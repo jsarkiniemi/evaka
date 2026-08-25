@@ -2,36 +2,64 @@
 //
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-import {
-  defaultPersons,
-  sfiSamlAttrs,
-  sfiSamlAttrUrns,
-  toSfiSamlAttrs,
-  vtjPersonSchema
-} from './model'
-import express from 'express'
-import { z } from 'zod'
-import samlp, { IdPOptions } from 'samlp'
+// oxlint-disable no-console
+
 import * as crypto from 'node:crypto'
 import * as fs from 'node:fs'
-import { config } from './config'
-import { SessionParticipants, SimpleProfileMapper } from './saml'
-import { html, Html } from './html'
 
-let vtjPersons = defaultPersons
+import type express from 'express'
+import type { IdPOptions } from 'samlp'
+import samlp from 'samlp'
+
+import { config } from './config'
+import { defaultDataset } from './default-dataset'
+import type { Html } from './html'
+import { html } from './html'
+import type { MockVtjDataset } from './model'
+import {
+  mockVtjDatasetSchema,
+  sfiSamlAttrs,
+  sfiSamlAttrUrns,
+  toSfiSamlAttrs
+} from './model'
+import { SessionParticipants, SimpleProfileMapper } from './saml'
+import { VtjStore } from './vtj-store'
+
+const store = new VtjStore(mockVtjDatasetSchema.parse(defaultDataset))
+
+let preTestModeSnapshot: MockVtjDataset | null = null
 
 export const clearUsers: express.RequestHandler = (_, res) => {
-  vtjPersons = []
+  store.clear()
+  res.sendStatus(200)
+}
+
+export const enterTestMode: express.RequestHandler = (_, res) => {
+  preTestModeSnapshot = store.snapshot()
+  res.sendStatus(200)
+}
+
+export const exitTestMode: express.RequestHandler = (_, res) => {
+  if (preTestModeSnapshot) {
+    store.clear()
+    store.upsert(preTestModeSnapshot)
+    preTestModeSnapshot = null
+  }
   res.sendStatus(200)
 }
 
 export const upsertUser: express.RequestHandler = (req, res) => {
-  const persons = z.array(vtjPersonSchema).parse(req.body)
-  vtjPersons = [
-    ...vtjPersons.filter((p) => persons.every(({ ssn }) => p.ssn !== ssn)),
-    ...persons
-  ]
+  store.upsert(mockVtjDatasetSchema.parse(req.body))
   res.sendStatus(200)
+}
+
+export const getVtjPerson: express.RequestHandler = (req, res) => {
+  const person = store.get(req.params.ssn)
+  if (!person) {
+    res.sendStatus(404)
+    return
+  }
+  res.json(person)
 }
 
 const idpPublicCert = fs.readFileSync(config.IDP_PUBLIC_CERT_PATH)
@@ -51,7 +79,7 @@ const renderSamlFormPage = (
 ) => {
   // Preserve SAML state in hidden input fields
   const samlStateInputs = ['SAMLRequest', 'RelayState', 'SigAlg']
-    .map((key) => [key, req.query[key] ?? ''] as const)
+    .map((key) => [key, req.query[key] ?? ''] as [string, string])
     .map(
       ([key, value]) =>
         html`<input type="hidden" name="${key}" value="${value.toString()}" />`
@@ -93,7 +121,7 @@ const renderSamlFormPage = (
   <h1>Devausympäristön Suomi.fi-kirjautuminen</h1>
   <form action="${encodeURI(params.uri)}" method="get">
 ${samlStateInputs.join('\n')}
-${params.bodyHtml}
+${params.bodyHtml.toString()}
   </form>
 </body>
 </html>
@@ -146,16 +174,26 @@ export const samlSingleSignOnRoute: express.RequestHandler = (
 ) => {
   console.log('SSO endpoint called')
   if (req.session.user) {
-    confirmHandler(req, res, next)
+    void confirmHandler(req, res, next)
   } else {
     const defaultSsn = '070644-937X'
-    const persons = [...vtjPersons] // copy data, because we're doing a mutable sort
-    persons.sort((a, b) => a.ssn.localeCompare(b.ssn))
+    const persons = store
+      .list()
+      .slice()
+      .sort((a, b) =>
+        a.socialSecurityNumber.localeCompare(b.socialSecurityNumber)
+      )
     const inputs = persons
-      .map(({ ssn, givenName, surname, comment }) => {
+      .map((person) => {
+        const ssn = person.socialSecurityNumber
         if (!ssn) return ''
         const checked = ssn === defaultSsn ? 'checked' : ''
-        const commentHtml = comment ? html`<small>(${comment})</small>` : ''
+        const count = store.dependantCount(ssn)
+        const commentText =
+          person.comment ?? (count > 0 ? `${count} huollettavaa` : '')
+        const commentHtml = commentText
+          ? html`<small>(${commentText})</small>`
+          : ''
         return html`<div>
           <input
             type="radio"
@@ -167,7 +205,7 @@ export const samlSingleSignOnRoute: express.RequestHandler = (
           />
           <label for="${ssn}">
             <span style="font-family: monospace; user-select: all">${ssn}</span
-            >: ${givenName} ${surname} ${commentHtml}
+            >: ${person.firstNames} ${person.lastName} ${commentHtml}
           </label>
         </div>`
       })
@@ -190,14 +228,14 @@ export const samlSingleSignOnConfirmRoute: express.RequestHandler = (
   res,
   next
 ) => {
-  const ssn = req.query.ssn
-  const person = vtjPersons.find((p) => p.ssn === ssn)
+  const ssn = typeof req.query.ssn === 'string' ? req.query.ssn : ''
+  const person = store.get(ssn)
   if (!person) throw new Error(`No person with ssn ${ssn}`)
   req.session.user = {
     nameId: crypto.randomUUID(),
     person
   }
-  confirmHandler(req, res, next)
+  void confirmHandler(req, res, next)
 }
 
 // @types/samlp is not fully correct, so fix things here
@@ -210,7 +248,8 @@ export const samlSingleSignOnFinishRoute: express.RequestHandler = (
   next
 ) => {
   console.log('SSO finish endpoint called')
-  samlp.auth({
+  // oxlint-disable-next-line typescript/no-unsafe-argument
+  void samlp.auth({
     cert: idpPublicCert,
     key: idpPrivateKey,
     signatureAlgorithm: 'rsa-sha256',
@@ -223,6 +262,7 @@ export const samlSingleSignOnFinishRoute: express.RequestHandler = (
     keyEncryptionAlgorighm: 'http://www.w3.org/2001/04/xmlenc#rsa-oaep-mgf1p',
     sessionIndex: '1',
     getUserFromRequest: (req) => req.session.user,
+    // oxlint-disable-next-line typescript/no-explicit-any typescript/no-unsafe-argument
     profileMapper: (pu: any) => new SimpleProfileMapper(pu),
     getPostURL: (audience, authnRequestDom, req, callback) => {
       if (audience === config.SP_ENTITY_ID) {
@@ -231,6 +271,7 @@ export const samlSingleSignOnFinishRoute: express.RequestHandler = (
         return callback(new Error(`Unexpected SAML audience ${audience}`), '')
       }
     }
+    // oxlint-disable-next-line typescript/no-explicit-any
   } satisfies LoginIdpOptions as any)(req, res, next)
 }
 
@@ -238,6 +279,7 @@ export const samlSingleSignOnFinishRoute: express.RequestHandler = (
 type LogoutIdpOptions = Pick<IdPOptions, 'cert' | 'key' | 'issuer'> & {
   deflate?: boolean
   sessionParticipants: SessionParticipants
+  // oxlint-disable-next-line typescript/no-explicit-any
   clearIdPSession: (cb: (err: any) => void) => void
 }
 export const samlSingleLogoutRoute: express.RequestHandler = (
@@ -246,7 +288,8 @@ export const samlSingleLogoutRoute: express.RequestHandler = (
   next
 ) => {
   console.log('SLO endpoint called')
-  samlp.logout({
+  // oxlint-disable-next-line typescript/no-unsafe-argument
+  void samlp.logout({
     cert: idpPublicCert,
     key: idpPrivateKey,
     issuer: 'dummy-idp',
@@ -268,5 +311,6 @@ export const samlSingleLogoutRoute: express.RequestHandler = (
         : []
     ),
     clearIdPSession: (cb) => req.session.destroy(cb)
+    // oxlint-disable-next-line typescript/no-explicit-any
   } satisfies LogoutIdpOptions as any)(req, res, next)
 }

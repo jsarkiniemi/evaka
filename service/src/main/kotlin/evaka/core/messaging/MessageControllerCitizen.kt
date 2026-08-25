@@ -172,6 +172,8 @@ class MessageControllerCitizen(
                                 featureConfig.municipalMessageAccountName,
                                 featureConfig.serviceWorkerMessageAccountName,
                                 featureConfig.financeMessageAccountName,
+                                deletedMessageBody = featureConfig.deletedMessagePlaceholderBody,
+                                deletedMessageTitle = featureConfig.deletedMessagePlaceholderTitle,
                             )
                         }
                         .mapTo(::PagedCitizenMessageThreads) {
@@ -293,6 +295,7 @@ class MessageControllerCitizen(
                         municipalAccountName = featureConfig.municipalMessageAccountName,
                         serviceWorkerAccountName = featureConfig.serviceWorkerMessageAccountName,
                         financeAccountName = featureConfig.financeMessageAccountName,
+                        deletedMessageBody = featureConfig.deletedMessagePlaceholderBody,
                     )
                 accountId to response
             }
@@ -320,8 +323,9 @@ class MessageControllerCitizen(
                 val receivers =
                     dbc.read { it.getCitizenRecipients(today, senderId) }
                         .mapValues { entry -> entry.value.newMessage }
-                val validRecipients =
-                    receivers.mapValues { entry -> entry.value.map { it.account.id }.toSet() }
+                val validRecipients = receivers.mapValues { entry ->
+                    entry.value.map { it.account.id }.toSet()
+                }
                 val recipientTypes =
                     receivers.values.flatten().associate { it.account.id to it.account.type }
                 val allRecipientsValid =

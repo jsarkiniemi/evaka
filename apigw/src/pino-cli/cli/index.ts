@@ -2,12 +2,13 @@
 //
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+import { Transform, type TransformCallback } from 'node:stream'
+
 import type {
   SerializedRequest,
   SerializedResponse
 } from 'pino-std-serializers'
 import split from 'split2'
-import * as through from 'through2'
 
 import { ipv6ToIpv4 } from './utils.ts'
 
@@ -54,7 +55,7 @@ export interface MiscLog extends BaseLog {
   exception?: string
   logLevel: string
   message: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line typescript/no-explicit-any
   meta?: Record<string, any>
   stackTrace?: string
   type: 'app-misc'
@@ -108,7 +109,7 @@ export interface PinoAppAuditLog extends PinoBaseLog {
 export interface PinoMiscLog extends PinoBaseLog {
   exception?: string
   message: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line typescript/no-explicit-any
   meta?: Record<string, any>
   stackTrace?: string
   type: 'app-misc'
@@ -187,26 +188,26 @@ const mapPinoLogToMiscLog = (obj: PinoMiscLog): MiscLog => ({
   version: obj.version
 })
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line typescript/no-explicit-any
 const isPinoAccessLog = (obj: any): boolean =>
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return,@typescript-eslint/no-unsafe-member-access
+  // oxlint-disable-next-line typescript/no-unsafe-return,typescript/no-unsafe-member-access
   obj.req &&
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+  // oxlint-disable-next-line typescript/no-unsafe-member-access
   obj.res &&
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+  // oxlint-disable-next-line typescript/no-unsafe-member-access
   (obj.message === 'request completed' || obj.message === 'request errored')
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line typescript/no-explicit-any
 const isPinoAppAuditLog = (obj: any): boolean =>
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return,@typescript-eslint/no-unsafe-member-access
+  // oxlint-disable-next-line typescript/no-unsafe-return,typescript/no-unsafe-member-access
   obj.type && obj.type === 'app-audit-events'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any,@typescript-eslint/no-unsafe-return,@typescript-eslint/no-unsafe-member-access
+// oxlint-disable-next-line typescript/no-explicit-any,typescript/no-unsafe-return,typescript/no-unsafe-member-access
 const isPinoMiscLog = (obj: any): boolean => obj.type && obj.type === 'app-misc'
 
 const stdoutStream = process.stdout
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line typescript/no-explicit-any
 const writeObjToStdoutAsJson = (obj: any): boolean =>
   stdoutStream.write(JSON.stringify(obj) + '\n')
 
@@ -228,7 +229,7 @@ const errorPayload = (e: unknown, message?: string): ErrorLog => {
 
 const parser = (input: string) => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    // oxlint-disable-next-line typescript/no-unsafe-return
     return JSON.parse(input)
   } catch (e) {
     if (e instanceof SyntaxError) {
@@ -241,8 +242,8 @@ const parser = (input: string) => {
 
 export const parserStream = split(parser)
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const transport = (obj: any, _: string, cb: through.TransformCallback) => {
+// oxlint-disable-next-line typescript/no-explicit-any
+const transport = (obj: any, _: BufferEncoding, cb: TransformCallback) => {
   try {
     if (
       !isPinoAccessLog(obj) &&
@@ -253,23 +254,23 @@ const transport = (obj: any, _: string, cb: through.TransformCallback) => {
       return cb()
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    // oxlint-disable-next-line typescript/no-unsafe-argument
     if (isPinoAccessLog(obj) && isHealthCheckRequest(obj)) {
       return cb()
     }
 
     if (isPinoAccessLog(obj)) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+      // oxlint-disable-next-line typescript/no-unsafe-argument
       writeObjToStdoutAsJson(mapPinoLogToAccessLog(obj))
     }
 
     if (isPinoAppAuditLog(obj)) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+      // oxlint-disable-next-line typescript/no-unsafe-argument
       writeObjToStdoutAsJson(mapPinoLogToAuditLog(obj))
     }
 
     if (isPinoMiscLog(obj)) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+      // oxlint-disable-next-line typescript/no-unsafe-argument
       writeObjToStdoutAsJson(mapPinoLogToMiscLog(obj))
     }
     cb()
@@ -279,4 +280,7 @@ const transport = (obj: any, _: string, cb: through.TransformCallback) => {
   }
 }
 
-export const transportStream = through.obj(transport)
+export const transportStream = new Transform({
+  objectMode: true,
+  transform: transport
+})

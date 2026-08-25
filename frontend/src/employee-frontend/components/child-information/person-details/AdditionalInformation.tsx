@@ -16,7 +16,6 @@ import type { IsoLanguage } from 'lib-common/generated/language'
 import { isoLanguages } from 'lib-common/generated/language'
 import { constantQuery, useQueryResult } from 'lib-common/query'
 import { Button } from 'lib-components/atoms/buttons/Button'
-import { LegacyButton } from 'lib-components/atoms/buttons/LegacyButton'
 import { MutateButton } from 'lib-components/atoms/buttons/MutateButton'
 import Combobox from 'lib-components/atoms/dropdowns/Combobox'
 import Checkbox from 'lib-components/atoms/form/Checkbox'
@@ -28,11 +27,11 @@ import { H4 } from 'lib-components/typography'
 import { featureFlags } from 'lib-customizations/employee'
 import { faPen } from 'lib-icons'
 
+import { ChildContext } from '../../../state'
 import { useTranslation } from '../../../state/i18n'
 import type { UiState } from '../../../state/ui'
 import { UIContext } from '../../../state/ui'
 import { formatParagraphs } from '../../../utils/html-utils'
-import { RequireRole } from '../../../utils/roles'
 import { renderResult } from '../../async-rendering'
 import { FlexRow } from '../../common/styled/containers'
 import { textAreaRows } from '../../utils'
@@ -101,6 +100,7 @@ function getMealTextureCaption(mealTexture: MealTexture) {
 
 export default React.memo(function AdditionalInformation({ childId }: Props) {
   const { i18n } = useTranslation()
+  const { permittedActions } = useContext(ChildContext)
   const additionalInformation = useQueryResult(
     getAdditionalInfoQuery({ childId })
   )
@@ -209,25 +209,14 @@ export default React.memo(function AdditionalInformation({ childId }: Props) {
     <div data-qa="additional-information-section">
       <FlexRow $justifyContent="space-between">
         <H4>{i18n.childInformation.additionalInformation.title}</H4>
-        {!editing && (
-          <RequireRole
-            oneOf={[
-              'SERVICE_WORKER',
-              'FINANCE_ADMIN',
-              'UNIT_SUPERVISOR',
-              'ADMIN',
-              'STAFF',
-              'SPECIAL_EDUCATION_TEACHER'
-            ]}
-          >
-            <Button
-              appearance="inline"
-              icon={faPen}
-              onClick={startEdit}
-              data-qa="edit-child-settings-button"
-              text={i18n.common.edit}
-            />
-          </RequireRole>
+        {!editing && permittedActions.has('UPDATE_ADDITIONAL_INFO') && (
+          <Button
+            appearance="inline"
+            icon={faPen}
+            onClick={startEdit}
+            data-qa="edit-child-settings-button"
+            text={i18n.common.edit}
+          />
         )}
       </FlexRow>
       {renderResult(additionalInformation, (data) => (
@@ -467,7 +456,11 @@ export default React.memo(function AdditionalInformation({ childId }: Props) {
                         <>
                           <Combobox
                             data-qa="nekku-diet-input"
-                            items={nekkuDiets}
+                            items={nekkuDiets.filter(
+                              (diet) =>
+                                diet.type !== 'VEGAN' ||
+                                form.nekkuSpecialDietChoices.length === 0
+                            )}
                             selectedItem={nekkuDiets.find(
                               (value) => value.type === form.nekkuDiet
                             )}
@@ -500,6 +493,7 @@ export default React.memo(function AdditionalInformation({ childId }: Props) {
                           setField={setChoiceField}
                           toggleField={toggleChoiceField}
                           editing={editing}
+                          disabled={form.nekkuDiet === 'VEGAN'}
                         />
                       )
                     }
@@ -518,10 +512,7 @@ export default React.memo(function AdditionalInformation({ childId }: Props) {
               )}
               <RightAlignedRow>
                 <FixedSpaceRow>
-                  <LegacyButton
-                    onClick={clearUiMode}
-                    text={i18n.common.cancel}
-                  />
+                  <Button onClick={clearUiMode} text={i18n.common.cancel} />
                   <MutateButton
                     primary
                     disabled={false}

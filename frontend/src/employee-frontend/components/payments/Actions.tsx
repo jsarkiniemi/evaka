@@ -6,8 +6,8 @@ import { faEnvelope } from '@fortawesome/free-solid-svg-icons'
 import React, { useState } from 'react'
 import styled from 'styled-components'
 
-import { useBoolean } from 'lib-common/form/hooks'
 import { required, validate } from 'lib-common/form-validation'
+import { useBoolean } from 'lib-common/form/hooks'
 import type { PaymentStatus } from 'lib-common/generated/api-types/invoicing'
 import type { PaymentId } from 'lib-common/generated/api-types/shared'
 import LocalDate from 'lib-common/local-date'
@@ -133,7 +133,7 @@ const SendPaymentsModal = React.memo(function Modal({
   onSuccess: () => void
   onCancel: () => void
 }) {
-  const { i18n } = useTranslation()
+  const { i18n, lang } = useTranslation()
   const [paymentDate, setPaymentDate] = useState<LocalDate | null>(
     LocalDate.todayInHelsinkiTz()
   )
@@ -170,7 +170,7 @@ const SendPaymentsModal = React.memo(function Modal({
               i18n.validationErrors
             )}
             hideErrorsBeforeTouched
-            locale="fi"
+            locale={lang}
           />
         </div>
         <Gap $size="s" />
@@ -184,7 +184,7 @@ const SendPaymentsModal = React.memo(function Modal({
               i18n.validationErrors
             )}
             hideErrorsBeforeTouched
-            locale="fi"
+            locale={lang}
           />
         </div>
       </ModalContent>

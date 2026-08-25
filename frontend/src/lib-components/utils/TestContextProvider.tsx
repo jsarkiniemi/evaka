@@ -174,14 +174,15 @@ export const testTranslations: Translations = {
   metadata: {
     title: '',
     notFound: '',
+    case: '',
     caseIdentifier: '',
     processName: '',
     organization: '',
+    organizationName: '',
     archiveDurationMonths: '',
     primaryDocument: '',
     secondaryDocuments: '',
     documentId: '',
-    name: '',
     createdAt: '',
     createdBy: '',
     publishedVersions: '',
@@ -201,6 +202,7 @@ export const testTranslations: Translations = {
     },
     sfiDelivery: {
       label: '',
+      readAt: '',
       method: {
         ELECTRONIC: '',
         PAPER_MAIL: '',
@@ -218,6 +220,36 @@ export const testTranslations: Translations = {
     section: {
       show: '',
       hide: ''
+    },
+    applicationDocumentNames: {
+      DAYCARE: '',
+      PRESCHOOL: '',
+      CLUB: ''
+    },
+    decisionDocumentNames: {
+      CLUB: '',
+      DAYCARE: '',
+      DAYCARE_PART_TIME: '',
+      PRESCHOOL: '',
+      PRESCHOOL_DAYCARE: '',
+      PRESCHOOL_CLUB: '',
+      PREPARATORY_EDUCATION: ''
+    },
+    financeDecisionDocumentNames: {
+      FEE_DECISION: '',
+      VOUCHER_VALUE_DECISION: ''
+    },
+    processNames: {
+      APPLICATION_DAYCARE: '',
+      APPLICATION_PRESCHOOL: '',
+      APPLICATION_CLUB: '',
+      FEE_DECISION: '',
+      VOUCHER_VALUE_DECISION: '',
+      CHILD_DOCUMENT_VASU: '',
+      CHILD_DOCUMENT_LEOPS: '',
+      CHILD_DOCUMENT_HOJKS: '',
+      CHILD_DOCUMENT_PEDAGOGICAL_ASSESSMENT: '',
+      CHILD_DOCUMENT_PEDAGOGICAL_REPORT: ''
     }
   }
 }

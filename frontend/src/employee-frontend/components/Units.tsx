@@ -11,7 +11,7 @@ import type { Daycare } from 'lib-common/generated/api-types/daycare'
 import { careTypes } from 'lib-common/generated/api-types/daycare'
 import LocalDate from 'lib-common/local-date'
 import { useQueryResult } from 'lib-common/query'
-import { LegacyButton } from 'lib-components/atoms/buttons/LegacyButton'
+import { Button } from 'lib-components/atoms/buttons/Button'
 import Checkbox from 'lib-components/atoms/form/Checkbox'
 import InputField from 'lib-components/atoms/form/InputField'
 import MultiSelect from 'lib-components/atoms/form/MultiSelect'
@@ -32,7 +32,7 @@ import { useTranslation } from '../state/i18n'
 import type { SearchColumn, UnitsState } from '../state/units'
 import { UnitsContext } from '../state/units'
 import { UserContext } from '../state/user'
-import { RequireRole } from '../utils/roles'
+import { hasGlobalAction, RequirePermittedGlobalAction } from '../utils/roles'
 
 import { renderResult } from './async-rendering'
 import { daycaresQuery } from './unit/queries'
@@ -89,7 +89,7 @@ export default React.memo(function Units() {
   if (
     units.isSuccess &&
     units.value.length === 1 &&
-    !user?.accessibleFeatures.createUnits
+    !hasGlobalAction(user, 'CREATE_UNIT')
   ) {
     return <Redirect to={`/units/${units.value[0].id}`} replace={true} />
   }
@@ -142,16 +142,16 @@ export default React.memo(function Units() {
               data-qa="include-closed"
             />
           </div>
-          <RequireRole oneOf={['ADMIN']}>
+          <RequirePermittedGlobalAction oneOf={['CREATE_UNIT']}>
             <div>
-              <LegacyButton
+              <Button
                 data-qa="create-new-unit"
                 className="units-wrapper-create"
                 onClick={() => navigate('/units/new')}
                 text={i18n.unit.create}
               />
             </div>
-          </RequireRole>
+          </RequirePermittedGlobalAction>
         </TopBar>
         <Gap $size="L" />
         <div className="table-of-units">

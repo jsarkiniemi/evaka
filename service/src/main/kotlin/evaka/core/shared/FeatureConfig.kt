@@ -6,6 +6,7 @@ package evaka.core.shared
 
 import evaka.core.application.ApplicationStatus
 import evaka.core.application.ApplicationType
+import evaka.core.decision.DecisionType
 import evaka.core.holidayperiod.QuestionnaireType
 import java.time.MonthDay
 
@@ -79,6 +80,24 @@ data class FeatureConfig(
     val financeMessageAccountName: String,
 
     /**
+     * Address that receives "message deleted by employee" notifications, and is shown to the sender
+     * in the post-deletion banner and emails as the support contact.
+     *
+     * If null, the municipality has not configured a support address: the support-contact line is
+     * omitted from the banner and emails, and the admin notification email is sent to all active
+     * users with the admin role.
+     */
+    val messageSupportEmail: String? = null,
+
+    /** Title and body shown in place of a deleted message. */
+    val deletedMessagePlaceholderBody: String =
+        "Lähettäjä on poistanut viestin. Sinun ei tarvitse tehdä mitään.\n\n" +
+            "Avsändaren har tagit bort meddelandet. Du behöver inte göra något.\n\n" +
+            "The sender has deleted this message. No action is needed on your part.",
+    val deletedMessagePlaceholderTitle: String =
+        "Viesti on poistettu / Meddelandet har raderats / Message was deleted",
+
+    /**
      * true = placement unit is resolved from decision when it's accepted, false = placement unit is
      * resolved from placement plan
      */
@@ -99,6 +118,12 @@ data class FeatureConfig(
 
     /** The name of the organization used in archived metadata */
     val archiveMetadataOrganization: String,
+
+    /**
+     * Municipality business ID (Y-tunnus) displayed in the metadata UI. Not persisted to
+     * case_process or archive metadata.
+     */
+    val metadataBusinessId: String,
 
     /** Configs for enabled archive metadata processes */
     val archiveMetadataConfigs: (type: ArchiveProcessType, year: Int) -> ArchiveProcessConfig?,
@@ -126,6 +151,15 @@ data class FeatureConfig(
 
     /** Accept preschool decision without asking guardian confirmation */
     val skipGuardianPreschoolDecisionApproval: Boolean = false,
+
+    /** Allow English as a language for every child document type, not only `CITIZEN_BASIC` */
+    val allowEnglishChildDocumentsForAllTypes: Boolean = false,
+
+    /** Whether placement decisions can be made in Swedish. */
+    val placementDecisionSwedishLanguageEnabled: Boolean,
+
+    /** Decision types whose decisions are made without decision reasonings */
+    val decisionsWithoutReasonings: Set<DecisionType> = emptySet(),
 )
 
 enum class ArchiveProcessType {

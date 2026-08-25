@@ -9,24 +9,24 @@ import evaka.core.shared.db.Database
 
 fun Database.Transaction.updatePersonalDetails(personId: PersonId, body: PersonalDataUpdate) {
     createUpdate {
-            sql(
-                """
+        sql(
+            """
                 UPDATE person SET
-                    preferred_name = ${bind(body.preferredName)},
-                    phone = ${bind(body.phone)},
-                    backup_phone = ${bind(body.backupPhone)},
-                    email = ${bind(body.email)}
+                    preferred_name = coalesce(${bind(body.preferredName)}, preferred_name),
+                    phone = coalesce(${bind(body.phone)}, phone),
+                    backup_phone = coalesce(${bind(body.backupPhone)}, backup_phone),
+                    email = coalesce(${bind(body.email)}, email)
                 WHERE id = ${bind(personId)}
                 """
-            )
-        }
+        )
+    }
         .updateExactlyOne()
 }
 
 fun Database.Read.getDisabledEmailTypes(personId: PersonId): Set<EmailMessageType> {
     return createQuery {
-            sql("SELECT disabled_email_types FROM person WHERE id = ${bind(personId)}")
-        }
+        sql("SELECT disabled_email_types FROM person WHERE id = ${bind(personId)}")
+    }
         .exactlyOne<Set<EmailMessageType>>()
 }
 
@@ -35,9 +35,9 @@ fun Database.Transaction.updateDisabledEmailTypes(
     emailTypes: Set<EmailMessageType>,
 ) {
     createUpdate {
-            sql(
-                "UPDATE person SET disabled_email_types = ${bind(emailTypes)} WHERE id = ${bind(personId)}"
-            )
-        }
+        sql(
+            "UPDATE person SET disabled_email_types = ${bind(emailTypes)} WHERE id = ${bind(personId)}"
+        )
+    }
         .updateExactlyOne()
 }

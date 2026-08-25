@@ -63,16 +63,24 @@ export const fi = {
     clubTerm: 'Kerhon lukukausi',
     clubTerms: 'Kerhojen lukukaudet',
     placementTool: 'Optimointityökalu',
-    outOfOffice: 'Poissaoloviesti'
+    outOfOffice: 'Poissaoloviesti',
+    decisionReasonings: 'Päätösten perustelut'
   },
   common: {
     yes: 'Kyllä',
     no: 'Ei',
     and: 'Ja',
-    loadingFailed: 'Tietojen haku epäonnistui',
+    loadingFailed: 'Tietojen hakeminen ei onnistunut',
+    loadingFailedInfo:
+      'Kokeile päivittää sivu hetken kuluttua. Ongelma on yleensä hetkellinen.',
     noAccess: 'Oikeudet puuttuvat',
-    endpointDisabled:
-      'eVakassa on käynnissä osittainen huoltokatko. Osa toiminnoista ei ole tällä hetkellä käytettävissä. Yritä hetken kuluttua uudelleen.',
+    noAccessInfo:
+      'Jos tarvitset pääsyn, ota yhteys esihenkilöösi tai järjestelmänvalvojaan.',
+    endpointDisabled: 'Osittainen huoltokatko',
+    endpointDisabledInfo:
+      'Osa toiminnoista ei ole juuri nyt käytettävissä. Yritä uudelleen hetken kuluttua.',
+    networkError: 'Ei verkkoyhteyttä',
+    networkErrorInfo: 'Tarkista internet-yhteytesi ja kokeile uudelleen.',
     edit: 'Muokkaa',
     add: 'Lisää',
     addNew: 'Lisää uusi',
@@ -424,6 +432,22 @@ export const fi = {
       confirmDecisionMailed: 'Merkitse postitetuksi',
       checked: (count: number) =>
         count === 1 ? `${count} hakemus valittu` : `${count} hakemusta valittu`
+    },
+    decisionReasoning: {
+      individualCountTooltip: (count: number) =>
+        count === 1
+          ? `Päätöksillä on ${count} yksilöllinen perustelu.`
+          : `Päätöksillä on ${count} yksilöllistä perustelua.`,
+      genericNotReadyTooltip:
+        'Päätösten yleinen perustelu ei ole käytössä. Päätökset voidaan lähettää, kun perustelu on otettu käyttöön.',
+      sendBlockedTitle: (applicationCount: number): string =>
+        applicationCount === 1
+          ? 'Päätöksen lähettäminen ei onnistunut'
+          : 'Päätösten lähettäminen ei onnistunut',
+      sendBlockedText: (applicationCount: number): string =>
+        applicationCount === 1
+          ? 'Päätöksen perustelutekstit eivät ole valmiita. Voit lähettää päätöksen vasta, kun pääkäyttäjä on viimeistellyt perustelut.'
+          : 'Valituilla hakemuksilla on päätöksiä, joiden perustelutekstit eivät ole valmiita. Voit lähettää päätökset vasta, kun pääkäyttäjä on viimeistellyt perustelut. Yhtään hakemusta ei siirretty eteenpäin.'
     },
     distinctiveDetails: {
       SECONDARY: 'Näytä myös, jos yksikköön on haettu 2. tai 3. toiveena'
@@ -846,7 +870,7 @@ export const fi = {
         },
         otherAssistanceMeasureType: {
           TRANSPORT_BENEFIT: 'Kuljetusetu (esioppilailla Koski-tieto)',
-          ACCULTURATION_SUPPORT: 'Lapsen kotoutumisen tuki (ELY)',
+          ACCULTURATION_SUPPORT: 'Lapsen kotoutumisen tuki (EVK)',
           ANOMALOUS_EDUCATION_START: 'Opetuksen poikkeava aloittamisajankohta',
           CHILD_DISCUSSION_OFFERED: 'Lapset puheeksi tarjottu',
           CHILD_DISCUSSION_HELD: 'Lapset puheeksi pidetty',
@@ -1760,6 +1784,7 @@ export const fi = {
       noIncomeStatements: 'Ei tuloselvityksiä',
       incomeStatementHeading: 'Asiakkaan tuloselvityslomake',
       sentAtHeading: 'Saapumispäivä',
+      citizenModifiedAtHeading: 'Muokattu',
       handledHeading: 'Käsitelty',
       open: 'Avaa lomake',
       handled: 'Tuloselvitys käsitelty',
@@ -1824,6 +1849,7 @@ export const fi = {
       ALIMONY: 'Elatusapu tai -tuki',
       INTEREST_AND_INVESTMENT_INCOME: 'Korko- ja osinkotulot',
       RENTAL_INCOME: 'Vuokratulot',
+      GENERAL_SOCIAL_SECURITY_BENEFIT: 'Yleistuki',
       UNEMPLOYMENT_ALLOWANCE: 'Työttömyyspäiväraha',
       LABOUR_MARKET_SUBSIDY: 'Työmarkkinatuki',
       ADJUSTED_DAILY_ALLOWANCE: 'Soviteltu päiväraha',
@@ -1934,6 +1960,7 @@ export const fi = {
       HOME_CARE_ALLOWANCE: 'Päätös kotihoidontuesta',
       FLEXIBLE_AND_PARTIAL_HOME_CARE_ALLOWANCE: 'Päätös hoitorahasta',
       ALIMONY: 'Elatussopimus tai päätös elatustuesta',
+      GENERAL_SOCIAL_SECURITY_BENEFIT: 'Päätös yleistuesta',
       UNEMPLOYMENT_ALLOWANCE: 'Päätös työttömyyspäivärahasta',
       LABOUR_MARKET_SUBSIDY: 'Päätös työmarkkinatuesta',
       ADJUSTED_DAILY_ALLOWANCE: 'Päätös päivärahasta',
@@ -2020,8 +2047,10 @@ export const fi = {
       role: 'Rooli',
       name: 'Nimi',
       email: 'Sähköpostiosoite',
-      aclStartDate: 'Luvitus alkaa',
-      aclEndDate: 'Luvitus päättyy',
+      aclStartDate: 'Luvitus yksikköön alkaa',
+      aclEndDate: 'Luvitus yksikköön päättyy',
+      aclEndDateHelp:
+        'Päättymispäivän jälkeen henkilön pääsy yksikköön ja kaikkiin ryhmiin poistuu.',
       removeConfirmation:
         'Haluatko poistaa pääsyoikeuden valitulta henkilöltä?',
       removeScheduledConfirmation: 'Haluatko poistaa tulevan luvituksen?',
@@ -2038,6 +2067,8 @@ export const fi = {
       chooseRole: 'Valitse rooli',
       choosePerson: 'Valitse henkilö',
       chooseGroup: 'Valitse ryhmä',
+      chooseGroupHelp:
+        'Luvitus ryhmään noudattaa yksikön luvituksen voimassaoloa.',
       temporaryEmployees: {
         title: 'Tilapäiset sijaiset',
         previousEmployeesTitle: 'Aiemmat tilapäiset sijaiset',
@@ -2433,7 +2464,7 @@ export const fi = {
         groupNotesHeader: 'Ryhmän muistiinpanot',
         stickyNotesHeader: 'Huomioitavaa lähipäivinä',
         notesHint:
-          'Leikkejä, onnistumisia, ilonaiheita ja opittuja asioita tänään (ei terveystietoja tai salassapidettäviä tietoja).',
+          'Leikkejä, aktiivista liikkumista, onnistumisia, ilonaiheita ja opittuja asioita tänään (ei terveystietoja tai salassapidettäviä tietoja).',
         childStickyNoteHint:
           'Muistiinpano henkilökunnalle (ei terveystietoja tai salassapidettäviä tietoja).',
         otherThings: 'Muut asiat',
@@ -2482,15 +2513,7 @@ export const fi = {
       requiresBackupCare: 'Tee varasijoitus',
       openReservationModal: 'Tee toistuva varaus',
       childCount: 'Lapsia läsnä',
-      lastModifiedStaff: (date: string, name: string) => (
-        <div>
-          <p>*Henkilökunnan tekemä merkintä</p>
-          <p>
-            Viimeksi muokattu {date}; muokkaaja: {name}
-          </p>
-        </div>
-      ),
-      lastModifiedOther: (date: string, name: string) =>
+      lastModified: (date: string, name: string) =>
         `Viimeksi muokattu ${date}; muokkaaja: ${name}`,
       reservationModal: {
         title: 'Tee varaus',
@@ -2608,6 +2631,8 @@ export const fi = {
       addedAt: 'Merkintä luotu',
       modifiedAt: 'Muokattu',
       departedAutomatically: 'Automaattikatkaistu',
+      departedAutomaticallyBanner: (count: number) =>
+        `${count} läsnäolojen automaattikatkaisua tällä viikolla.`,
       hasStaffOccupancyEffect: 'Kasvatusvastuullinen'
     },
     error: {
@@ -3358,7 +3383,7 @@ export const fi = {
       BILLABLE: 'Varhaiskasvatus (maksullinen)'
     },
     modifiedByStaff: 'Henkilökunta',
-    modifiedByCitizen: 'Huoltaja',
+    modifiedByCitizen: (name: string) => `${name} (huoltaja)`,
     modal: {
       absenceSectionLabel: 'Poissaolon syy',
       placementSectionLabel: 'Toimintamuoto, jota poissaolo koskee',
@@ -3398,8 +3423,6 @@ export const fi = {
     absence: 'Poissaolo',
     reservation: 'Varaus',
     present: 'Läsnä',
-    guardian: 'Huoltaja',
-    staff: 'Henkilökunta',
     dailyServiceTime: 'Sopimusaika'
   },
   placementDraft: {
@@ -3434,6 +3457,14 @@ export const fi = {
   },
   decisionDraft: {
     title: 'Päätöksen teko ja lähetys',
+    titlePlural: 'Päätösten muokkaus',
+    titleSingle: 'Päätöksen muokkaus',
+    decisionsHeading: 'Päätökset',
+    decisionsHeadingSingle: 'Päätös',
+    decisionsSubtitle:
+      'Valitse sijoitukset, joista lähetetään kuntalaiselle päätökset:',
+    unitInlineSummary: (address: string, manager: string) =>
+      `${address} · Johtaja: ${manager}`,
     info1:
       'Lähettämällä päätöksen hyväksyt sijoitussuunnitelman. Kuntalaiselle lähetetään ne päätökset, jotka olet alla valinnut.',
     info2:
@@ -3443,7 +3474,19 @@ export const fi = {
     ssnInfo2: 'Lähetä tulostettu päätös postitse ja merkitse se postitetuksi.',
     unitInfo1: 'Yksikön tiedot ovat puutteelliset.',
     unitInfo2:
-      'Puutteelliset tiedot on päivitettävä ennen päätösten luontia. Ota yhteyttä kehittäjiin.',
+      'Puutteelliset tiedot on päivitettävä ennen päätösten lähettämistä. Ota yhteys pääkäyttäjään.',
+    unitFieldsMissingUnitName: 'Valittu yksikkö',
+    unitFields: {
+      unit: 'Yksikön tietoja ei löytynyt',
+      daycareDecisionName: 'Varhaiskasvatuspäätöksellä näkyvä yksikön nimi',
+      preschoolDecisionName: 'Esiopetuspäätöksellä näkyvä yksikön nimi',
+      manager: 'Yksikön johtaja',
+      streetAddress: 'Käyntiosoite',
+      postalCode: 'Postinumero',
+      postOffice: 'Postitoimipaikka',
+      decisionHandler: 'Päätöksen käsittelijä',
+      decisionHandlerAddress: 'Päätöksen käsittelijän osoite'
+    },
     notGuardianInfo1: 'Hakemuksen huoltaja ei ole lapsen huoltaja.',
     notGuardianInfo2:
       'Henkilö joka on merkitty hakemuksella huoltajaksi ei ole VTJn mukaan lapsen huoltaja. Päätös pitää lähettää paperisena.',
@@ -3469,6 +3512,7 @@ export const fi = {
     daycareDecisionName: 'Yksikön nimi varhaiskasvatuspäätöksellä',
     unitManager: 'Yksikön johtaja',
     unitAddress: 'Yksikön osoite',
+    handler: 'Asian käsittelijä',
     handlerName: 'Käsittelijän nimi',
     handlerAddress: 'Käsittelijän osoite',
     receiver: 'Vastaanottaja',
@@ -3476,7 +3520,25 @@ export const fi = {
     missingValue: 'Tieto puuttuu.',
     noOtherGuardian: 'Toista huoltajaa ei ole',
     differentUnit:
-      'Päätöksellä näkyvä yksikkö on eri kuin alkuperäisessä sijoituksessa.'
+      'Päätöksellä näkyvä yksikkö on eri kuin alkuperäisessä sijoituksessa.',
+    reasonings: {
+      generic: 'Yleinen perustelu',
+      individual: 'Yksilölliset perustelut',
+      pickerButton: 'Valitse',
+      noGenericForSlot:
+        'Pääkäyttäjä ei ole lisännyt yleistä perustelua tälle päätöstyypille.',
+      noIndividual: 'Päätökseen ei ole liitetty yksilöllisiä perusteluja.',
+      genericRangeOpen: (validFrom: string) =>
+        `${validFrom}– alkavat sijoitukset`,
+      genericRangeClosed: (validFrom: string, validUntil: string) =>
+        `${validFrom}–${validUntil} alkavat sijoitukset`,
+      modalTitle: 'Valitse yksilölliset perustelut',
+      modalCloseButton: 'Sulje',
+      modalEntryTextLabel: 'Päätökselle tuleva teksti',
+      removedFromUse: 'Poistettu käytöstä',
+      unitLanguageUnsupported:
+        'Valittu yksikkö on ruotsinkielinen, mutta ruotsinkieliset päätökset eivät ole käytössä. Vaihda yksikkö tai ota yhteyttä pääkäyttäjään.'
+    }
   },
   reports: {
     title: 'Raportit',
@@ -3518,6 +3580,7 @@ export const fi = {
       over3y: '3+',
       age: 'Ikä',
       dateOfBirth: 'Syntymäaika',
+      yearOfBirth: 'Syntymävuosi',
       attendanceType: 'Läsnäolo',
       attendanceTypes: {
         RESERVATION: 'Varaus',
@@ -3646,9 +3709,6 @@ export const fi = {
         'application.other_guardian_id': 'Hakemuksia (toisena huoltajana)',
         'assistance_action.child_id': 'Tuki- toimia',
         'assistance_need.child_id': 'Tuen tarpeita',
-        'assistance_need_decision.child_id': 'Tuen tarpeen päätöksiä',
-        'assistance_need_decision_guardian.person_id':
-          'Tuen päätöksen huoltajana',
         'assistance_need_voucher_coefficient.child_id':
           'Tuen palvelusetelikertoimia',
         'attachment.uploaded_by_person': 'Liitteitä',
@@ -4053,6 +4113,7 @@ export const fi = {
         'Raportti hetuttomista sijoitetuista lapsista OID-tietojen tarkistamiseen',
       childName: 'Lapsen nimi',
       dateOfBirth: 'Syntymäpäivä',
+      placementStartDate: 'Sijoituksen alkupäivä',
       personOid: 'Lapsen tietojen OID',
       lastSentToVarda: 'Viety Vardaan viimeksi',
       lastSentToKoski: 'Viety Koskeen viimeksi',
@@ -4224,6 +4285,33 @@ export const fi = {
           label: 'Esiopetuskausi:',
           placeholder: 'Valitse esiopetuskausi'
         },
+        includeClosed: 'Näytä lopetetut yksiköt ja ryhmät'
+      }
+    },
+    childAbsences: {
+      title: 'Lasten poissaoloraportti',
+      description:
+        'Raportti listaa lasten koko päivän poissaolojen määrät päivinä valitulla aikavälillä. Auttaa esimerkiksi ilmoittamattomien poissaolojen seurannassa.',
+      firstName: 'Etunimi',
+      lastName: 'Sukunimi',
+      daycareName: 'Yksikkö',
+      groupName: 'Ryhmä',
+      days: '(päivää)',
+      total: 'Yhteensä',
+      filters: {
+        areaSelection: {
+          label: 'Alue:',
+          placeHolder: 'Valitse alue'
+        },
+        daycareSelection: {
+          label: 'Yksikkö:',
+          placeholder: 'Valitse yksikkö'
+        },
+        groupSelection: {
+          label: 'Ryhmä:',
+          placeholder: 'Valitse ryhmä'
+        },
+        range: 'Aikaväli:',
         includeClosed: 'Näytä lopetetut yksiköt ja ryhmät'
       }
     },
@@ -4579,6 +4667,39 @@ export const fi = {
     replyToThread: 'Vastaa viestiin',
     archiveThread: 'Arkistoi viestiketju',
     markUnread: 'Merkitse lukemattomaksi',
+    deletion: {
+      deleteButton: 'Viestin poistaminen',
+      alreadyDeleted: 'Viesti oli jo poistettu',
+      modal: {
+        title: 'Viestin poistaminen',
+        intro:
+          'Toiminto on tarkoitettu vain tilanteeseen, jossa viesti on lähetetty vahingossa väärälle vastaanottajalle. Poistetun viestin sisältö korvataan jokaisen vastaanottajan eVakassa seuraavalla tekstillä:',
+        stepsHeader: 'Toimenpiteet välittömästi poiston jälkeen',
+        stepsBody1:
+          'Väärälle vastaanottajalle lähetetystä viestistä tulee aina tehdä tietosuojailmoitus. Ota poiston jälkeen yhteyttä kunnan eVaka-tukeen jatkotoimenpiteitä varten.',
+        stepsBody2:
+          'Tieto poistosta välitetään varhaiskasvatusyksikön johtajille ja eVaka-tukeen.',
+        cancel: 'Peruuta',
+        confirm: 'Poista viesti'
+      },
+      afterDeletion: {
+        banner: (supportEmail: string | null): ReactNode =>
+          supportEmail ? (
+            <span>
+              Viesti on poistettu. Ota välittömästi yhteyttä eVaka-tukeen
+              osoitteessa <a href={`mailto:${supportEmail}`}>{supportEmail}</a>.
+            </span>
+          ) : (
+            'Viesti on poistettu. Ota välittömästi yhteyttä eVaka-tukeen.'
+          ),
+        viewLogWarning:
+          'Poistetun viestin katselusta jää lokitieto järjestelmään.',
+        viewButton: 'Näytä poistettu viesti',
+        hideButton: 'Piilota poistettu viesti',
+        threadTitlePrefix: 'Viesti poistettu',
+        sentThreadTitlePrefix: 'Viestiketjun otsikko poistettu'
+      }
+    },
     changeFolder: {
       button: 'Vaihda kansiota',
       modalTitle: 'Valitse kansio',
@@ -4956,7 +5077,13 @@ export const fi = {
         'Tiedonohjaussuunnitelmassa määritelty tehtäväluokan numero. Jätä tyhjäksi jos asiakirjaa ei arkistoida.',
       archiveDurationMonths: 'Arkistointiaika (kuukautta)',
       archiveExternally: 'Siirrettävä ulkoiseen arkistoon ennen poistoa',
-      endDecisionWhenUnitChanges: 'Päätös katkeaa, jos lapsi vaihtaa yksikköä'
+      endDecisionWhenUnitChanges: 'Päätös katkeaa, jos lapsi vaihtaa yksikköä',
+      deletionRetentionDays: 'Säilytysaika eVakassa (päivää)',
+      deletionRetention: 'Säilytysaika eVakassa',
+      deletionRetentionBasis: {
+        PLACEMENT_END: 'lapsen viimeisen sijoituksen päättymisestä',
+        STATUS_TRANSITION: 'asiakirjan viimeisestä tilasiirtymästä'
+      }
     },
     templateEditor: {
       confidential: 'Salassapidettävä',
@@ -5141,49 +5268,6 @@ export const fi = {
     select: 'Valitse kutsumanimi',
     confirm: 'Vahvista'
   },
-  metadata: {
-    title: 'Arkistoitava metadata',
-    notFound: 'Asiakirjalle ei ole arkistoitavaa metadataa',
-    caseIdentifier: 'Asiatunnus',
-    processName: 'Asiaprosessi',
-    organization: 'Organisaatio',
-    archiveDurationMonths: 'Arkistointiaika',
-    primaryDocument: 'Ensisijainen asiakirja',
-    secondaryDocuments: 'Muut asiakirjat',
-    documentId: 'Asiakirjan tunniste',
-    name: 'Asiakirjan nimi',
-    createdAt: 'Laatimisajankohta',
-    createdBy: 'Laatija',
-    monthsUnit: 'kuukautta',
-    confidentiality: 'Julkisuus',
-    confidential: 'Salassapidettävä',
-    public: 'Julkinen',
-    notSet: 'Asettamatta',
-    confidentialityDuration: 'Salassapitoaika',
-    confidentialityBasis: 'Salassapitoperuste',
-    years: 'vuotta',
-    receivedBy: {
-      label: 'Saapumistapa',
-      PAPER: 'Paperilla',
-      ELECTRONIC: 'Sähköisesti'
-    },
-    sfiDelivery: {
-      label: 'Suomi.fi -toimitukset',
-      method: {
-        ELECTRONIC: 'Sähköisesti',
-        PAPER_MAIL: 'Postitse',
-        PENDING: 'Odottaa toimitusta'
-      }
-    },
-    history: 'Prosessin historia',
-    downloadPdf: 'Lataa PDF',
-    states: {
-      INITIAL: 'Asian vireillepano / -tulo',
-      PREPARATION: 'Asian valmistelu',
-      DECIDING: 'Päätöksenteko',
-      COMPLETED: 'Toimeenpano / Päättäminen / Sulkeminen'
-    }
-  },
   systemNotifications: {
     title: {
       CITIZENS: 'Kuntalaisille näkyvä ilmoitus',
@@ -5218,6 +5302,77 @@ export const fi = {
     validationErrors: {
       endBeforeToday: 'Ei voi päättyä menneisyydessä'
     }
+  },
+  decisionReasonings: {
+    tabs: {
+      DAYCARE: 'Varhaiskasvatus',
+      PRESCHOOL: 'Esiopetus',
+      CLUB: 'Kerho'
+    },
+    collectionInfo: {
+      DAYCARE:
+        'Varhaiskasvatusperusteluja käytetään päätöksissä, jotka koskevat sijoitustyyppejä:',
+      PRESCHOOL:
+        'Esiopetusperusteluja käytetään päätöksissä, jotka koskevat sijoitustyyppejä:',
+      CLUB: 'Kerhoperusteluja käytetään päätöksissä, jotka koskevat sijoitustyyppejä:'
+    },
+    placementTypes: {
+      DAYCARE: [
+        'Varhaiskasvatuspäätökset',
+        'Osa-aikainen varhaiskasvatus',
+        'Liittyvä varhaiskasvatus'
+      ],
+      PRESCHOOL: ['Esiopetus', 'Valmistava opetus'],
+      CLUB: ['Kerho', 'Esiopetuksen kerho']
+    },
+    generic: {
+      title: 'Yleiset perustelut',
+      addNew: 'Lisää yleinen perustelu',
+      dateSuffix: 'alkavat sijoitukset',
+      dateLabel: 'Koskee sijoituksia, jotka alkavat',
+      textFi: 'Päätökselle tuleva teksti',
+      textSv: 'Päätökselle tuleva teksti',
+      statusReady: 'Käytössä',
+      statusNotReady: 'Ei käytössä',
+      statusOutdated: 'Vanhentunut',
+      notReadyWarning:
+        'Päätöksiä ei voi lähettää ennen kuin perustelu on otettu käyttöön',
+      outdated: 'Vanhentuneet',
+      cancel: 'Peruuta',
+      saveAsNotReady: 'Tallenna otamatta käyttöön',
+      saveAndActivate: 'Ota käyttöön',
+      saveAndActivateConfirmTitle: 'Ota perustelu käyttöön',
+      saveAndActivateConfirmText:
+        'Huomaathan, että käyttöön otettua yleistä perustelua ei voi poistaa. Käytössä oleva yleinen perustelu voidaan kuitenkin korvata uudella yleisellä perustelulla, joka otetaan käyttöön samalla ajanjaksolla. Haluatko ottaa yleisen perustelun käyttöön?',
+      edit: 'Muokkaa',
+      delete: 'Poista',
+      deleteConfirmTitle: 'Poista perustelu',
+      deleteConfirmText: 'Haluatko poistaa yleisen perustelun?',
+      remove: 'Poista käytöstä',
+      removeConfirmTitle: 'Poista perustelu käytöstä',
+      removeConfirmText:
+        'Aktiivinen perustelu poistettavissa vain testiympäristöissä'
+    },
+    individual: {
+      title: 'Yksilölliset perustelut',
+      addNew: 'Lisää yksilöllinen perustelu',
+      statusActive: 'Käytettävissä',
+      statusRemoved: 'Poistettu käytöstä',
+      titleFi: 'Sisäinen nimi',
+      titleSv: 'Sisäinen nimi',
+      textFi: 'Päätökselle tuleva teksti',
+      textSv: 'Päätökselle tuleva teksti',
+      removed: 'Poistettu käytöstä',
+      cancel: 'Peruuta',
+      saveAndActivate: 'Ota käyttöön',
+      saveAndActivateConfirmTitle: 'Ota perustelu käyttöön',
+      saveAndActivateConfirmText:
+        'Huomaathan, että jos yksilöllinen perustelu poistetaan myöhemmin käytöstä, se ei poistu päätöksiltä, joille se on jo valittu. Haluatko ottaa yksilöllisen perustelun käyttöön?',
+      removeConfirmTitle: 'Poista perustelu käytöstä',
+      removeConfirmText: 'Haluatko poistaa yksilöllisen perustelun käytöstä?'
+    },
+    fi: 'FI',
+    sv: 'SV'
   },
   components
 }

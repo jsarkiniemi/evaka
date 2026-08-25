@@ -39,15 +39,7 @@ import {
 } from 'lib-components/layout/flex-helpers'
 import { AlertBox, InfoBox } from 'lib-components/molecules/MessageBoxes'
 import DatePicker from 'lib-components/molecules/date-picker/DatePicker'
-import {
-  fontWeights,
-  H1,
-  H2,
-  H3,
-  H4,
-  Label,
-  P
-} from 'lib-components/typography'
+import { H1, H2, H3, H4, Label, P } from 'lib-components/typography'
 import { defaultMargins, Gap } from 'lib-components/white-space'
 
 import Footer from '../Footer'
@@ -307,6 +299,8 @@ export default React.memo(function IncomeStatementForm({
         <ContentArea $opaque $paddingVertical="L">
           <AssureCheckbox>
             <Checkbox
+              aria-required
+              hideAsterisk
               label={t.income.assure}
               checked={formData.assure}
               data-qa="assure-checkbox"
@@ -429,62 +423,60 @@ const IncomeTypeSelection = React.memo(
     )
 
     const dateRange = useCallback(
-      (isHighestFee: boolean) => {
-        return (
-          <Indent>
-            <FixedSpaceRow $spacing="XL">
-              <div>
-                <Label htmlFor="start-date">
-                  {isHighestFee
-                    ? t.income.incomeType.startDate
-                    : t.income.incomeType.starts}{' '}
-                  *
-                </Label>
-                <Gap $size="xs" />
-                <DatePicker
-                  id="start-date"
-                  data-qa="income-start-date"
-                  date={formData.startDate}
-                  onChange={onStartDateChange}
-                  info={startDateInputInfo}
-                  hideErrorsBeforeTouched={!showFormErrors}
-                  locale={lang}
-                  required={true}
-                  isInvalidDate={(d) =>
-                    isValidStartDate(d)
-                      ? null
-                      : t.validationErrors.unselectableDate
-                  }
-                />
-              </div>
-              <div>
-                <Label htmlFor="end-date">{`${isHighestFee ? t.income.incomeType.endDate : t.income.incomeType.ends}${isEndDateRequired ? ' *' : ''}`}</Label>
-                <Gap $size="xs" />
-                <DatePicker
-                  id="end-date"
-                  data-qa="income-end-date"
-                  date={formData.endDate}
-                  onChange={onEndDateChange}
-                  minDate={formData.startDate ?? undefined}
-                  maxDate={
-                    isEndDateRequired
-                      ? formData.startDate?.addYears(1)
-                      : undefined
-                  }
-                  hideErrorsBeforeTouched={false}
-                  locale={lang}
-                  info={endDateInputInfo}
-                  isInvalidDate={(d) =>
-                    errorToInputInfo(validateEndDate(d), t.validationErrors)
-                      ?.text || null
-                  }
-                  required={isEndDateRequired}
-                />
-              </div>
-            </FixedSpaceRow>
-          </Indent>
-        )
-      },
+      (isHighestFee: boolean) => (
+        <Indent>
+          <FixedSpaceRow $spacing="XL">
+            <div>
+              <Label htmlFor="start-date">
+                {isHighestFee
+                  ? t.income.incomeType.startDate
+                  : t.income.incomeType.starts}{' '}
+                *
+              </Label>
+              <Gap $size="xs" />
+              <DatePicker
+                id="start-date"
+                data-qa="income-start-date"
+                date={formData.startDate}
+                onChange={onStartDateChange}
+                info={startDateInputInfo}
+                hideErrorsBeforeTouched={!showFormErrors}
+                locale={lang}
+                required
+                isInvalidDate={(d) =>
+                  isValidStartDate(d)
+                    ? null
+                    : t.validationErrors.unselectableDate
+                }
+              />
+            </div>
+            <div>
+              <Label htmlFor="end-date">{`${isHighestFee ? t.income.incomeType.endDate : t.income.incomeType.ends}${isEndDateRequired ? ' *' : ''}`}</Label>
+              <Gap $size="xs" />
+              <DatePicker
+                id="end-date"
+                data-qa="income-end-date"
+                date={formData.endDate}
+                onChange={onEndDateChange}
+                minDate={formData.startDate ?? undefined}
+                maxDate={
+                  isEndDateRequired
+                    ? formData.startDate?.addYears(1)
+                    : undefined
+                }
+                hideErrorsBeforeTouched={false}
+                locale={lang}
+                info={endDateInputInfo}
+                isInvalidDate={(d) =>
+                  errorToInputInfo(validateEndDate(d), t.validationErrors)
+                    ?.text || null
+                }
+                required={isEndDateRequired}
+              />
+            </div>
+          </FixedSpaceRow>
+        </Indent>
+      ),
       [
         endDateInputInfo,
         formData.endDate,
@@ -520,7 +512,11 @@ const IncomeTypeSelection = React.memo(
               <Gap $size="s" />
             </>
           )}
-          <div role="group" aria-labelledby="income-type-label">
+          <div
+            role="radiogroup"
+            aria-required="true"
+            aria-labelledby="income-type-label"
+          >
             <LabelWithError
               label={`${t.income.incomeType.title} *`}
               labelId="income-type-label"
@@ -624,7 +620,11 @@ const GrossIncomeSelection = React.memo(function GrossIncomeSelection({
         <Gap $size="m" />
         {t.income.grossIncome.description}
         <Gap $size="m" />
-        <div role="group" aria-labelledby="income-source-label">
+        <div
+          role="radiogroup"
+          aria-required="true"
+          aria-labelledby="income-source-label"
+        >
           <LabelWithError
             label={`${t.income.grossIncome.incomeSource} *`}
             labelId="income-source-label"
@@ -676,6 +676,7 @@ const GrossIncomeSelection = React.memo(function GrossIncomeSelection({
                 validate(formData.noIncomeDescription, required),
                 t.validationErrors
               )}
+              required
             />
           </>
         )}
@@ -693,16 +694,20 @@ const GrossIncomeSelection = React.memo(function GrossIncomeSelection({
           formData.incomeSource === 'ATTACHMENTS') && (
           <>
             <Gap $size="L" />
-            <Label>{t.income.grossIncome.estimate}</Label>
+            <Label htmlFor="estimated-monthly-income-gross">
+              {t.income.grossIncome.estimate} *
+            </Label>
             <Gap $size="m" />
             <FixedSpaceRow>
               <FixedSpaceColumn>
-                <LightLabel htmlFor="estimated-monthly-income-gross">
-                  {t.income.grossIncome.estimatedMonthlyIncome} *
-                </LightLabel>
+                <P $noMargin id="estimated-monthly-income-gross-description">
+                  {t.income.grossIncome.estimatedMonthlyIncome}
+                </P>
+                <Gap $size="zero" />
                 <InputField
                   id="estimated-monthly-income-gross"
                   data-qa="gross-monthly-income-estimate"
+                  aria-describedby="estimated-monthly-income-gross-description"
                   value={formData.estimatedMonthlyIncome}
                   onChange={onEstimatedMonthlyIncomeChange}
                   required
@@ -723,7 +728,7 @@ const GrossIncomeSelection = React.memo(function GrossIncomeSelection({
               {t.income.grossIncome.otherIncome}
             </Label>
             <Gap $size="s" />
-            {t.income.grossIncome.otherIncomeDescription}
+            <P $noMargin>{t.income.grossIncome.otherIncomeDescription}</P>
             <Gap $size="s" />
             <OtherIncomeWrapper>
               <MultiSelect
@@ -749,13 +754,17 @@ const GrossIncomeSelection = React.memo(function GrossIncomeSelection({
             {formData.otherIncome.length > 0 && (
               <>
                 <Gap $size="s" />
-                <Label>{t.income.grossIncome.otherIncomeInfoLabel}</Label>
+                <Label htmlFor="other-income-info">
+                  {t.income.grossIncome.otherIncomeInfoLabel}
+                </Label>
                 <Gap $size="s" />
-                <P $noMargin>
+                <P $noMargin id="other-income-info-description">
                   {t.income.grossIncome.otherIncomeInfoDescription}
                 </P>
                 <Gap $size="s" />
                 <InputField
+                  aria-describedby="other-income-info-description"
+                  id="other-income-info"
                   value={formData.otherIncomeInfo}
                   onChange={onOtherIncomeInfoChange}
                 />
@@ -764,7 +773,11 @@ const GrossIncomeSelection = React.memo(function GrossIncomeSelection({
           </>
         )}
         <Gap $size="L" />
-        <div role="group" aria-labelledby="entrepreneur-select-label">
+        <div
+          role="radiogroup"
+          aria-required="true"
+          aria-labelledby="entrepreneur-select-label"
+        >
           <LabelWithError
             label={`${t.income.entrepreneurIncome.entrepreneurSelectTitle} *`}
             labelId="entrepreneur-select-label"
@@ -901,7 +914,11 @@ const EntrepreneurIncomeSelection = React.memo(
             </FixedSpaceColumn>
           </FixedSpaceRow>
           <Gap $size="L" />
-          <div role="group" aria-labelledby="spouse-works-in-company-label">
+          <div
+            role="radiogroup"
+            aria-required="true"
+            aria-labelledby="spouse-works-in-company-label"
+          >
             <LabelWithError
               label={`${t.income.entrepreneurIncome.spouseWorksInCompany} *`}
               labelId="spouse-works-in-company-label"
@@ -1208,29 +1225,38 @@ const LimitedCompanyIncomeSelection = React.memo(
     return (
       <Indent>
         <FixedSpaceColumn>
-          <P $noMargin>{t.income.limitedCompany.info}</P>
-          {showFormErrors && formData.incomeSource === null && (
-            <LabelError text={t.income.errors.choose} />
-          )}
-          <Gap $size="xs" />
           <AttachmentSection
             attachmentType="ACCOUNTANT_REPORT_LLC"
             showFormErrors={showFormErrors}
             attachmentHandler={attachmentHandler}
             dense
           />
-          <Radio
-            label={t.income.limitedCompany.incomesRegister}
-            data-qa="llc-incomes-register"
-            checked={formData.incomeSource === 'INCOMES_REGISTER'}
-            onChange={() => onIncomeSourceChange('INCOMES_REGISTER')}
-          />
-          <Radio
-            label={t.income.limitedCompany.attachments}
-            data-qa="llc-attachments"
-            checked={formData.incomeSource === 'ATTACHMENTS'}
-            onChange={() => onIncomeSourceChange('ATTACHMENTS')}
-          />
+          <div
+            role="radiogroup"
+            aria-labelledby="llc-income-source-label"
+            aria-required="true"
+          >
+            <LabelWithError
+              label={`${t.income.limitedCompany.info} *`}
+              labelId="llc-income-source-label"
+              showError={showFormErrors && formData.incomeSource === null}
+              errorText={t.income.errors.choose}
+            />
+            <Gap $size="s" />
+            <Radio
+              label={t.income.limitedCompany.incomesRegister}
+              data-qa="llc-incomes-register"
+              checked={formData.incomeSource === 'INCOMES_REGISTER'}
+              onChange={() => onIncomeSourceChange('INCOMES_REGISTER')}
+            />
+            <Gap $size="xs" />
+            <Radio
+              label={t.income.limitedCompany.attachments}
+              data-qa="llc-attachments"
+              checked={formData.incomeSource === 'ATTACHMENTS'}
+              onChange={() => onIncomeSourceChange('ATTACHMENTS')}
+            />
+          </div>
           {formData.incomeSource === 'ATTACHMENTS' && (
             <AttachmentSection
               attachmentType="PAYSLIP_LLC"
@@ -1286,6 +1312,7 @@ const Accounting = React.memo(function Accounting({
         <Label htmlFor="accountant-phone">{t.phone} *</Label>
         <InputField
           id="accountant-phone"
+          type="tel"
           placeholder={t.phonePlaceholder}
           data-qa="accountant-phone"
           required
@@ -1302,6 +1329,7 @@ const Accounting = React.memo(function Accounting({
         <Label htmlFor="accountant-email">{t.email} *</Label>
         <InputField
           id="accountant-email"
+          type="email"
           placeholder={t.emailPlaceholder}
           data-qa="accountant-email"
           required
@@ -1411,10 +1439,6 @@ const OtherInfo = React.memo(function OtherInfo({
 
 const FeeInfo = styled(P).attrs({ $noMargin: true })`
   margin-left: ${defaultMargins.XL};
-`
-
-const LightLabel = styled(Label)`
-  font-weight: ${fontWeights.normal};
 `
 
 const Indent = styled.div`

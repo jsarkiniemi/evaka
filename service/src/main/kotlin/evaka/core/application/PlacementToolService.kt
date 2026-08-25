@@ -5,6 +5,7 @@
 package evaka.core.application
 
 import evaka.core.Audit
+import evaka.core.AuditContext
 import evaka.core.EvakaEnv
 import evaka.core.daycare.PreschoolTerm
 import evaka.core.daycare.getDaycare
@@ -108,6 +109,7 @@ WHERE application.type = 'PRESCHOOL'
         tx: Database.Transaction,
         user: AuthenticatedUser,
         clock: EvakaClock,
+        audit: AuditContext,
         file: MultipartFile,
     ) {
         val serviceNeedOptions = tx.getServiceNeedOptions()
@@ -120,42 +122,43 @@ WHERE application.type = 'PRESCHOOL'
                         "No service need option found: ${evakaEnv.placementToolServiceNeedOptionId}"
                     )
             } else null
-        val nextPreschoolTermId =
-            findNextPreschoolTerm(tx, clock.today())?.id
+        val nextPreschoolTerm =
+            findNextPreschoolTerm(tx, clock.today())
                 ?: throw NotFound("No next preschool term found")
+        val nextPreschoolTermId = nextPreschoolTerm.id
+        audit.add(nextPreschoolTermId).observeDate(nextPreschoolTerm.finnishPreschool.start)
         val placements = file.inputStream.use { parsePlacementToolCsv(it) }
-        asyncJobRunner
-            .plan(
-                tx,
-                placements.map { (childIdentifier, preschoolId) ->
-                    when {
-                        isValidSSN(childIdentifier) -> {
-                            AsyncJob.PlacementToolFromSSN(
-                                user,
-                                childIdentifier,
-                                preschoolId,
-                                serviceNeedOptionId,
-                                nextPreschoolTermId,
-                            )
-                        }
-
-                        else -> {
-                            AsyncJob.PlacementTool(
-                                user,
-                                PlacementToolData(
-                                    ChildId(UUID.fromString(childIdentifier)),
-                                    preschoolId,
-                                ),
-                                serviceNeedOptionId,
-                                nextPreschoolTermId,
-                            )
-                        }
+        audit.addMeta("count", placements.size)
+        asyncJobRunner.plan(
+            tx,
+            placements.map { (childIdentifier, preschoolId) ->
+                when {
+                    isValidSSN(childIdentifier) -> {
+                        AsyncJob.PlacementToolFromSSN(
+                            user,
+                            childIdentifier,
+                            preschoolId,
+                            serviceNeedOptionId,
+                            nextPreschoolTermId,
+                        )
                     }
-                },
-                runAt = clock.now(),
-                retryCount = 1,
-            )
-            .also { Audit.PlacementTool.log(meta = mapOf("total" to placements.size)) }
+
+                    else -> {
+                        AsyncJob.PlacementTool(
+                            user,
+                            PlacementToolData(
+                                ChildId(UUID.fromString(childIdentifier)),
+                                preschoolId,
+                            ),
+                            serviceNeedOptionId,
+                            nextPreschoolTermId,
+                        )
+                    }
+                }
+            },
+            runAt = clock.now(),
+            retryCount = 1,
+        )
     }
 
     fun createPlacementToolApplicationsFromSsn(
@@ -190,10 +193,9 @@ WHERE application.type = 'PRESCHOOL'
         clock: EvakaClock,
         ssn: String,
     ): PersonId {
-        val child =
-            db.transaction { tx ->
-                personService.getOrCreatePerson(tx, user, ExternalIdentifier.SSN.getInstance(ssn))
-            }
+        val child = db.transaction { tx ->
+            personService.getOrCreatePerson(tx, user, ExternalIdentifier.SSN.getInstance(ssn))
+        }
         fridgeFamilyService.updateChildAndFamilyFromVtj(db, user, clock, child!!.id)
         return child.id
     }
@@ -206,6 +208,9 @@ WHERE application.type = 'PRESCHOOL'
         defaultServiceNeedOptionId: ServiceNeedOptionId?,
         nextPreschoolTermId: PreschoolTermId,
     ) {
+        val desiredStatus = featureConfig.placementToolApplicationStatus
+        val audit =
+            AuditContext().add(data.childId).add(data.preschoolId).addMeta("status", desiredStatus)
         dbc.transaction { tx ->
             if (tx.getPersonById(data.childId) == null) {
                 throw Exception("No person found with id ${data.childId}")
@@ -216,6 +221,7 @@ WHERE application.type = 'PRESCHOOL'
             if (guardianIds.isEmpty()) {
                 throw Exception("No guardians found for child ${data.childId}")
             }
+            audit.add(guardianIds)
             val guardianId =
                 guardianIds.find { id ->
                     id ==
@@ -227,7 +233,6 @@ WHERE application.type = 'PRESCHOOL'
                             .firstOrNull()
                             ?.headOfChildId
                 } ?: guardianIds.first()
-            val desiredStatus = featureConfig.placementToolApplicationStatus
 
             val (_, applicationId) =
                 savePaperApplication(
@@ -247,6 +252,8 @@ WHERE application.type = 'PRESCHOOL'
                     personService,
                     applicationStateService,
                 )
+
+            audit.add(applicationId)
 
             val application = tx.fetchApplicationDetails(applicationId)!!
             val serviceNeedOptions = tx.getServiceNeedOptions()
@@ -268,6 +275,7 @@ WHERE application.type = 'PRESCHOOL'
                 tx,
                 user,
                 clock,
+                audit,
                 application,
                 data,
                 guardianIds,
@@ -281,7 +289,13 @@ WHERE application.type = 'PRESCHOOL'
                 applicationStateService.sendPlacementToolApplication(tx, user, clock, application)
             }
             if (desiredStatus >= ApplicationStatus.WAITING_PLACEMENT) {
-                applicationStateService.moveToWaitingPlacement(tx, user, clock, application.id)
+                applicationStateService.moveToWaitingPlacement(
+                    tx,
+                    user,
+                    clock,
+                    audit,
+                    application.id,
+                )
             }
             if (desiredStatus >= ApplicationStatus.WAITING_DECISION) {
                 val period = nextPreschoolTerm.finnishPreschool
@@ -289,6 +303,7 @@ WHERE application.type = 'PRESCHOOL'
                     tx,
                     user,
                     clock,
+                    audit,
                     application.id,
                     DaycarePlacementPlan(
                         data.preschoolId,
@@ -303,12 +318,14 @@ WHERE application.type = 'PRESCHOOL'
                 )
             }
         }
+        audit.log(Audit.PlacementToolApplicationCreate, clock)
     }
 
     private fun updateApplicationPreferences(
         tx: Database.Transaction,
         user: AuthenticatedUser,
         clock: EvakaClock,
+        audit: AuditContext,
         application: ApplicationDetails,
         data: PlacementToolData,
         guardianIds: List<PersonId>,
@@ -358,6 +375,7 @@ WHERE application.type = 'PRESCHOOL'
             tx,
             user,
             clock.now(),
+            audit,
             application.id,
             ApplicationUpdate(form = ApplicationFormUpdate.from(updatedApplication.form)),
             user.evakaUserId,

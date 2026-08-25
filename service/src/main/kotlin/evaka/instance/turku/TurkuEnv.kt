@@ -5,13 +5,13 @@
 package evaka.instance.turku
 
 import evaka.core.Sensitive
+import evaka.core.SftpEnv
 import evaka.core.lookup
 import org.springframework.core.env.Environment
 
 data class TurkuEnv(
     val sapInvoicing: SftpProperties,
     val sapPayments: SftpProperties,
-    val bucket: BucketProperties,
     val dwExport: DwExportProperties,
 ) {
     companion object {
@@ -19,11 +19,9 @@ data class TurkuEnv(
             TurkuEnv(
                 sapInvoicing = SftpProperties.fromEnvironment(env, "evakaturku.sap_invoicing"),
                 sapPayments = SftpProperties.fromEnvironment(env, "evakaturku.sap_payments"),
-                bucket = BucketProperties(export = env.lookup("evakaturku.bucket.export")),
                 dwExport =
                     DwExportProperties(
-                        prefix = env.lookup("evakaturku.dw_export.prefix"),
-                        sftp = SftpProperties.fromEnvironment(env, "evakaturku.dw_export.sftp"),
+                        sftp = SftpProperties.fromEnvironment(env, "evakaturku.dw_export.sftp")
                     ),
             )
     }
@@ -36,6 +34,17 @@ data class SftpProperties(
     val username: Sensitive<String>,
     val password: Sensitive<String>,
 ) {
+    fun toSftpEnv(): SftpEnv =
+        SftpEnv(
+            host = address,
+            port = port,
+            hostKeys = emptyList(),
+            username = username.value,
+            password = password,
+            privateKey = null,
+            skipHostKeyVerification = true,
+        )
+
     companion object {
         fun fromEnvironment(env: Environment, prefix: String) =
             SftpProperties(
@@ -52,4 +61,4 @@ data class BucketProperties(val export: String) {
     fun allBuckets() = listOf(export)
 }
 
-data class DwExportProperties(val prefix: String, val sftp: SftpProperties)
+data class DwExportProperties(val sftp: SftpProperties)

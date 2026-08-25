@@ -416,29 +416,29 @@ class Database(private val jdbi: Jdbi, private val tracer: Tracer) {
          */
         fun <R> useIterable(f: (Iterable<T>) -> R): R = rows.use { f(it.asIterable()) }
 
+        fun forEach(action: (T) -> Unit) = useSequence { it.forEach(action) }
+
         fun toList(): List<T> = rows.use { it.toList() }
 
         fun toSet(): Set<T> = rows.use { it.toSet() }
 
-        fun exactlyOne(): T =
-            rows.use {
-                val iterator = it.iterator()
-                if (!iterator.hasNext()) error("Expected exactly one result, got none")
+        fun exactlyOne(): T = rows.use {
+            val iterator = it.iterator()
+            if (!iterator.hasNext()) error("Expected exactly one result, got none")
+            val result = iterator.next()
+            if (iterator.hasNext()) error("Expected exactly one result, got more than one")
+            result
+        }
+
+        fun exactlyOneOrNull(): T? = rows.use {
+            val iterator = it.iterator()
+            if (!iterator.hasNext()) null
+            else {
                 val result = iterator.next()
-                if (iterator.hasNext()) error("Expected exactly one result, got more than one")
+                if (iterator.hasNext()) error("Expected 0-1 results, got more than one")
                 result
             }
-
-        fun exactlyOneOrNull(): T? =
-            rows.use {
-                val iterator = it.iterator()
-                if (!iterator.hasNext()) null
-                else {
-                    val result = iterator.next()
-                    if (iterator.hasNext()) error("Expected 0-1 results, got more than one")
-                    result
-                }
-            }
+        }
     }
 
     class Update internal constructor(override val raw: org.jdbi.v3.core.statement.Update) :

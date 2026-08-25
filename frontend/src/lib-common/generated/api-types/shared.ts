@@ -4,6 +4,7 @@
 
 // GENERATED FILE: no manual modifications
 
+import type { DecisionType } from './decision'
 import HelsinkiDateTime from '../../helsinki-date-time'
 import type { Id } from '../../id-type'
 import type { JsonOf } from '../../json'
@@ -108,23 +109,47 @@ export type DaycareCaretakerId = Id<'DaycareCaretaker'>
 
 export type DaycareId = Id<'Daycare'>
 
+export type DecisionGenericReasoningId = Id<'DecisionGenericReasoning'>
+
 export type DecisionId = Id<'Decision'>
 
+export type DecisionIndividualReasoningId = Id<'DecisionIndividualReasoning'>
+
 export type DocumentTemplateId = Id<'DocumentTemplate'>
+
+/**
+* Generated from evaka.core.shared.security.EmployeeFeatureConfig
+*/
+export interface EmployeeFeatureConfig {
+  allowEnglishChildDocumentsForAllTypes: boolean
+  decisionReasoningGenericRemoval: boolean
+  decisionReasoningsEnabled: boolean
+  decisionsWithoutReasonings: DecisionType[]
+  deletedMessagePlaceholderBody: string
+  messageSupportEmail: string | null
+  openRangesHolidayQuestionnaire: boolean
+  placementDecisionSwedishLanguageEnabled: boolean
+  replacementInvoices: boolean
+}
 
 /**
 * Generated from evaka.core.shared.security.EmployeeFeatures
 */
 export interface EmployeeFeatures {
+  allowEnglishChildDocumentsForAllTypes: boolean
   applications: boolean
   createDraftInvoices: boolean
   createPlacements: boolean
   createUnits: boolean
+  decisionReasoningGenericRemoval: boolean
+  decisionReasoningManagement: boolean
+  decisionReasoningsEnabled: boolean
   documentTemplates: boolean
   employees: boolean
   finance: boolean
   financeBasics: boolean
   holidayAndTermPeriods: boolean
+  messageSupportEmail: string | null
   messages: boolean
   openRangesHolidayQuestionnaire: boolean
   outOfOffice: boolean

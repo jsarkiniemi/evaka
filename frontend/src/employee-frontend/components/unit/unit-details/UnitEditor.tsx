@@ -6,9 +6,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import styled from 'styled-components'
 
 import type DateRange from 'lib-common/date-range'
-import { useBoolean } from 'lib-common/form/hooks'
 import type { UpdateStateFn } from 'lib-common/form-state'
 import { time } from 'lib-common/form-validation'
+import { useBoolean } from 'lib-common/form/hooks'
 import type {
   CareType,
   Daycare,
@@ -924,7 +924,7 @@ function MealtimeInput({
 }
 
 export default function UnitEditor(props: Props) {
-  const { i18n } = useTranslation()
+  const { i18n, lang } = useTranslation()
   const initialData = useMemo<FormData>(
     () => toFormData(props.unit),
     [props.unit]
@@ -997,7 +997,7 @@ export default function UnitEditor(props: Props) {
       props.financeDecisionHandlerOptions.find(
         (e) => e.value === form.financeDecisionHandlerId
       ),
-    [form.financeDecisionHandlerId] // eslint-disable-line react-hooks/exhaustive-deps
+    [form.financeDecisionHandlerId] // oxlint-disable-line react-hooks/exhaustive-deps
   )
 
   const [
@@ -1140,7 +1140,7 @@ export default function UnitEditor(props: Props) {
                   date={form.openingDate}
                   onChange={(openingDate) => updateForm({ openingDate })}
                   maxDate={form.closingDate ?? LocalDate.of(2100, 1, 1)}
-                  locale="fi"
+                  locale={lang}
                   data-qa="opening-date-input"
                 />
                 <DatePickerSpacer />
@@ -1148,7 +1148,7 @@ export default function UnitEditor(props: Props) {
                   date={form.closingDate}
                   onChange={(closingDate) => updateForm({ closingDate })}
                   minDate={form.openingDate ?? LocalDate.of(1960, 1, 1)}
-                  locale="fi"
+                  locale={lang}
                   data-qa="closing-date-input"
                 />
               </>
@@ -1352,7 +1352,7 @@ export default function UnitEditor(props: Props) {
                                   }
                                 })
                               }}
-                              locale="fi"
+                              locale={lang}
                             />
                             <DatePickerSpacer />
                             <DatePicker
@@ -1367,7 +1367,7 @@ export default function UnitEditor(props: Props) {
                                   }
                                 })
                               }}
-                              locale="fi"
+                              locale={lang}
                             />
                           </>
                         ) : (
@@ -1655,12 +1655,13 @@ export default function UnitEditor(props: Props) {
         </div>
         {props.editable ? (
           <FixedSpaceColumn>
-            {(['fi', 'sv'] as const).map((value) => (
+            {(['fi', 'sv', 'en'] as const).map((value) => (
               <Radio
                 key={value}
                 label={i18n.language[value]}
                 checked={form.language === value}
                 onChange={() => updateForm({ language: value })}
+                data-qa={`language-${value}`}
               />
             ))}
           </FixedSpaceColumn>

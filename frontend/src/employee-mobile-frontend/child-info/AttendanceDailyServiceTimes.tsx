@@ -2,13 +2,17 @@
 //
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+import partition from 'lodash/partition'
 import React, { useMemo } from 'react'
 
 import type { DailyServiceTimesValue } from 'lib-common/generated/api-types/dailyservicetimes'
 import type { ScheduleType } from 'lib-common/generated/api-types/placement'
 import type { Reservation } from 'lib-common/generated/api-types/reservations'
 
-import { Reservations } from '../child-attendance/Reservations'
+import {
+  ReservationNoTimes,
+  Reservations
+} from '../child-attendance/Reservations'
 import { ServiceTime } from '../common/components'
 import { getTodaysServiceTimes } from '../common/dailyServiceTimes'
 import { useTranslation } from '../common/i18n'
@@ -27,11 +31,8 @@ export default React.memo(function AttendanceDailyServiceTimes({
   scheduleType
 }: Props) {
   const { i18n } = useTranslation()
-  const reservationsWithTimes = useMemo(
-    () =>
-      reservations.flatMap((reservation) =>
-        reservation.type === 'TIMES' ? [reservation] : []
-      ),
+  const [reservationsWithTimes, reservationsNoTimes] = useMemo(
+    () => partition(reservations, (r) => r.type === 'TIMES'),
     [reservations]
   )
 
@@ -47,6 +48,15 @@ export default React.memo(function AttendanceDailyServiceTimes({
   }
 
   const todaysTimes = getTodaysServiceTimes(dailyServiceTimes)
+
+  if (reservationsNoTimes.length > 0 && typeof todaysTimes === 'string') {
+    return (
+      <ServiceTime data-qa="reservation">
+        <ReservationNoTimes hideLabel={hideLabel} />
+      </ServiceTime>
+    )
+  }
+
   return (
     <ServiceTime data-qa="reservation">
       {scheduleType === 'FIXED_SCHEDULE' ? (

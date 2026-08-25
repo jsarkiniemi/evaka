@@ -5,6 +5,7 @@
 package evaka.core.decision
 
 import evaka.core.EmailEnv
+import evaka.core.EvakaEnv
 import evaka.core.application.ApplicationDetails
 import evaka.core.application.ServiceNeed
 import evaka.core.application.fetchApplicationDetails
@@ -13,6 +14,12 @@ import evaka.core.daycare.UnitManager
 import evaka.core.daycare.domain.Language
 import evaka.core.daycare.domain.ProviderType
 import evaka.core.daycare.getDaycare
+import evaka.core.decision.reasoning.DecisionPdfReasoningSource
+import evaka.core.decision.reasoning.getDecisionPdfReasoningSource
+import evaka.core.decision.reasoning.getPlannedUnsentDecisions
+import evaka.core.decision.reasoning.hasLinkedGenericReasoning
+import evaka.core.decision.reasoning.updateGenericReasoningToDecision
+import evaka.core.decision.reasoning.validateResolvedGenericReasoning
 import evaka.core.emailclient.Email
 import evaka.core.emailclient.EmailClient
 import evaka.core.emailclient.IEmailMessageProvider
@@ -35,7 +42,7 @@ import evaka.core.sficlient.SfiMessage
 import evaka.core.sficlient.storeSentSfiMessage
 import evaka.core.shared.ApplicationId
 import evaka.core.shared.DecisionId
-import evaka.core.shared.PersonId
+import evaka.core.shared.FeatureConfig
 import evaka.core.shared.async.AsyncJob
 import evaka.core.shared.async.AsyncJobRunner
 import evaka.core.shared.auth.AuthenticatedUser
@@ -64,6 +71,8 @@ class DecisionService(
     private val emailMessageProvider: IEmailMessageProvider,
     private val emailClient: EmailClient,
     private val asyncJobRunner: AsyncJobRunner<AsyncJob>,
+    private val evakaEnv: EvakaEnv,
+    private val featureConfig: FeatureConfig,
 ) {
     fun finalizeDecisions(
         tx: Database.Transaction,
@@ -75,12 +84,19 @@ class DecisionService(
     ): List<DecisionId> {
         val now = clock.now()
         val decisionIds = tx.finalizeDecisions(applicationId, now)
+        val decisions = decisionIds.map { tx.getDecision(it)!! }
+
+        if (evakaEnv.decisionReasoningEnabled) {
+            decisions
+                .filterNot { it.type in featureConfig.decisionsWithoutReasonings }
+                .forEach { setGenericReasoningIfMissing(tx, it) }
+        }
+
         asyncJobRunner.plan(
             tx,
-            decisionIds.map { decisionId ->
-                val decision = tx.getDecision(decisionId)!!
+            decisions.map { decision ->
                 AsyncJob.NotifyDecisionCreated(
-                    decisionId,
+                    decision.id,
                     user,
                     sendAsMessage,
                     skipGuardianApproval && decision.type == DecisionType.PRESCHOOL,
@@ -91,11 +107,41 @@ class DecisionService(
         return decisionIds
     }
 
+    fun freezeGenericDecisionReasonings(tx: Database.Transaction, applicationId: ApplicationId) {
+        if (!evakaEnv.decisionReasoningEnabled) return
+        tx.getPlannedUnsentDecisions(applicationId)
+            .filterNot { it.type in featureConfig.decisionsWithoutReasonings }
+            .forEach { decision ->
+                val genericReasoning =
+                    validateResolvedGenericReasoning(
+                        tx,
+                        decision.id,
+                        decision.type,
+                        decision.startDate,
+                    )
+                tx.updateGenericReasoningToDecision(decision.id, genericReasoning.id)
+            }
+    }
+
+    private fun setGenericReasoningIfMissing(tx: Database.Transaction, decision: Decision) {
+        // Generic reasonings are frozen when the service worker sends the decisions onward
+        // (sendDecisionsWithoutProposal / sendPlacementProposal). The reasoning is only missing
+        // here for placement proposals that were already waiting for unit confirmation when
+        // decision reasoning was enabled.
+        if (tx.hasLinkedGenericReasoning(decision.id)) return
+        logger.warn {
+            "Decision ${decision.id} had no frozen generic reasoning at finalization, resolving it now"
+        }
+        val genericReasoning =
+            validateResolvedGenericReasoning(tx, decision.id, decision.type, decision.startDate)
+        tx.updateGenericReasoningToDecision(decision.id, genericReasoning.id)
+    }
+
     fun createDecisionPdf(tx: Database.Transaction, decisionId: DecisionId) {
         val settings = tx.getSettings()
         val decision =
             tx.getDecision(decisionId) ?: throw NotFound("No decision with id: $decisionId")
-        val decisionLanguage = determineDecisionLanguage(decision, tx)
+        val decisionLanguage = tx.getDecisionLanguage(decision.id)
         val application =
             tx.fetchApplicationDetails(decision.applicationId)
                 ?: throw NotFound("Application ${decision.applicationId} was not found")
@@ -103,6 +149,15 @@ class DecisionService(
             tx.getPersonById(application.childId)
                 ?: error("Child not found with id: ${application.childId}")
         val unit = tx.getDaycare(decision.unit.id) ?: error("No unit with id: ${decision.unit.id}")
+        val reasoning =
+            if (
+                evakaEnv.decisionReasoningEnabled &&
+                    decision.type !in featureConfig.decisionsWithoutReasonings
+            ) {
+                buildPdfReasoning(decisionLanguage, tx.getDecisionPdfReasoningSource(decisionId))
+            } else {
+                null
+            }
         val guardianDecisionLocation =
             createAndUploadDecision(
                 settings,
@@ -112,6 +167,7 @@ class DecisionService(
                 decisionLanguage,
                 unit.unitManager,
                 unit.preschoolManager,
+                reasoning,
             )
 
         tx.updateDecisionGuardianDocumentKey(decisionId, guardianDecisionLocation.key)
@@ -125,6 +181,7 @@ class DecisionService(
         decisionLanguage: OfficialLanguage,
         unitManager: UnitManager,
         preschoolManager: UnitManager,
+        reasoning: PdfReasoning?,
     ): DocumentLocation {
         val decisionBytes =
             createDecisionPdf(
@@ -138,27 +195,13 @@ class DecisionService(
                 decisionLanguage,
                 unitManager,
                 preschoolManager,
+                reasoning,
             )
 
         return uploadPdfToS3(
             DocumentKey.Decision(decision.id, decision.type, decisionLanguage),
             decisionBytes,
         )
-    }
-
-    private fun Database.Read.isDecisionForSecondGuardianRequired(
-        decision: Decision,
-        application: ApplicationDetails,
-        otherGuardian: PersonId,
-    ) =
-        decision.type != DecisionType.CLUB &&
-            !personService.personsLiveInTheSameAddress(this, application.guardianId, otherGuardian)
-
-    private fun determineDecisionLanguage(
-        decision: Decision,
-        tx: Database.Transaction,
-    ): OfficialLanguage {
-        return tx.getDecisionLanguage(decision.id)
     }
 
     private fun uploadPdfToS3(document: DocumentKey, bytes: ByteArray): DocumentLocation =
@@ -177,7 +220,7 @@ class DecisionService(
             tx.getDecision(decisionId) ?: throw NotFound("No decision with id: $decisionId")
 
         // make sure VTJ guardians are up-to-date
-        personService.getGuardians(tx, AuthenticatedUser.SystemInternalUser, decision.childId)
+        personService.getGuardians(tx, AuthenticatedUser.SystemInternalUser, now, decision.childId)
 
         val applicationId = decision.applicationId
         val application =
@@ -211,7 +254,9 @@ class DecisionService(
         }
 
         if (
-            !applicationGuardian.restrictedDetailsEnabled && !decision.documentContainsContactInfo
+            !applicationGuardian.restrictedDetailsEnabled &&
+                !decision.documentContainsContactInfo &&
+                decision.type != DecisionType.CLUB
         ) {
             val otherGuardians = tx.getApplicationOtherGuardians(applicationId)
             for (guardianId in otherGuardians) {
@@ -219,20 +264,18 @@ class DecisionService(
                     tx.getPersonById(guardianId)
                         ?: error("Other guardian not found with id: $guardianId")
 
-                if (tx.isDecisionForSecondGuardianRequired(decision, application, guardianId)) {
-                    if (currentGuardians.contains(guardianId)) {
-                        deliverDecisionToGuardian(
-                            tx,
-                            now,
-                            decision,
-                            otherGuardian,
-                            documentLocation,
-                            skipGuardianApproval,
-                        )
-                    } else {
-                        logger.warn {
-                            "Skipping sending decision $decisionId to application other guardian $guardianId - not a current guardian or foster parent"
-                        }
+                if (currentGuardians.contains(guardianId)) {
+                    deliverDecisionToGuardian(
+                        tx,
+                        now,
+                        decision,
+                        otherGuardian,
+                        documentLocation,
+                        skipGuardianApproval,
+                    )
+                } else {
+                    logger.warn {
+                        "Skipping sending decision $decisionId to application other guardian $guardianId - not a current guardian or foster parent"
                     }
                 }
             }
@@ -291,20 +334,22 @@ class DecisionService(
         clock: EvakaClock,
         applicationId: ApplicationId,
     ) {
-        val guardianId =
-            db.transaction { tx ->
-                val application =
-                    tx.fetchApplicationDetails(applicationId)
-                        ?: throw NotFound("Application $applicationId was not found")
-                val childId = application.childId
+        val now = clock.now()
+        val today = now.toLocalDate()
 
-                // make sure VTJ guardians are up-to-date
-                personService.getGuardians(tx, AuthenticatedUser.SystemInternalUser, childId)
+        val guardianId = db.transaction { tx ->
+            val application =
+                tx.fetchApplicationDetails(applicationId)
+                    ?: throw NotFound("Application $applicationId was not found")
+            val childId = application.childId
 
-                val currentGuardians = tx.getChildGuardiansAndFosterParents(childId, clock.today())
+            // make sure VTJ guardians are up-to-date
+            personService.getGuardians(tx, AuthenticatedUser.SystemInternalUser, now, childId)
 
-                application.guardianId.takeIf { currentGuardians.contains(it) }
-            }
+            val currentGuardians = tx.getChildGuardiansAndFosterParents(childId, today)
+
+            application.guardianId.takeIf { currentGuardians.contains(it) }
+        }
 
         if (guardianId != null) {
             // simplified to get rid of superfluous language requirement
@@ -351,6 +396,26 @@ class DecisionService(
     }
 }
 
+data class PdfReasoning(val generic: String, val individual: List<String>)
+
+internal fun buildPdfReasoning(
+    lang: OfficialLanguage,
+    source: DecisionPdfReasoningSource,
+): PdfReasoning {
+    val swedish = lang == OfficialLanguage.SV
+    val generic =
+        source.generic?.let { if (swedish) it.textSv else it.textFi }?.takeIf { it.isNotBlank() }
+            ?: error("Cannot render decision reasoning: generic reasoning text is missing or blank")
+    val individual =
+        source.individual.map { reasoning ->
+            (if (swedish) reasoning.textSv else reasoning.textFi).takeIf { it.isNotBlank() }
+                ?: error(
+                    "Cannot render decision reasoning: individual reasoning ${reasoning.id} has blank text"
+                )
+        }
+    return PdfReasoning(generic, individual)
+}
+
 fun createDecisionPdf(
     templateProvider: ITemplateProvider,
     pdfService: PdfGenerator,
@@ -362,6 +427,7 @@ fun createDecisionPdf(
     lang: OfficialLanguage,
     unitManager: UnitManager,
     preschoolManager: UnitManager,
+    reasoning: PdfReasoning? = null,
 ): ByteArray {
     val template = createTemplate(templateProvider, decision, isTransferApplication)
     val isPartTimeDecision: Boolean = decision.type == DecisionType.DAYCARE_PART_TIME
@@ -377,12 +443,13 @@ fun createDecisionPdf(
             preschoolManager,
             isPartTimeDecision,
             serviceNeed,
+            reasoning,
         )
 
     return pdfService.render(pages)
 }
 
-private fun generateDecisionPages(
+internal fun generateDecisionPages(
     template: String,
     lang: OfficialLanguage,
     settings: Map<SettingType, String>,
@@ -392,6 +459,7 @@ private fun generateDecisionPages(
     preschoolManager: UnitManager,
     isPartTimeDecision: Boolean,
     serviceNeed: ServiceNeed?,
+    reasoning: PdfReasoning? = null,
 ): Page {
     return Page(
         Template(template),
@@ -444,6 +512,7 @@ private fun generateDecisionPages(
             setVariable("decisionMakerName", settings[SettingType.DECISION_MAKER_NAME])
             setVariable("decisionMakerTitle", settings[SettingType.DECISION_MAKER_TITLE])
             setVariable("sentDate", decision.sentDate)
+            setVariable("reasoning", reasoning)
         },
     )
 }

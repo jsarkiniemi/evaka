@@ -24,7 +24,7 @@ const prod: FeatureFlags = {
   },
   decisionDraftMultipleUnits: true,
   urgencyAttachments: true,
-  preschool: true,
+  preschool: false,
   preparatory: false,
   assistanceActionOther: false,
   financeDecisionHandlerSelect: true,
@@ -36,7 +36,7 @@ const prod: FeatureFlags = {
   voucherUnitPayments: false,
   voucherValueSeparation: false,
   extendedPreschoolTerm: false,
-  hideClubApplication: false,
+  hideClubApplication: true,
   discussionReservations: true,
   jamixIntegration: true,
   serviceApplications: true,
@@ -51,14 +51,14 @@ const prod: FeatureFlags = {
     feeDecisions: true,
     voucherValueDecisions: true
   },
-  placementDesktop: true
+  placementDesktop: true,
+  citizenChildDocumentTypes: true
 }
 
 const features: Features = {
   default: {
     ...prod,
-    environmentLabel: 'Test',
-    citizenChildDocumentTypes: true
+    environmentLabel: 'Test'
   },
   prod
 }

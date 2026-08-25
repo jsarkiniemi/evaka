@@ -103,6 +103,8 @@ test.describe('Employee - Child documents', () => {
     await modal.confidentialityDurationYearsInput.fill('100')
     await modal.confidentialityBasisInput.fill('Joku laki §300')
     await modal.processDefinitionNumberInput.fill('12.06.01.SL1.RT34')
+    await modal.deletionRetentionDaysInput.fill('1825')
+    await modal.deletionRetentionBasisPlacementEnd.check()
     await modal.confirmCreateButton.click()
     await documentTemplatesPage.openTemplate(documentName)
 
@@ -373,7 +375,7 @@ test.describe('Employee - Child documents', () => {
     ).toBeHidden()
   })
 
-  test('Staff can create CITIZEN_BASIC document for child with placement starting in less than 30 days', async ({
+  test('Staff can create CITIZEN_BASIC document for child with placement starting in less than 60 days', async ({
     newEvakaPage
   }) => {
     const group1: DevDaycareGroup = await Fixture.daycareGroup({
@@ -395,11 +397,11 @@ test.describe('Employee - Child documents', () => {
 
     await Fixture.guardian(childFuture, testAdult).save()
 
-    // Create a placement that starts in 20 days (within the 30-day window)
+    // placement starts inside the citizen-document creation window
     const futurePlacement = await Fixture.placement({
       childId: childFuture.id,
       unitId: testDaycare.id,
-      startDate: now.toLocalDate().addDays(20),
+      startDate: now.toLocalDate().addDays(45),
       endDate: now.toLocalDate().addYears(1),
       type: 'DAYCARE'
     }).save()
@@ -449,7 +451,7 @@ test.describe('Employee - Child documents', () => {
     await expect(childDocument.status).toHaveText('Luonnos')
   })
 
-  test('Staff cannot see child documents section for child with placement starting in more than 30 days', async ({
+  test('Staff cannot see child documents section for child with placement starting in more than 60 days', async ({
     newEvakaPage
   }) => {
     const group1: DevDaycareGroup = await Fixture.daycareGroup({
@@ -471,11 +473,11 @@ test.describe('Employee - Child documents', () => {
 
     await Fixture.guardian(childFuture, testAdult).save()
 
-    // Create a placement that starts in 40 days (outside the 30-day window)
+    // Create a placement that starts in 70 days (outside the 60-day window)
     const futurePlacement = await Fixture.placement({
       childId: childFuture.id,
       unitId: testDaycare.id,
-      startDate: now.toLocalDate().addDays(40),
+      startDate: now.toLocalDate().addDays(70),
       endDate: now.toLocalDate().addYears(1),
       type: 'DAYCARE'
     }).save()
@@ -497,6 +499,7 @@ test.describe('Employee - Child documents', () => {
     await employeeLogin(page, staffEmployee)
     await page.goto(`${config.employeeUrl}/child-information/${childFuture.id}`)
     const childInformationPage = new ChildInformationPage(page)
+    await childInformationPage.waitUntilLoaded()
 
     await childInformationPage.assertSomeCollapsiblesVisible({
       childDocuments: false
@@ -723,6 +726,101 @@ test.describe('Employee - Child documents', () => {
     await expect(groupRow.total).toHaveText('2')
   })
 
+  test('Document archiving', async ({ newEvakaPage }) => {
+    // Admin creates a template
+
+    let page = await newEvakaPage()
+    await employeeLogin(page, admin)
+    await page.goto(config.employeeUrl)
+    const nav = new EmployeeNav(page)
+    await nav.openAndClickDropdownMenuItem('document-templates')
+
+    const documentTemplatesPage = new DocumentTemplatesListPage(page)
+    const modal = await documentTemplatesPage.openCreateModal()
+    const documentName = 'VASU 2022-2023'
+    await modal.nameInput.fill(documentName)
+    await modal.typeSelect.selectOption('VASU')
+    await modal.placementTypesSelect.fillAndSelectFirst('Esiopetus')
+    await modal.validityStartInput.fill('01.08.2022')
+    await modal.confidentialityDurationYearsInput.fill('100')
+    await modal.confidentialityBasisInput.fill('Joku laki §300')
+    await modal.processDefinitionNumberInput.fill('12.06.01.SL1.RT34')
+    await modal.archiveDurationMonthsInput.fill('1320')
+    await modal.archiveExternallyCheckbox.check()
+    await modal.deletionRetentionDaysInput.fill('1825')
+    await modal.deletionRetentionBasisPlacementEnd.check()
+    await modal.confirmCreateButton.click()
+    await documentTemplatesPage.openTemplate(documentName)
+
+    const templateEditor = new DocumentTemplateEditorPage(page)
+    await templateEditor.createNewSectionButton.click()
+    const sectionName = 'Eka osio'
+    await templateEditor.sectionNameInput.fill(sectionName)
+    await templateEditor.confirmCreateSectionButton.click()
+
+    const section = templateEditor.getSection(sectionName)
+    await section.element.hover()
+    await section.createNewQuestionButton.click()
+    const questionName = 'Eka kysymys'
+    await templateEditor.questionLabelInput.fill(questionName)
+    await templateEditor.confirmCreateQuestionButton.click()
+
+    await templateEditor.publishCheckbox.check()
+    await templateEditor.saveButton.click()
+    await expect(templateEditor.saveButton).toBeHidden()
+    // End of admin creates a template
+
+    // Unit supervisor creates a child document
+    page = await newEvakaPage()
+    await employeeLogin(page, unitSupervisor)
+    await page.goto(`${config.employeeUrl}/child-information/${testChild2.id}`)
+    const childInformationPage = new ChildInformationPage(page)
+    const childDocumentsSection =
+      await childInformationPage.openCollapsible('childDocuments')
+    await childDocumentsSection.createInternalDocumentButton.click()
+    await expect(childDocumentsSection.createModalTemplateSelect).toHaveText(
+      'VASU 2022-2023'
+    )
+    await childDocumentsSection.modalConfirm.check()
+    await childDocumentsSection.modalOk.click()
+
+    // Fill an answer and return
+    const childDocument = new ChildDocumentPage(page)
+    await childDocument.editButton.click()
+    await expect(childDocument.status).toHaveText('Luonnos')
+    const answer = 'Jonkin sortin vastaus'
+    const question = childDocument.getTextQuestion(sectionName, questionName)
+    await question.fill(answer)
+    await expect(childDocument.savingIndicator).toBeHidden()
+    await childDocument.previewButton.click()
+    await childDocument.publish()
+    await childDocument.goToNextStatus()
+    await childDocument.goToCompletedStatus()
+
+    // PDF-generation should be triggered by publishing
+    await runJobs({ mockedTime: now })
+
+    page = await newEvakaPage()
+    await employeeLogin(page, admin)
+    await page.goto(`${config.employeeUrl}/child-information/${testChild2.id}`)
+    const childInformationPage2 = new ChildInformationPage(page)
+    const childDocumentsSection2 =
+      await childInformationPage2.openCollapsible('childDocuments')
+    const row2 = childDocumentsSection2.internalChildDocuments(0)
+    await row2.openLink.click()
+    const childDocument2 = new ChildDocumentPage(page)
+    await childDocument2.archiveButton.click()
+    await childDocument2.archiveButton.waitUntilIdle()
+    await runJobs({ mockedTime: now })
+
+    await page.reload()
+    const childDocument3 = new ChildDocumentPage(page)
+    await childDocument3.archiveButton.hover()
+    await childDocument3.archiveTooltip.assertText((text) =>
+      text.includes('Asiakirja on arkistoitu ')
+    )
+  })
+
   test('Citizen basic can be sent without filling the form', async ({
     newEvakaPage
   }) => {
@@ -746,6 +844,8 @@ test.describe('Employee - Child documents', () => {
     await modal.validityStartInput.fill('01.08.2022')
     await modal.confidentialityDurationYearsInput.fill('100')
     await modal.confidentialityBasisInput.fill('Joku laki §300')
+    await modal.deletionRetentionDaysInput.fill('1825')
+    await modal.deletionRetentionBasisPlacementEnd.check()
     await modal.confirmCreateButton.click()
     await documentTemplatesPage.openTemplate(documentName)
 
@@ -889,6 +989,8 @@ test.describe('Employee - Child documents', () => {
     await modal.validityStartInput.fill('01.08.2022')
     await modal.confidentialityDurationYearsInput.fill('100')
     await modal.confidentialityBasisInput.fill('Joku laki §300')
+    await modal.deletionRetentionDaysInput.fill('1825')
+    await modal.deletionRetentionBasisPlacementEnd.check()
     await modal.confirmCreateButton.click()
     await documentTemplatesPage.openTemplate(documentName)
 

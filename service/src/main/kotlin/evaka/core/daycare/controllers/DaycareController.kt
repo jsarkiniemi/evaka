@@ -12,13 +12,17 @@ import evaka.core.application.getActiveTransferApplicationsFromUnit
 import evaka.core.backupcare.UnitBackupCare
 import evaka.core.backupcare.getBackupCaresForDaycare
 import evaka.core.daycare.CaretakerAmount
+import evaka.core.daycare.Caretakers
 import evaka.core.daycare.Daycare
 import evaka.core.daycare.DaycareFields
+import evaka.core.daycare.DaycareGroup
 import evaka.core.daycare.UnitFeatures
 import evaka.core.daycare.UnitOperationPeriod
 import evaka.core.daycare.addUnitFeatures
 import evaka.core.daycare.createDaycare
+import evaka.core.daycare.createDaycareGroup
 import evaka.core.daycare.deleteCaretakers
+import evaka.core.daycare.deleteDaycareGroup
 import evaka.core.daycare.getCaretakers
 import evaka.core.daycare.getDaycare
 import evaka.core.daycare.getDaycareGroup
@@ -27,20 +31,23 @@ import evaka.core.daycare.getDaycareGroups
 import evaka.core.daycare.getDaycareStub
 import evaka.core.daycare.getDaycares
 import evaka.core.daycare.getGroupStats
+import evaka.core.daycare.getLastGroupPlacementEndDate
+import evaka.core.daycare.getLastGroupPlacementEndDates
 import evaka.core.daycare.getLastPlacementDate
 import evaka.core.daycare.getOphUnitOIDs
 import evaka.core.daycare.getUnitFeatures
 import evaka.core.daycare.getUnitOperationPeriods
+import evaka.core.daycare.initCaretakers
 import evaka.core.daycare.insertCaretakers
+import evaka.core.daycare.isValidDaycareId
 import evaka.core.daycare.removeUnitFeatures
-import evaka.core.daycare.service.Caretakers
-import evaka.core.daycare.service.DaycareGroup
-import evaka.core.daycare.service.DaycareService
 import evaka.core.daycare.updateCaretakers
 import evaka.core.daycare.updateDaycare
 import evaka.core.daycare.updateGroup
 import evaka.core.daycare.updateUnitClosingDate
 import evaka.core.daycare.validateUnitClosingDate
+import evaka.core.messaging.createDaycareGroupMessageAccount
+import evaka.core.messaging.deleteDaycareGroupMessageAccount
 import evaka.core.occupancy.OccupancyPeriod
 import evaka.core.occupancy.OccupancyPeriodGroupLevel
 import evaka.core.occupancy.OccupancyResponse
@@ -56,8 +63,10 @@ import evaka.core.placement.getMissingGroupPlacements
 import evaka.core.placement.getTerminatedPlacements
 import evaka.core.placement.getUnitChildrenCapacities
 import evaka.core.placement.getWaitingUnitConfirmationApplicationsCount
+import evaka.core.placement.hasGroupPlacements
 import evaka.core.serviceneed.application.getUndecidedServiceApplicationsByUnit
 import evaka.core.shared.BackupCareId
+import evaka.core.shared.ChildId
 import evaka.core.shared.DaycareCaretakerId
 import evaka.core.shared.DaycareId
 import evaka.core.shared.GroupId
@@ -65,6 +74,9 @@ import evaka.core.shared.GroupPlacementId
 import evaka.core.shared.PlacementId
 import evaka.core.shared.auth.AuthenticatedUser
 import evaka.core.shared.db.Database
+import evaka.core.shared.db.psqlCause
+import evaka.core.shared.domain.BadRequest
+import evaka.core.shared.domain.Conflict
 import evaka.core.shared.domain.EvakaClock
 import evaka.core.shared.domain.FiniteDateRange
 import evaka.core.shared.domain.NotFound
@@ -73,6 +85,8 @@ import evaka.core.shared.security.Action
 import evaka.core.shared.security.PilotFeature
 import evaka.core.shared.security.actionrule.AccessControlFilter
 import java.time.LocalDate
+import org.jdbi.v3.core.statement.UnableToExecuteStatementException
+import org.postgresql.util.PSQLState
 import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
@@ -86,10 +100,7 @@ import org.springframework.web.bind.annotation.RestController
 
 @RestController
 @RequestMapping("/employee/daycares")
-class DaycareController(
-    private val daycareService: DaycareService,
-    private val accessControl: AccessControl,
-) {
+class DaycareController(private val accessControl: AccessControl) {
     @GetMapping
     fun getDaycares(
         db: Database,
@@ -285,7 +296,9 @@ class DaycareController(
                         Action.Unit.READ_GROUPS,
                         daycareId,
                     )
-                    daycareService.getDaycareGroups(it, daycareId, from, to, includeClosed)
+                    if (!it.isValidDaycareId(daycareId))
+                        throw NotFound("No daycare found with id $daycareId")
+                    it.getDaycareGroups(daycareId, from, to, includeClosed)
                 }
             }
             .also {
@@ -305,22 +318,24 @@ class DaycareController(
         @RequestBody body: CreateGroupRequest,
     ): DaycareGroup {
         return db.connect { dbc ->
-                dbc.transaction {
+                dbc.transaction { tx ->
                     accessControl.requirePermissionFor(
-                        it,
+                        tx,
                         user,
                         clock,
                         Action.Unit.CREATE_GROUP,
                         daycareId,
                     )
-                    daycareService.createGroup(
-                        it,
-                        daycareId,
-                        body.name,
-                        body.startDate,
-                        body.initialCaretakers,
-                        body.aromiCustomerId,
-                    )
+                    tx.createDaycareGroup(
+                            daycareId,
+                            body.name,
+                            body.startDate,
+                            body.aromiCustomerId,
+                        )
+                        .also {
+                            tx.initCaretakers(it.id, it.startDate, body.initialCaretakers)
+                            tx.createDaycareGroupMessageAccount(it.id)
+                        }
                 }
             }
             .also { group ->
@@ -350,9 +365,25 @@ class DaycareController(
         @RequestBody body: GroupUpdateRequest,
     ) {
         db.connect { dbc ->
-            dbc.transaction {
-                accessControl.requirePermissionFor(it, user, clock, Action.Group.UPDATE, groupId)
-                it.updateGroup(
+            dbc.transaction { tx ->
+                accessControl.requirePermissionFor(tx, user, clock, Action.Group.UPDATE, groupId)
+
+                if (body.endDate != null) {
+                    if (body.endDate.isBefore(body.startDate)) {
+                        throw BadRequest("Group end date cannot be before start date")
+                    }
+                    val lastGroupPlacementEndDate = tx.getLastGroupPlacementEndDate(groupId)
+                    if (
+                        lastGroupPlacementEndDate != null &&
+                            lastGroupPlacementEndDate > body.endDate
+                    ) {
+                        throw BadRequest(
+                            "Group end date cannot be before the last group placement date"
+                        )
+                    }
+                }
+
+                tx.updateGroup(
                     groupId,
                     body.name,
                     body.startDate,
@@ -375,9 +406,23 @@ class DaycareController(
         @PathVariable groupId: GroupId,
     ) {
         db.connect { dbc ->
-            dbc.transaction {
-                accessControl.requirePermissionFor(it, user, clock, Action.Group.DELETE, groupId)
-                daycareService.deleteGroup(it, groupId)
+            dbc.transaction { tx ->
+                accessControl.requirePermissionFor(tx, user, clock, Action.Group.DELETE, groupId)
+                try {
+                    if (tx.hasGroupPlacements(groupId))
+                        throw Conflict("Cannot delete group which has children placed in it")
+                    tx.deleteDaycareGroupMessageAccount(groupId)
+                    tx.deleteDaycareGroup(groupId)
+                } catch (e: UnableToExecuteStatementException) {
+                    throw e.psqlCause()
+                        ?.takeIf { it.sqlState == PSQLState.FOREIGN_KEY_VIOLATION.state }
+                        ?.let {
+                            Conflict(
+                                "Cannot delete group which is still referred to from other data",
+                                cause = e,
+                            )
+                        } ?: e
+                }
             }
         }
         Audit.UnitGroupsDelete.log(targetId = AuditId(groupId))
@@ -424,25 +469,24 @@ class DaycareController(
         @PathVariable groupId: GroupId,
         @RequestBody body: CaretakerRequest,
     ) {
-        val daycareCaretakerId =
-            db.connect { dbc ->
-                dbc.transaction {
-                    accessControl.requirePermissionFor(
-                        it,
-                        user,
-                        clock,
-                        Action.Group.CREATE_CARETAKERS,
-                        groupId,
-                    )
-                    insertCaretakers(
-                        it,
-                        groupId = groupId,
-                        startDate = body.startDate,
-                        endDate = body.endDate,
-                        amount = body.amount,
-                    )
-                }
+        val daycareCaretakerId = db.connect { dbc ->
+            dbc.transaction {
+                accessControl.requirePermissionFor(
+                    it,
+                    user,
+                    clock,
+                    Action.Group.CREATE_CARETAKERS,
+                    groupId,
+                )
+                insertCaretakers(
+                    it,
+                    groupId = groupId,
+                    startDate = body.startDate,
+                    endDate = body.endDate,
+                    amount = body.amount,
+                )
             }
+        }
         Audit.UnitGroupsCaretakersCreate.log(
             targetId = AuditId(groupId),
             objectId = AuditId(daycareCaretakerId),
@@ -595,6 +639,7 @@ class DaycareController(
                         unitId,
                     )
                     val groups = tx.getDaycareGroups(unitId, from, to)
+                    val groupLastPlacementDates = tx.getLastGroupPlacementEndDates(unitId)
                     val placements = tx.getDetailedDaycarePlacements(unitId, null, period).toList()
                     val backupCares = tx.getBackupCaresForDaycare(unitId, period)
                     val (missingGroupPlacements, missingBackupPlacements) =
@@ -647,6 +692,25 @@ class DaycareController(
                         placements.map { it.child.id }.toSet() +
                             backupCares.map { it.child.id }.toSet()
 
+                    val serviceNeedPermissionByChild =
+                        accessControl.getPermittedActions<ChildId, Action.Child>(
+                            tx,
+                            user,
+                            clock,
+                            placements.map { it.child.id }.toSet(),
+                        )
+                    val responsePlacements = placements.map { placement ->
+                        if (
+                            serviceNeedPermissionByChild[placement.child.id]?.contains(
+                                Action.Child.READ_SERVICE_NEEDS
+                            ) == true
+                        ) {
+                            placement
+                        } else {
+                            placement.copy(serviceNeedDetail = null)
+                        }
+                    }
+
                     val capacities =
                         if (
                             accessControl.hasPermissionFor(
@@ -683,7 +747,8 @@ class DaycareController(
 
                     UnitGroupDetails(
                         groups = groups,
-                        placements = placements,
+                        groupLastPlacementDates = groupLastPlacementDates,
+                        placements = responsePlacements,
                         backupCares = backupCares,
                         missingGroupPlacements = missingGroupPlacements,
                         missingBackupGroupPlacements = missingBackupPlacements,
@@ -858,6 +923,7 @@ class DaycareController(
 
 data class UnitGroupDetails(
     val groups: List<DaycareGroup>,
+    val groupLastPlacementDates: Map<GroupId, LocalDate>,
     val placements: List<DaycarePlacementWithDetails>,
     val backupCares: List<UnitBackupCare>,
     val missingGroupPlacements: List<MissingGroupPlacement>,
@@ -913,16 +979,15 @@ private fun getGroupOccupancyResponses(
     return occupancies
         .groupBy { it.groupId }
         .mapValues { (_, value) ->
-            val occupancyPeriods =
-                value.map {
-                    OccupancyPeriod(
-                        period = it.period,
-                        sum = it.sum,
-                        headcount = it.headcount,
-                        caretakers = it.caretakers,
-                        percentage = it.percentage,
-                    )
-                }
+            val occupancyPeriods = value.map {
+                OccupancyPeriod(
+                    period = it.period,
+                    sum = it.sum,
+                    headcount = it.headcount,
+                    caretakers = it.caretakers,
+                    percentage = it.percentage,
+                )
+            }
 
             OccupancyResponse(
                 occupancies = occupancyPeriods,

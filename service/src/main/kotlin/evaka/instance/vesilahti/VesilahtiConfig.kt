@@ -36,6 +36,7 @@ class VesilahtiConfig {
     @Bean
     fun featureConfig() =
         FeatureConfig(
+            placementDecisionSwedishLanguageEnabled = false,
             valueDecisionCapacityFactorEnabled = true,
             citizenReservationThresholdHours = 7 * 24 - 9, // Mon 09:00
             freeAbsenceGivesADailyRefund = true,
@@ -49,10 +50,12 @@ class VesilahtiConfig {
             municipalMessageAccountName = "Vesilahden kunta",
             serviceWorkerMessageAccountName = "Varhaiskasvatuksen asiakaspalvelu",
             financeMessageAccountName = "Vesilahden varhaiskasvatuksen asiakasmaksut",
+            messageSupportEmail = "varhaiskasvatus.sovellustuki@tampere.fi",
             applyPlacementUnitFromDecision = true,
             preferredStartRelativeApplicationDueDate = true,
             fiveYearsOldDaycareEnabled = false,
             archiveMetadataOrganization = "Vesilahden kunta, varhaiskasvatus",
+            metadataBusinessId = "0157711-9",
             archiveMetadataConfigs = { type, year ->
                 when (type) {
                     ArchiveProcessType.APPLICATION_DAYCARE ->
@@ -87,6 +90,10 @@ class VesilahtiConfig {
                 }
             },
             daycarePlacementPlanEndMonthDay = MonthDay.of(8, 15),
+            deletedMessagePlaceholderBody =
+                "Lähettäjä on poistanut viestin. Sinun ei tarvitse tehdä mitään.\n\n" +
+                    "The sender has deleted this message. No action is needed on your part.",
+            deletedMessagePlaceholderTitle = "Viesti on poistettu / Message was deleted",
         )
 
     @Bean

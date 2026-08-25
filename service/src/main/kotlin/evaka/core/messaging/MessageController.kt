@@ -184,6 +184,8 @@ class MessageController(
                     featureConfig.financeMessageAccountName,
                     accountAccessLimit = accountAccessLimit,
                     childId = childId,
+                    deletedMessageBody = featureConfig.deletedMessagePlaceholderBody,
+                    deletedMessageTitle = featureConfig.deletedMessagePlaceholderTitle,
                 )
             }
             .also {
@@ -220,6 +222,8 @@ class MessageController(
                             featureConfig.financeMessageAccountName,
                             archiveFolderId,
                             accountAccessLimit,
+                            deletedMessageBody = featureConfig.deletedMessagePlaceholderBody,
+                            deletedMessageTitle = featureConfig.deletedMessagePlaceholderTitle,
                         )
                     }
                 }
@@ -279,6 +283,8 @@ class MessageController(
                         featureConfig.serviceWorkerMessageAccountName,
                         featureConfig.financeMessageAccountName,
                         folderId,
+                        deletedMessageBody = featureConfig.deletedMessagePlaceholderBody,
+                        deletedMessageTitle = featureConfig.deletedMessagePlaceholderTitle,
                     )
                 }
             }
@@ -302,7 +308,14 @@ class MessageController(
                 requireMessageAccountAccess(dbc, user, clock, accountId)
                 dbc.read {
                     val accountAccessLimit = it.getAccountAccessLimit(accountId, user.id)
-                    it.getMessageCopiesByAccount(accountId, pageSize = 20, page, accountAccessLimit)
+                    it.getMessageCopiesByAccount(
+                        accountId,
+                        pageSize = 20,
+                        page,
+                        accountAccessLimit,
+                        deletedMessageBody = featureConfig.deletedMessagePlaceholderBody,
+                        deletedMessageTitle = featureConfig.deletedMessagePlaceholderTitle,
+                    )
                 }
             }
             .also {
@@ -349,7 +362,14 @@ class MessageController(
     ): PagedSentMessages {
         return dbc.read {
                 val accountAccessLimit = it.getAccountAccessLimit(accountId, employeeId)
-                it.getMessagesSentByAccount(accountId, pageSize = 20, page, accountAccessLimit)
+                it.getMessagesSentByAccount(
+                    accountId,
+                    pageSize = 20,
+                    page,
+                    accountAccessLimit,
+                    deletedMessageBody = featureConfig.deletedMessagePlaceholderBody,
+                    deletedMessageTitle = featureConfig.deletedMessagePlaceholderTitle,
+                )
             }
             .also {
                 Audit.MessagingSentMessagesRead.log(
@@ -393,6 +413,8 @@ class MessageController(
                         featureConfig.municipalMessageAccountName,
                         featureConfig.serviceWorkerMessageAccountName,
                         featureConfig.financeMessageAccountName,
+                        deletedMessageBody = featureConfig.deletedMessagePlaceholderBody,
+                        deletedMessageTitle = featureConfig.deletedMessagePlaceholderTitle,
                     )
                 }
             }
@@ -417,16 +439,17 @@ class MessageController(
                     dbc.read { it.getServiceWorkerAccountId() }
                         ?: throw NotFound("No account found")
                 requireMessageAccountAccess(dbc, user, clock, accountId)
-                val thread =
-                    dbc.read {
-                        it.getMessageThreadByApplicationId(
-                            accountId,
-                            applicationId,
-                            featureConfig.municipalMessageAccountName,
-                            featureConfig.serviceWorkerMessageAccountName,
-                            featureConfig.financeMessageAccountName,
-                        )
-                    }
+                val thread = dbc.read {
+                    it.getMessageThreadByApplicationId(
+                        accountId,
+                        applicationId,
+                        featureConfig.municipalMessageAccountName,
+                        featureConfig.serviceWorkerMessageAccountName,
+                        featureConfig.financeMessageAccountName,
+                        deletedMessageBody = featureConfig.deletedMessagePlaceholderBody,
+                        deletedMessageTitle = featureConfig.deletedMessagePlaceholderTitle,
+                    )
+                }
                 accountId to thread
             }
             .let { (accountId, thread) ->
@@ -448,33 +471,33 @@ class MessageController(
                 val accountId =
                     dbc.read { it.getFinanceAccountId() } ?: throw NotFound("No account found")
                 requireMessageAccountAccess(dbc, user, clock, accountId)
-                val threads =
-                    dbc.read {
-                        val personAccountId = it.getCitizenMessageAccount(personId)
-                        val filter =
-                            accessControl.requireAuthorizationFilter(
-                                it,
-                                user,
-                                clock,
-                                Action.MessageAccount.ACCESS,
+                val threads = dbc.read {
+                    val personAccountId = it.getCitizenMessageAccount(personId)
+                    val filter =
+                        accessControl.requireAuthorizationFilter(
+                            it,
+                            user,
+                            clock,
+                            Action.MessageAccount.ACCESS,
+                        )
+                    val folderIds = listOf(null) + it.getFolders(filter).map { folder -> folder.id }
+                    folderIds.flatMap { folderId ->
+                        it.getThreads(
+                                accountId,
+                                pageSize = 200,
+                                page = 1,
+                                featureConfig.municipalMessageAccountName,
+                                featureConfig.serviceWorkerMessageAccountName,
+                                featureConfig.financeMessageAccountName,
+                                personAccountId = personAccountId,
+                                messagesSortDirection = SortDirection.DESC,
+                                folderId = folderId,
+                                deletedMessageBody = featureConfig.deletedMessagePlaceholderBody,
+                                deletedMessageTitle = featureConfig.deletedMessagePlaceholderTitle,
                             )
-                        val folderIds =
-                            listOf(null) + it.getFolders(filter).map { folder -> folder.id }
-                        folderIds.flatMap { folderId ->
-                            it.getThreads(
-                                    accountId,
-                                    pageSize = 200,
-                                    page = 1,
-                                    featureConfig.municipalMessageAccountName,
-                                    featureConfig.serviceWorkerMessageAccountName,
-                                    featureConfig.financeMessageAccountName,
-                                    personAccountId = personAccountId,
-                                    messagesSortDirection = SortDirection.DESC,
-                                    folderId = folderId,
-                                )
-                                .data
-                        }
+                            .data
                     }
+                }
                 accountId to threads
             }
             .let { (accountId, threads) ->
@@ -682,6 +705,9 @@ class MessageController(
                         throw BadRequest(
                             "Municipal message accounts are only allowed to send bulletins"
                         )
+                    }
+                    if (body.type == MessageType.BULLETIN && body.relatedApplicationId != null) {
+                        throw BadRequest("Bulletins cannot be related to an application")
                     }
                     if (senderAccountType == AccountType.SERVICE_WORKER) {
                         if (body.relatedApplicationId == null) {
@@ -1003,16 +1029,15 @@ class MessageController(
         @PathVariable messageId: MessageId,
         @RequestBody body: ReplyToMessageBody,
     ): MessageService.ThreadReply {
-        val threadId =
-            db.connect { dbc ->
-                requireMessageAccountAccess(dbc, user, clock, accountId)
-                dbc.read {
-                    it.createQuery {
-                            sql("""SELECT thread_id FROM message WHERE id = ${bind(messageId)}""")
-                        }
-                        .exactlyOneOrNull<MessageThreadId>()
-                } ?: throw NotFound("Message not found in the specified account")
-            }
+        val threadId = db.connect { dbc ->
+            requireMessageAccountAccess(dbc, user, clock, accountId)
+            dbc.read {
+                it.createQuery {
+                        sql("""SELECT thread_id FROM message WHERE id = ${bind(messageId)}""")
+                    }
+                    .exactlyOneOrNull<MessageThreadId>()
+            } ?: throw NotFound("Message not found in the specified account")
+        }
         return replyToThread(db, user, clock, accountId, threadId, body)
     }
 
@@ -1060,6 +1085,7 @@ class MessageController(
                     municipalAccountName = featureConfig.municipalMessageAccountName,
                     serviceWorkerAccountName = featureConfig.serviceWorkerMessageAccountName,
                     financeAccountName = featureConfig.financeMessageAccountName,
+                    deletedMessageBody = featureConfig.deletedMessagePlaceholderBody,
                 )
             }
             .also {
@@ -1196,6 +1222,60 @@ class MessageController(
                 )
             }
     }
+
+    @PostMapping("/employee/messages/{accountId}/contents/{contentId}/delete-content")
+    fun deleteMessageContent(
+        db: Database,
+        user: AuthenticatedUser.Employee,
+        clock: EvakaClock,
+        @PathVariable accountId: MessageAccountId,
+        @PathVariable contentId: MessageContentId,
+    ) {
+        db.connect { dbc ->
+                requireMessageAccountAccess(dbc, user, clock, accountId)
+                dbc.transaction { tx ->
+                    messageService.deleteSentMessageContent(
+                        tx,
+                        clock,
+                        user.id,
+                        accountId,
+                        contentId,
+                    )
+                }
+            }
+            .also {
+                Audit.MessagingDeleteContent.log(
+                    targetId = AuditId(listOf(accountId, contentId)),
+                    meta =
+                        mapOf(
+                            "recipientCount" to it.recipientCount,
+                            "sentAt" to it.sentAt,
+                            "deletedAt" to it.deletedAt,
+                        ),
+                )
+            }
+    }
+
+    @GetMapping("/employee/messages/{accountId}/contents/{contentId}/view-deleted-content")
+    fun getDeletedMessageContent(
+        db: Database,
+        user: AuthenticatedUser.Employee,
+        clock: EvakaClock,
+        @PathVariable accountId: MessageAccountId,
+        @PathVariable contentId: MessageContentId,
+    ): DeletedMessageContent =
+        db.connect { dbc ->
+                requireMessageAccountAccess(dbc, user, clock, accountId)
+                dbc.read { tx -> tx.fetchDeletedMessageContent(accountId, contentId) }
+                    ?: throw Forbidden(
+                        "Message $contentId is not a deleted message of this account"
+                    )
+            }
+            .also {
+                Audit.MessagingViewDeletedContent.log(
+                    targetId = AuditId(listOf(accountId, contentId))
+                )
+            }
 
     private fun requireMessageAccountAccess(
         db: Database.Connection,

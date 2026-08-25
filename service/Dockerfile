@@ -61,14 +61,14 @@ RUN apt-get update \
 
 WORKDIR /evaka/service
 
-ARG S3_DOWNLOADER_VERSION=v1.5.1
-ARG S3_DOWNLOADER_SHA256="cb751589ca60749c42b65009671d6076435e7454b8980ee98884e296a1ec6cb8"
+ARG S3_DOWNLOADER_VERSION=v1.5.2
+ARG S3_DOWNLOADER_SHA256="70a40524bf901d999eb7f85aaebfed25132767a1475cb76147f5c7f01ef5c66d"
 
 RUN curl -sSL https://github.com/espoon-voltti/s3-downloader/releases/download/${S3_DOWNLOADER_VERSION}/s3downloader-linux-amd64 -o /usr/local/bin/s3download \
  && echo "${S3_DOWNLOADER_SHA256}  /usr/local/bin/s3download" | sha256sum -c - \
  && chmod +x /usr/local/bin/s3download
 
-COPY --from=builder /evaka/service/build/download-only/dd-java-agent.jar /opt/dd-java-agent.jar
+COPY --chmod=0644 --from=builder /evaka/service/build/download-only/dd-java-agent.jar /opt/dd-java-agent.jar
 COPY ./service/dd-jmxfetch/ /etc/jmxfetch/
 
 COPY ./service/entrypoint.sh entrypoint.sh
@@ -76,8 +76,8 @@ ENTRYPOINT ["./entrypoint.sh"]
 
 ENV USERNAME=evaka
 ENV HOME_DIR=/home/${USERNAME}
-ENV USER_ID=1000
-ENV GROUP_ID=1000
+ENV USER_ID=2000
+ENV GROUP_ID=2000
 
 RUN addgroup --gid ${GROUP_ID} ${USERNAME} \
  && adduser --uid ${USER_ID} --gid ${GROUP_ID} --gecos "" -q --home ${HOME_DIR} --disabled-password ${USERNAME} \

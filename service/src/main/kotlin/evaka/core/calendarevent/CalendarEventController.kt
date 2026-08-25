@@ -36,6 +36,10 @@ import evaka.core.shared.security.Action
 import java.time.DayOfWeek
 import java.time.LocalDate
 import org.springframework.format.annotation.DateTimeFormat
+import org.springframework.http.ContentDisposition
+import org.springframework.http.HttpHeaders
+import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
@@ -192,63 +196,56 @@ class CalendarEventController(
         clock: EvakaClock,
         @RequestBody body: CalendarEventForm,
     ): CalendarEventId {
-        val eventId =
-            db.connect { dbc ->
-                dbc.transaction { tx ->
+        val eventId = db.connect { dbc ->
+            dbc.transaction { tx ->
+                accessControl.requirePermissionFor(
+                    tx,
+                    user,
+                    clock,
+                    Action.Unit.CREATE_CALENDAR_EVENT,
+                    body.unitId,
+                )
+
+                if (body.tree != null) {
                     accessControl.requirePermissionFor(
                         tx,
                         user,
                         clock,
-                        Action.Unit.CREATE_CALENDAR_EVENT,
-                        body.unitId,
+                        Action.Group.CREATE_CALENDAR_EVENT,
+                        body.tree.keys,
                     )
 
-                    if (body.tree != null) {
-                        accessControl.requirePermissionFor(
-                            tx,
-                            user,
-                            clock,
-                            Action.Group.CREATE_CALENDAR_EVENT,
-                            body.tree.keys,
-                        )
+                    val unitGroupIds =
+                        tx.getDaycareGroups(body.unitId, body.period.start, body.period.end)
 
-                        val unitGroupIds =
-                            tx.getDaycareGroups(body.unitId, body.period.start, body.period.end)
-
-                        if (
-                            body.tree.keys.any { groupId ->
-                                !unitGroupIds.any { unitGroup -> unitGroup.id == groupId }
-                            }
-                        ) {
-                            throw BadRequest("Group ID is not of the specified unit's")
+                    if (
+                        body.tree.keys.any { groupId ->
+                            !unitGroupIds.any { unitGroup -> unitGroup.id == groupId }
                         }
+                    ) {
+                        throw BadRequest("Group ID is not of the specified unit's")
+                    }
 
-                        body.tree.forEach { (groupId, childIds) ->
-                            if (childIds != null) {
-                                val groupChildIds =
-                                    tx.getGroupPlacementChildren(groupId, body.period)
-                                val backupCareChildren =
-                                    tx.getBackupCareChildrenInGroup(
-                                        body.unitId,
-                                        groupId,
-                                        body.period,
-                                    )
+                    body.tree.forEach { (groupId, childIds) ->
+                        if (childIds != null) {
+                            val groupChildIds = tx.getGroupPlacementChildren(groupId, body.period)
+                            val backupCareChildren =
+                                tx.getBackupCareChildrenInGroup(body.unitId, groupId, body.period)
 
-                                if (
-                                    childIds.any {
-                                        !groupChildIds.contains(it) &&
-                                            !backupCareChildren.contains(it)
-                                    }
-                                ) {
-                                    throw BadRequest("Child is not placed into the selected group")
+                            if (
+                                childIds.any {
+                                    !groupChildIds.contains(it) && !backupCareChildren.contains(it)
                                 }
+                            ) {
+                                throw BadRequest("Child is not placed into the selected group")
                             }
                         }
                     }
-
-                    tx.createCalendarEvent(body, clock.now(), user.evakaUserId)
                 }
+
+                tx.createCalendarEvent(body, clock.now(), user.evakaUserId)
             }
+        }
         Audit.CalendarEventCreate.log(targetId = AuditId(body.unitId), objectId = AuditId(eventId))
         return eventId
     }
@@ -547,59 +544,56 @@ class CalendarEventController(
         clock: EvakaClock,
         @RequestBody body: CalendarEventTimeClearingForm,
     ) {
-        val removedIds =
-            db.connect { dbc ->
-                dbc.transaction { tx ->
-                    accessControl.requirePermissionFor(
-                        tx,
-                        user,
-                        clock,
-                        Action.CalendarEvent.UPDATE,
-                        body.calendarEventId,
-                    )
-                    val eventTimesToRemove =
-                        tx.getCalendarEventTimesByChildAndEvent(body.childId, body.calendarEventId)
-                    accessControl.requirePermissionFor(
-                        tx,
-                        user,
-                        clock,
-                        Action.CalendarEventTime.UPDATE_RESERVATION,
-                        eventTimesToRemove.map { it.id },
-                    )
-                    val discussionSurvey =
-                        tx.getCalendarEventById(body.calendarEventId)
-                            ?: throw BadRequest("Calendar event not found")
-                    val cancellationRecipients = getRecipientsForChild(tx, body.childId)
+        val removedIds = db.connect { dbc ->
+            dbc.transaction { tx ->
+                accessControl.requirePermissionFor(
+                    tx,
+                    user,
+                    clock,
+                    Action.CalendarEvent.UPDATE,
+                    body.calendarEventId,
+                )
+                val eventTimesToRemove =
+                    tx.getCalendarEventTimesByChildAndEvent(body.childId, body.calendarEventId)
+                accessControl.requirePermissionFor(
+                    tx,
+                    user,
+                    clock,
+                    Action.CalendarEventTime.UPDATE_RESERVATION,
+                    eventTimesToRemove.map { it.id },
+                )
+                val discussionSurvey =
+                    tx.getCalendarEventById(body.calendarEventId)
+                        ?: throw BadRequest("Calendar event not found")
+                val cancellationRecipients = getRecipientsForChild(tx, body.childId)
 
-                    tx.freeCalendarEventTimeReservations(
-                        user,
-                        clock.now(),
-                        eventTimesToRemove.map { it.id }.toSet(),
-                    )
+                tx.freeCalendarEventTimeReservations(
+                    user,
+                    clock.now(),
+                    eventTimesToRemove.map { it.id }.toSet(),
+                )
 
-                    // only discussion times in the future should result in cancellation messages
-                    asyncJobRunner.plan(
-                        tx,
-                        eventTimesToRemove
-                            .filter {
-                                HelsinkiDateTime.of(it.date, it.endTime).isAfter(clock.now())
+                // only discussion times in the future should result in cancellation messages
+                asyncJobRunner.plan(
+                    tx,
+                    eventTimesToRemove
+                        .filter { HelsinkiDateTime.of(it.date, it.endTime).isAfter(clock.now()) }
+                        .flatMap { time ->
+                            cancellationRecipients.map { recipient ->
+                                AsyncJob.SendDiscussionSurveyReservationCancellationEmail(
+                                    eventTitle = discussionSurvey.title,
+                                    childId = body.childId,
+                                    language = Language.fi,
+                                    calendarEventTime = time,
+                                    recipientId = recipient.id,
+                                )
                             }
-                            .flatMap { time ->
-                                cancellationRecipients.map { recipient ->
-                                    AsyncJob.SendDiscussionSurveyReservationCancellationEmail(
-                                        eventTitle = discussionSurvey.title,
-                                        childId = body.childId,
-                                        language = Language.fi,
-                                        calendarEventTime = time,
-                                        recipientId = recipient.id,
-                                    )
-                                }
-                            },
-                        runAt = clock.now(),
-                    )
-                    eventTimesToRemove.map { it.id }
-                }
+                        },
+                    runAt = clock.now(),
+                )
+                eventTimesToRemove.map { it.id }
             }
+        }
         Audit.CalendarEventChildTimesCancellation.log(
             targetId = AuditId(body.calendarEventId),
             objectId = AuditId(body.childId),
@@ -732,6 +726,144 @@ class CalendarEventController(
                 )
             }
     }
+
+    @GetMapping("/citizen/calendar-events/{eventId}/ics", produces = ["text/calendar"])
+    fun exportCitizenCalendarEventIcs(
+        db: Database,
+        user: AuthenticatedUser.Citizen,
+        clock: EvakaClock,
+        @PathVariable eventId: CalendarEventId,
+        @RequestParam childId: ChildId,
+        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) date: LocalDate,
+    ): ResponseEntity<ByteArray> {
+        val (ics, fileName) =
+            db.connect { dbc ->
+                    dbc.read { tx ->
+                        accessControl.requirePermissionFor(
+                            tx,
+                            user,
+                            clock,
+                            Action.Citizen.Person.READ_CALENDAR_EVENTS,
+                            user.id,
+                        )
+                        // The attendance (and thus the location) the child has on the given date is
+                        // the one matching what the citizen sees in the calendar day view.
+                        val rows =
+                            tx.getDaycareEventsForGuardian(user.id, FiniteDateRange(date, date))
+                                .filter { it.id == eventId && it.childId == childId }
+                        val row =
+                            rows.firstOrNull { it.period.includes(date) }
+                                ?: rows.firstOrNull()
+                                ?: throw NotFound(
+                                    "Calendar event $eventId not found for child $childId"
+                                )
+                        val ics =
+                            buildIcsCalendar(
+                                IcsEvent(
+                                    uid = "calendar-event-$eventId@evaka",
+                                    summary = row.title,
+                                    location = eventLocation(row.unitName, row.groupName),
+                                    time =
+                                        IcsEventTime.AllDay(
+                                            start = row.eventPeriod.start,
+                                            // iCalendar all-day DTEND is exclusive
+                                            endExclusive = row.eventPeriod.end.plusDays(1),
+                                        ),
+                                ),
+                                dtstamp = clock.now(),
+                            )
+                        ics to "calendar-event_${row.eventPeriod.start}-${row.eventPeriod.end}.ics"
+                    }
+                }
+                .also {
+                    Audit.UnitCalendarEventsRead.log(
+                        targetId = AuditId(user.id),
+                        objectId = AuditId(eventId),
+                    )
+                }
+        return icsResponse(ics, fileName)
+    }
+
+    @GetMapping("/citizen/calendar-event-times/{eventTimeId}/ics", produces = ["text/calendar"])
+    fun exportCitizenDiscussionReservationIcs(
+        db: Database,
+        user: AuthenticatedUser.Citizen,
+        clock: EvakaClock,
+        @PathVariable eventTimeId: CalendarEventTimeId,
+    ): ResponseEntity<ByteArray> {
+        val (ics, date) =
+            db.connect { dbc ->
+                    dbc.read { tx ->
+                        accessControl.requirePermissionFor(
+                            tx,
+                            user,
+                            clock,
+                            Action.Citizen.Person.READ_CALENDAR_EVENTS,
+                            user.id,
+                        )
+                        val detail =
+                            tx.getDiscussionTimeDetailsByEventTimeId(eventTimeId)
+                                ?: throw NotFound("Calendar event time $eventTimeId not found")
+                        val date = detail.eventTime.date
+                        // Restricting to the guardian's children also enforces authorization: an
+                        // event time the citizen has no access to yields no rows and a 404.
+                        val rows =
+                            tx.getDiscussionSurveysForGuardian(user.id, FiniteDateRange(date, date))
+                                .filter { it.eventTimeId == eventTimeId }
+                        val row =
+                            rows.firstOrNull { it.period.includes(date) }
+                                ?: rows.firstOrNull()
+                                ?: throw NotFound(
+                                    "Calendar event time $eventTimeId not found for guardian"
+                                )
+                        val ics =
+                            buildIcsCalendar(
+                                IcsEvent(
+                                    uid = "calendar-event-time-$eventTimeId@evaka",
+                                    summary = row.title,
+                                    location = eventLocation(row.unitName, row.groupName),
+                                    time =
+                                        IcsEventTime.Timed(
+                                            start =
+                                                HelsinkiDateTime.of(
+                                                    row.eventTimeDate,
+                                                    row.eventTimeStart,
+                                                ),
+                                            end =
+                                                HelsinkiDateTime.of(
+                                                    row.eventTimeDate,
+                                                    row.eventTimeEnd,
+                                                ),
+                                        ),
+                                ),
+                                dtstamp = clock.now(),
+                            )
+                        ics to date
+                    }
+                }
+                .also {
+                    Audit.UnitCalendarEventsRead.log(
+                        targetId = AuditId(user.id),
+                        objectId = AuditId(eventTimeId),
+                    )
+                }
+        return icsResponse(ics, "discussion-time_$date.ics")
+    }
+
+    private fun eventLocation(unitName: String?, groupName: String?): String =
+        listOfNotNull(unitName, groupName?.let { "($it)" }).joinToString(" ")
+
+    private fun icsResponse(ics: String, fileName: String): ResponseEntity<ByteArray> =
+        ResponseEntity.ok()
+            .contentType(MediaType.parseMediaType("text/calendar;charset=utf-8"))
+            .header(
+                HttpHeaders.CONTENT_DISPOSITION,
+                ContentDisposition.attachment()
+                    .filename(fileName, Charsets.UTF_8)
+                    .build()
+                    .toString(),
+            )
+            .body(ics.toByteArray(Charsets.UTF_8))
 
     @PostMapping("/citizen/calendar-event/reservation")
     fun addCalendarEventTimeReservation(

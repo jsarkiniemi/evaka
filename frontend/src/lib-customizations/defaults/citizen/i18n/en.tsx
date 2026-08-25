@@ -90,10 +90,17 @@ const en: Translations = {
     },
     openExpandingInfo: 'Open the details',
     errors: {
-      genericGetError: 'Error in fetching the requested information',
-      http403Error: 'No access to the requested information',
-      endpointDisabled:
-        'eVaka is currently undergoing partial maintenance. Some features are temporarily unavailable. Please try again shortly.'
+      genericGetError: 'Error fetching the requested information',
+      genericGetErrorInfo:
+        'Try refreshing the page in a moment. The problem is usually temporary.',
+      http403Error: 'No access',
+      http403ErrorInfo:
+        'You do not have permission to view the requested information.',
+      endpointDisabled: 'Partial maintenance',
+      endpointDisabledInfo:
+        'Some features are temporarily unavailable. Try again shortly.',
+      networkError: 'No internet connection',
+      networkErrorInfo: 'Check your internet connection and try again.'
     },
     today: 'Today',
     datetime: {
@@ -382,7 +389,10 @@ const en: Translations = {
     serviceVoucherLink:
       'https://www.espoo.fi/en/childcare-and-education/early-childhood-education/applying-private-early-childhood-education#section-55369',
     noApplying: 'No applying via eVaka, contact the unit',
-    backToSearch: 'Back to search'
+    backToSearch: 'Back to search',
+    zoomIn: 'Zoom in',
+    zoomOut: 'Zoom out',
+    closePopup: 'Close unit information'
   },
   calendar: {
     title: 'Calendar',
@@ -1056,6 +1066,10 @@ const en: Translations = {
           otherInfoLabel: 'Additional information',
           dietLabel: 'Special diet',
           allergiesLabel: 'Allergies'
+        },
+        otherGuardianAgreement: {
+          title: 'Additional details of the application',
+          text: 'The other guardian has reported that you have agreed together to send this application.'
         }
       },
       serviceNeed: {
@@ -1447,7 +1461,8 @@ const en: Translations = {
           languageFilter: {
             label: 'Language of the location:',
             fi: 'Finnish',
-            sv: 'Swedish'
+            sv: 'Swedish',
+            en: 'English'
           },
           select: {
             label: (maxUnits: number) =>
@@ -1725,7 +1740,7 @@ const en: Translations = {
       unit: 'Unit',
       period: 'Time period',
       sentDate: 'Decision made',
-      resolved: 'Decision confirmed',
+      resolved: 'Confirmed',
       confirmation: 'Confirmation',
       statusLabel: 'Status',
       summary:
@@ -1901,14 +1916,38 @@ const en: Translations = {
   },
   personalDetails: {
     title: 'Personal information',
-    description: (
-      <P>
-        Here you can check and update your personal and contact information.
-        Your name and address are retrieved from the Population Information
-        System. If they change, you will need to inform the Digital and
-        Population Data Services Agency (DVV).
-      </P>
-    ),
+    editInfo:
+      'Your name and address are retrieved from the Population Information System. If they change, you will need to inform the Digital and Population Data Services Agency (DVV).',
+    tasks: {
+      addEmail: {
+        title: 'Add an email address',
+        description: 'You can receive email notifications.'
+      },
+      verifyEmail: {
+        title: 'Verify your email address',
+        description: 'You can receive email notifications.'
+      },
+      addPhone: {
+        title: 'Add a phone number',
+        description: 'You can be reached in urgent matters.'
+      }
+    },
+    familySizeSection: {
+      title: 'Family size',
+      description: (
+        <P $noMargin>
+          The number of adults and children living in the same household affects
+          the client fees. If your family details have changed, please contact
+          the client fee unit, email{' '}
+          <a href="mailto:vaka.maksut@espoo.fi">vaka.maksut@espoo.fi</a>.
+        </P>
+      ),
+      summary: (adults: number, children: number) =>
+        `${adults} ${adults === 1 ? 'adult' : 'adults'} and ${children} ${children === 1 ? 'child' : 'children'}`,
+      adults: 'Adults',
+      children: 'Children',
+      self: '(you)'
+    },
     detailsSection: {
       noEmailAlert:
         'Your email address is missing. Please fill it down below to receive notifications sent by eVaka.',
@@ -1924,7 +1963,6 @@ const en: Translations = {
       email: 'Email',
       emailMissing: 'Email missing',
       phoneMissing: 'Phone number missing',
-      noEmail: 'I have no email address',
       emailInfo:
         'Email is required to receive notifications about new messages, attendance reservations and other matters concerning your child’s early childhood education.',
       contactEmailInfo:
@@ -1944,7 +1982,7 @@ const en: Translations = {
           `To change your username, enter the verification code sent to ${verification.email}. The code is valid until ${verification.expiresAt.toLocalTime().format()} asti.`,
         toast: 'Username changed'
       },
-      codeNotReceived: 'I have not received a code.',
+      codeNotReceived: 'Have you not received the code?',
       codeNotReceivedInfo:
         'Please check your spam folder and that the address is correct.',
       verificationForm: 'Enter the verification code you received',
@@ -1963,18 +2001,15 @@ const en: Translations = {
         `Change your username to ${newUsername}`
     },
     loginDetailsSection: {
-      title: 'Login information',
+      title: 'Email login',
       weakLoginCredentials: 'Login with email',
       status: {
-        enabled: 'Allowed',
-        disabled: 'Not allowed',
-        info: 'By logging in with email, you can read incoming messages in eVaka and mark attendances without strong authentication.'
+        enabled: 'Enabled'
       },
-      usernameInfo: 'You can log in to eVaka with this username.',
       weakLoginUsername: 'Username',
       password: 'Password',
       unverifiedEmailWarning:
-        'Email login can only be enabled if you have verified your email address',
+        'You can enable this once you have verified your email address.',
       updatePassword: 'Change password',
       activateCredentials: 'Enable email login',
       activationSuccess: 'Email login has been enabled',
@@ -2002,17 +2037,19 @@ const en: Translations = {
         `The username ${username} is already in use by another person`
     },
     notificationsSection: {
-      title: 'Email notifications',
-      info: 'You can choose to receive email notifications on the following topics. You can edit the settings by clicking on the Edit button',
-      subtitle: 'Email notifications',
-      message: 'messages sent to eVaka by staff',
-      bulletin: 'bulletins sent to eVaka',
-      income: 'Reminders about updating your income information',
+      title: 'Notifications',
+      subtitle: 'I want to be notified',
+      moreInfo: 'More information',
+      email: 'Email',
+      push: 'Push',
+      message: 'Messages sent by staff',
+      bulletin: 'General bulletins from the municipality',
+      income: 'The need to update income information',
       incomeInfo:
         'If your family pays less than the maximum fee for early childhood education, you must update your income information regularly. If your income information is missing or expires, you will be charged the maximum fee for early childhood education.',
       incomeWarning:
         'If your income information is missing or expires, you will be charged the maximum fee for early childhood education.',
-      calendarEvent: 'Reminders about new events marked in the calendar',
+      calendarEvent: 'New calendar events',
       decision: 'New decisions',
       document: 'New pedagogic documents',
       documentInfo:
@@ -2020,13 +2057,13 @@ const en: Translations = {
       informalDocument: "Other documents related to the child's everyday life",
       informalDocumentInfo:
         'These documents may include, for example, images of drawings made by the child.',
-      attendanceReservation: 'Reminders of missing attendance reservations',
+      attendanceReservation: 'Missing attendance reservations',
       attendanceReservationInfo:
         'A reminder will be sent before the deadline if you have not registered your child’s attendance/absence for the following two weeks.',
-      discussionTime: 'Notifications related to discussion appointments',
+      discussionTime: 'Matters related to discussion times',
       discussionTimeInfo: (
         <div>
-          <div>You will receive notifications of the following:</div>
+          <div>Notifications of the following:</div>
           <ul>
             <li>
               when you are asked about suitable times for a discussion, e.g.
@@ -2232,6 +2269,7 @@ const en: Translations = {
         ALIMONY: 'Maintenance allowance/support',
         INTEREST_AND_INVESTMENT_INCOME: 'Income from interest and dividends',
         RENTAL_INCOME: 'Rental income',
+        GENERAL_SOCIAL_SECURITY_BENEFIT: 'General social security benefit',
         UNEMPLOYMENT_ALLOWANCE: 'Unemployment benefit',
         LABOUR_MARKET_SUBSIDY: 'Labour market subsidy',
         ADJUSTED_DAILY_ALLOWANCE: 'Adjusted unemployment benefit',
@@ -2292,14 +2330,7 @@ const en: Translations = {
       timeRange: 'Time range'
     },
     limitedCompany: {
-      info: (
-        <>
-          <strong>
-            Documents of dividend income must be submitted as an attachment.
-          </strong>{' '}
-          Select the appropriate method to provide other information below.
-        </>
-      ),
+      info: 'Select the appropriate method to provide other information below',
       incomesRegister:
         'My income can be checked directly from Kela and the Incomes Register.',
       attachments:
@@ -2350,6 +2381,8 @@ const en: Translations = {
         FLEXIBLE_AND_PARTIAL_HOME_CARE_ALLOWANCE: 'Decision on care allowance',
         ALIMONY:
           'Child maintenance agreement or decision on maintenance allowance',
+        GENERAL_SOCIAL_SECURITY_BENEFIT:
+          'Decision on general social security benefit',
         UNEMPLOYMENT_ALLOWANCE: 'Decision on unemployment benefit',
         LABOUR_MARKET_SUBSIDY: 'Decision on labour market subsidy',
         ADJUSTED_DAILY_ALLOWANCE: 'Decision on the daily allowance',
@@ -2400,6 +2433,8 @@ const en: Translations = {
           'Add decision on care allowance',
         ALIMONY:
           'Add child maintenance agreement or decision on maintenance allowance',
+        GENERAL_SOCIAL_SECURITY_BENEFIT:
+          'Add decision on general social security benefit',
         UNEMPLOYMENT_ALLOWANCE: 'Add decision on unemployment benefit',
         LABOUR_MARKET_SUBSIDY: 'Add decision on labour market subsidy',
         ADJUSTED_DAILY_ALLOWANCE: 'Add decision on the daily allowance',
@@ -2761,72 +2796,60 @@ const en: Translations = {
       <H1>Accessibility statement</H1>
       <P>
         This accessibility statement applies to the City of Espoo’s early
-        childhood education online service eVaka at{' '}
+        childhood education eVaka online service at{' '}
         <a href="https://espoonvarhaiskasvatus.fi">espoonvarhaiskasvatus.fi</a>.
-        The City of Espoo endeavours to ensure the accessibility of the online
+        The City of Espoo strives to guarantee the accessibility of the online
         service, continuously improve the user experience and apply appropriate
-        accessibility standards.
-      </P>
-      <P>
-        The accessibility of the service was assessed by the development team of
-        the service, and this statement was drawn up on 12 April 2022.
+        accessibility requirements.
       </P>
       <H2>Compliance of the service</H2>
       <P>
-        The online service complies with the statutory critical accessibility
-        requirements in accordance with Level AA of the Accessibility Guidelines
-        for the WCAG v2.1. The service is not yet fully compliant with the
-        requirements.
+        The online service meets the accessibility requirements set by law (WCAG
+        2.1, Level AA) for the most part, but the service still has some parts
+        that do not meet the requirements.
       </P>
       <H2>Measures to support accessibility</H2>
       <P>
-        The accessibility of the online service is ensured, among other things,
-        by the following measures:
+        We ensure the accessibility of the online service with, among others,
+        the following measures:
       </P>
       <ul>
         <li>
-          Accessibility has been taken into account from the beginning of the
-          design phase, for example, when choosing the colours and font sizes of
-          the service.
+          Accessibility is taken into account already in the design phase of the
+          service, for example by choosing accessible colours and font sizes.
         </li>
         <li>
-          The service elements have been defined in consistently in terms of
-          semantics.
+          The elements of the service are defined to be semantically consistent.
         </li>
-        <li>The service is continuously tested with a screen reader.</li>
+        <li>The service is tested with a screen reader during development.</li>
         <li>
           Various users test the service and give feedback on its accessibility.
         </li>
         <li>
-          When website technology or content changes, its accessibility is
-          ensured through constant monitoring.
+          The accessibility of the service is maintained through continuous
+          monitoring when its content and/or technical implementation changes.
         </li>
       </ul>
       <P>
-        This statement will be updated in conjunction with website changes and
-        accessibility evaluations.
+        This accessibility statement is updated in conjunction with changes to
+        the service and accessibility reviews.
       </P>
       <H2>Known accessibility issues</H2>
       <P>
-        Users may still encounter some issues on the website. The following
-        contains a description of known accessibility issues. If you notice an
-        issue on the site that is not listed, please contact us.
+        Users may still encounter some issues in the online service. Known
+        accessibility issues are described below. If you notice an issue in the
+        service that is not listed, please contact us, the administrators.
       </P>
       <ul>
         <li>
-          Date pickers and multi-select dropdowns in the service are not
-          optimised to be used with a screen reader.
-        </li>
-        <li>
-          The service’s unit map cannot be navigated using the keyboard/screen
-          reader, but the units can be browsed on the list available in the same
-          view. The map used in the service is produced by a third party.
+          When using a touch screen, the touch areas of some functions may be
+          too small.
         </li>
       </ul>
       <H2>Third parties</H2>
       <P>
-        The online service uses the following third party services, the
-        accessibility of which we cannot be responsible for.
+        The online service uses the following third-party services, the
+        accessibility of which we cannot guarantee.
       </P>
       <ul>
         <li>Suomi.fi identification</li>
@@ -2834,52 +2857,60 @@ const en: Translations = {
       </ul>
       <H2>Alternative ways of accessing the service</H2>
       <P>
+        You can get help with using the electronic services at{' '}
         <ExternalLink
           href="https://www.espoo.fi/en/city-espoo/customer-service/service-points-and-espoo-info/service-points"
-          text="The City of Espoo’s Service Points"
-        />{' '}
-        provide assistance with using electronic services. Service advisors at
-        the Service Points help users who cannot access digital services.
+          text="the City of Espoo’s Service Points"
+        />
+        . The service advisors at the Service Points help users for whom digital
+        services are not accessible.
+      </P>
+      <H2>Preparation of this accessibility statement</H2>
+      <P>
+        This statement was drawn up on 12 April 2022. The accessibility of the
+        service has been assessed by the development team of the service and an
+        external expert assessor. The latest external expert assessment was
+        carried out in spring 2024. The accessibility statement was last updated
+        on 30 June 2026.
       </P>
       <H2>Give feedback</H2>
       <P>
-        If you notice an accessibility gap in our online service, please let us
-        know! You can give us feedback using the{' '}
+        If you notice an accessibility issue in the eVaka online service, please
+        let us, the administrators, know. You can report an accessibility issue
+        or give us feedback using the{' '}
         <ExternalLink
           href="https://easiointi.espoo.fi/eFeedback/en/Feedback/20-S%C3%A4hk%C3%B6iset%20asiointipalvelut"
           text="online form"
         />{' '}
         or by emailing{' '}
-        <a href="mailto:evakatuki@espoo.fi">evakatuki@espoo.fi</a>.
+        <a href="mailto:evakatuki@espoo.fi">evakatuki@espoo.fi</a>. Receiving a
+        reply may take 14 days.
       </P>
-      <H2>Supervisory authority</H2>
+      <H2>Enforcement procedure</H2>
       <P>
-        If you notice any accessibility issues on the website, please send us,
-        the site administrator, feedback first. It may take us up to 14 days to
-        reply. If you are not satisfied with the reply or you do not receive a
-        reply within two weeks, you can give feedback to the Regional State
-        Administrative Agency for Southern Finland. The website of the Regional
-        State Administrative Agency for Southern Finland explains in detail how
-        a complaint can be submitted, and how the matter will be processed.
+        If you are not satisfied with the reply you have received from the
+        administrators, or if you do not receive a reply within 14 days, you can
+        submit a report to Traficom. Traficom’s website explains in detail how
+        you can submit a report and how the matter will be processed.
       </P>
 
       <P>
-        <strong>Contact information of the supervisory authority</strong>
+        <strong>Contact information of the supervisory authority:</strong>
         <br />
-        Regional State Administrative Agency of Southern Finland
+        Finnish Transport and Communications Agency Traficom
         <br />
-        Accessibility Supervision Unit
+        Digital Accessibility Supervision
+        <br />
+        <a href="mailto:saavutettavuus@traficom.fi">
+          saavutettavuus@traficom.fi
+        </a>
+        <br />
+        Switchboard: 029 534 5000
         <br />
         <ExternalLink
-          href="https://www.saavutettavuusvaatimukset.fi"
-          text="www.saavutettavuusvaatimukset.fi"
+          href="https://www.webaccessibility.fi"
+          text="www.webaccessibility.fi"
         />
-        <br />
-        <a href="mailto:saavutettavuus@avi.fi">saavutettavuus@avi.fi</a>
-        <br />
-        tel. (exchange) 0295 016 000
-        <br />
-        Open: Mon-Fri 8.00–16.15
       </P>
     </>
   ),

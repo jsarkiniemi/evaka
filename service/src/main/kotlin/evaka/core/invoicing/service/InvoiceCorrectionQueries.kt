@@ -18,8 +18,8 @@ import kotlin.math.abs
 
 private fun Database.Read.getInvoiceCorrections(where: Predicate): List<InvoiceCorrection> =
     createQuery {
-            sql(
-                """
+        sql(
+            """
 SELECT
     invoice_correction.id,
     target_month,
@@ -54,15 +54,27 @@ LEFT JOIN LATERAL (
 ) invoice ON true
 WHERE ${predicate(where.forTable("invoice_correction"))}
 """
-            )
-        }
-        .toList()
+        )
+    }
+    .toList()
 
 fun Database.Read.getUnappliedInvoiceCorrections(): List<InvoiceCorrection> =
     getInvoiceCorrections(Predicate { where("$it.target_month IS NULL") })
 
-fun Database.Read.getInvoiceCorrectionsForMonth(month: YearMonth): List<InvoiceCorrection> =
-    getInvoiceCorrections(Predicate { where("$it.target_month = ${bind(month)}") })
+fun Database.Read.getInvoiceCorrectionsForMonth(
+    month: YearMonth,
+    headOfFamilyId: PersonId?,
+): List<InvoiceCorrection> {
+    val headOfFamilyFilter =
+        if (headOfFamilyId != null) {
+            Predicate { where("$it.head_of_family_id = ${bind(headOfFamilyId)}") }
+        } else {
+            Predicate.alwaysTrue()
+        }
+    return getInvoiceCorrections(
+        Predicate { where("$it.target_month = ${bind(month)}") }.and(headOfFamilyFilter)
+    )
+}
 
 fun Database.Read.getInvoiceCorrectionsByIds(
     ids: Set<InvoiceCorrectionId>

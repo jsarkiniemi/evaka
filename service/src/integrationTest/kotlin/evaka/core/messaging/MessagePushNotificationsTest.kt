@@ -11,10 +11,12 @@ import evaka.core.shared.MobileDeviceId
 import evaka.core.shared.async.AsyncJob
 import evaka.core.shared.async.AsyncJobRunner
 import evaka.core.shared.auth.AuthenticatedUser
+import evaka.core.shared.config.testFeatureConfig
 import evaka.core.shared.dev.DevCareArea
 import evaka.core.shared.dev.DevDaycare
 import evaka.core.shared.dev.DevDaycareGroup
 import evaka.core.shared.dev.DevDaycareGroupPlacement
+import evaka.core.shared.dev.DevEmployee
 import evaka.core.shared.dev.DevMobileDevice
 import evaka.core.shared.dev.DevPerson
 import evaka.core.shared.dev.DevPersonType
@@ -164,7 +166,14 @@ class MessagePushNotificationsTest : FullApplicationTest(resetDbBeforeEach = tru
 
         val copy =
             db.read { tx ->
-                    tx.getMessageCopiesByAccount(groupAccount, pageSize = 20, page = 1).data
+                    tx.getMessageCopiesByAccount(
+                            groupAccount,
+                            pageSize = 20,
+                            page = 1,
+                            deletedMessageBody = testFeatureConfig.deletedMessagePlaceholderBody,
+                            deletedMessageTitle = testFeatureConfig.deletedMessagePlaceholderTitle,
+                        )
+                        .data
                 }
                 .single()
         assertEquals(municipalAccount, copy.senderId)
@@ -172,16 +181,52 @@ class MessagePushNotificationsTest : FullApplicationTest(resetDbBeforeEach = tru
         assertEquals(0, mockEndpoint.getCapturedRequests("1234").size)
     }
 
-    private fun upsertSubscription(device: MobileDeviceId, endpoint: URI) =
-        db.transaction { tx ->
-            tx.upsertPushSubscription(
-                device,
-                WebPushSubscription(
-                    endpoint = endpoint,
-                    expires = null,
-                    ecdhKey = WebPushCrypto.encode(keyPair.publicKey).toList(),
-                    authSecret = listOf(0x00, 0x11, 0x22, 0x33),
-                ),
+    @Test
+    fun `a push notification is not sent when the message content has been deleted`() {
+        val endpoint = URI("http://localhost:$httpPort/public/mock-web-push/subscription/1234")
+        upsertSubscription(device.id, endpoint)
+
+        val employee = DevEmployee()
+        val sent = db.transaction { tx ->
+            tx.insert(employee)
+            messageService.sendMessageAsCitizen(
+                tx,
+                clock.now(),
+                sender = citizenAccount,
+                recipients = setOf(groupAccount),
+                children = emptySet(),
+                msg = testMessage,
             )
         }
+
+        db.transaction { tx ->
+            tx.execute {
+                sql(
+                    """
+UPDATE message
+SET content_deleted_at = ${bind(clock.now())},
+    content_deleted_by_employee_id = ${bind(employee.id)}
+WHERE id = ${bind(sent.messageId)}
+"""
+                )
+            }
+        }
+
+        clock.tick(Duration.ofMinutes(30))
+        asyncJobRunner.runPendingJobsSync(clock)
+
+        assertEquals(0, mockEndpoint.getCapturedRequests("1234").size)
+    }
+
+    private fun upsertSubscription(device: MobileDeviceId, endpoint: URI) = db.transaction { tx ->
+        tx.upsertPushSubscription(
+            device,
+            WebPushSubscription(
+                endpoint = endpoint,
+                expires = null,
+                ecdhKey = WebPushCrypto.encode(keyPair.publicKey).toList(),
+                authSecret = listOf(0x00, 0x11, 0x22, 0x33),
+            ),
+        )
+    }
 }

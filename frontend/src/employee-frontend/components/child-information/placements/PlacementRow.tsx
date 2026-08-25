@@ -24,7 +24,7 @@ import {
 } from 'lib-common/query'
 import type { UUID } from 'lib-common/types'
 import UnorderedList from 'lib-components/atoms/UnorderedList'
-import { LegacyButton } from 'lib-components/atoms/buttons/LegacyButton'
+import { Button } from 'lib-components/atoms/buttons/Button'
 import { MutateButton } from 'lib-components/atoms/buttons/MutateButton'
 import { FixedSpaceRow } from 'lib-components/layout/flex-helpers'
 import DatePicker from 'lib-components/molecules/date-picker/DatePicker'
@@ -113,7 +113,7 @@ export default React.memo(function PlacementRow({
   otherPlacementRanges,
   serviceNeedOptions
 }: Props) {
-  const { i18n } = useTranslation()
+  const { i18n, lang } = useTranslation()
   const { setErrorMessage } = useContext<UiState>(UIContext)
   const backupCares = useQueryResult(
     backupCaresQuery({ childId: placement.child.id })
@@ -325,8 +325,9 @@ export default React.memo(function PlacementRow({
             deletable={permittedActions.includes('DELETE')}
             dataQaDelete="btn-remove-placement"
             warning={
-              placement.missingServiceNeedDays > 0
-                ? `${i18n.childInformation.placements.serviceNeedMissingTooltip1} ${placement.missingServiceNeedDays} ${i18n.childInformation.placements.serviceNeedMissingTooltip2}`
+              placement.serviceNeedDetail &&
+              placement.serviceNeedDetail.missingServiceNeedDays > 0
+                ? `${i18n.childInformation.placements.serviceNeedMissingTooltip1} ${placement.serviceNeedDetail.missingServiceNeedDays} ${i18n.childInformation.placements.serviceNeedMissingTooltip2}`
                 : undefined
             }
           />
@@ -346,7 +347,7 @@ export default React.memo(function PlacementRow({
                     validate(startDate, placement.endDate)
                   }}
                   data-qa="placement-start-date-input"
-                  locale="fi"
+                  locale={lang}
                 />
                 {startDateWarning ? (
                   <WarningContainer>
@@ -376,7 +377,7 @@ export default React.memo(function PlacementRow({
                         setForm({ ...form, endDate })
                         validate(placement.startDate, endDate)
                       }}
-                      locale="fi"
+                      locale={lang}
                       data-qa="placement-end-date-input"
                       aria-labelledby="placement-details-end-date"
                     />
@@ -530,7 +531,7 @@ export default React.memo(function PlacementRow({
         {editing && (
           <ActionRow>
             <FixedSpaceRow>
-              <LegacyButton
+              <Button
                 onClick={() => setEditing(false)}
                 text={i18n.common.cancel}
               />

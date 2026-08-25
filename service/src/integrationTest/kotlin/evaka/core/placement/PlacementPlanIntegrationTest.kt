@@ -28,6 +28,7 @@ import evaka.core.shared.dev.DevEmployee
 import evaka.core.shared.dev.DevPerson
 import evaka.core.shared.dev.DevPersonType
 import evaka.core.shared.dev.insert
+import evaka.core.shared.dev.insertDefaultDecisionGenericReasonings
 import evaka.core.shared.dev.insertTestApplication
 import evaka.core.shared.domain.FiniteDateRange
 import evaka.core.shared.domain.Forbidden
@@ -86,6 +87,7 @@ class PlacementPlanIntegrationTest : FullApplicationTest(resetDbBeforeEach = tru
             listOf(adult, restrictedAdult).forEach { tx.insert(it, DevPersonType.ADULT) }
             tx.insert(child, DevPersonType.CHILD)
             tx.insert(preschoolTerm)
+            tx.insertDefaultDecisionGenericReasonings()
         }
         MockPersonDetailsService.addPersons(adult, restrictedAdult, child)
         MockPersonDetailsService.addDependants(adult, child)
@@ -279,7 +281,10 @@ class PlacementPlanIntegrationTest : FullApplicationTest(resetDbBeforeEach = tru
                 period =
                     FiniteDateRange(preferredStartDate.plusDays(1), defaultEndDate.minusDays(1)),
                 preschoolDaycarePeriod =
-                    FiniteDateRange(preferredStartDate.minusDays(1), defaultClubEndDate.plusDays(1)),
+                    FiniteDateRange(
+                        preferredStartDate.minusDays(1),
+                        defaultClubEndDate.plusDays(1),
+                    ),
             ),
         )
     }
@@ -722,28 +727,27 @@ class PlacementPlanIntegrationTest : FullApplicationTest(resetDbBeforeEach = tru
         preschoolDaycare: Boolean = false,
         preferredUnits: List<DevDaycare> = listOf(daycare1, daycare2),
         preparatory: Boolean = false,
-    ): ApplicationId =
-        db.transaction { tx ->
-            val careDetails = if (preparatory) CareDetails(preparatory = true) else CareDetails()
-            tx.insertTestApplication(
-                status = status,
-                guardianId = adult.id,
-                childId = child.id,
-                type = type,
-                document =
-                    DaycareFormV0(
-                        type = type,
-                        partTime = partTime,
-                        serviceNeedOption = serviceNeedOption,
-                        connectedDaycare = preschoolDaycare,
-                        serviceStart = "08:00".takeIf { preschoolDaycare },
-                        serviceEnd = "16:00".takeIf { preschoolDaycare },
-                        child = child.toDaycareFormChild(),
-                        guardian = adult.toDaycareFormAdult(adult.restrictedDetailsEnabled),
-                        apply = Apply(preferredUnits = preferredUnits.map { it.id }),
-                        preferredStartDate = preferredStartDate,
-                        careDetails = careDetails,
-                    ),
-            )
-        }
+    ): ApplicationId = db.transaction { tx ->
+        val careDetails = if (preparatory) CareDetails(preparatory = true) else CareDetails()
+        tx.insertTestApplication(
+            status = status,
+            guardianId = adult.id,
+            childId = child.id,
+            type = type,
+            document =
+                DaycareFormV0(
+                    type = type,
+                    partTime = partTime,
+                    serviceNeedOption = serviceNeedOption,
+                    connectedDaycare = preschoolDaycare,
+                    serviceStart = "08:00".takeIf { preschoolDaycare },
+                    serviceEnd = "16:00".takeIf { preschoolDaycare },
+                    child = child.toDaycareFormChild(),
+                    guardian = adult.toDaycareFormAdult(adult.restrictedDetailsEnabled),
+                    apply = Apply(preferredUnits = preferredUnits.map { it.id }),
+                    preferredStartDate = preferredStartDate,
+                    careDetails = careDetails,
+                ),
+        )
+    }
 }

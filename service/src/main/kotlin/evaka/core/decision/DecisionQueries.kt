@@ -29,7 +29,7 @@ private fun Database.Read.createDecisionQuery(
         """
         SELECT
             d.id, d.type, d.start_date, d.end_date, d.document_key, d.number, d.sent_date, d.status, d.unit_id, d.application_id, d.requested_start_date, d.resolved, d.document_contains_contact_info, d.archived_at,
-            u.name, u.decision_daycare_name, u.decision_preschool_name, u.decision_handler, u.decision_handler_address, u.provider_type,
+            u.name, u.decision_daycare_name, u.decision_preschool_name, u.decision_handler, u.decision_handler_address, u.provider_type, u.language,
             u.street_address, u.postal_code, u.post_office,
             u.phone,
             unit_manager_name AS manager,
@@ -76,6 +76,7 @@ private fun Row.decisionFromResultSet(): Decision =
                 decisionHandler = column("decision_handler"),
                 decisionHandlerAddress = column("decision_handler_address"),
                 providerType = column("provider_type"),
+                language = column("language"),
             ),
         applicationId = column("application_id"),
         childId = column("child_id"),
@@ -179,10 +180,9 @@ fun Database.Read.getOwnDecisions(
     guardianId: PersonId,
     children: Collection<ChildId>,
     filter: AccessControlFilter<DecisionId>,
-): List<DecisionSummary> =
-    createQuery {
-            sql(
-                """
+): List<DecisionSummary> = createQuery {
+    sql(
+        """
         SELECT
             d.application_id,
             a.child_id,
@@ -206,21 +206,30 @@ fun Database.Read.getOwnDecisions(
         AND d.sent_date IS NOT NULL
         AND a.status IN ('WAITING_CONFIRMATION', 'ACTIVE', 'REJECTED')
         """
-            )
-        }
-        .toList()
+    )
+}
+    .toList()
 
 fun Database.Read.fetchDecisionDrafts(applicationId: ApplicationId): List<DecisionDraft> =
     createQuery {
-            sql(
-                """
-SELECT id, unit_id, type, start_date, end_date, planned
-FROM decision
-WHERE application_id = ${bind(applicationId)} AND sent_date IS NULL
+        sql(
+            """
+SELECT
+    d.id,
+    d.unit_id,
+    d.type,
+    d.start_date,
+    d.end_date,
+    d.planned,
+    (SELECT coalesce(array_agg(s.reasoning_id ORDER BY s.created_at), '{}')
+     FROM decision_reasoning_individual_selection s
+     WHERE s.decision_id = d.id) AS individual_reasoning_ids
+FROM decision d
+WHERE d.application_id = ${bind(applicationId)} AND d.sent_date IS NULL
 """
-            )
-        }
-        .toList()
+        )
+    }
+    .toList()
 
 fun Database.Transaction.finalizeDecisions(
     applicationId: ApplicationId,
@@ -234,10 +243,10 @@ fun Database.Transaction.finalizeDecisions(
     }
 
     return createQuery {
-            sql(
-                "UPDATE decision SET sent_date = ${bind(sentAt.toLocalDate())}, sent_time = ${bind(sentAt.toLocalTime())} WHERE application_id = ${bind(applicationId)} RETURNING id"
-            )
-        }
+        sql(
+            "UPDATE decision SET sent_date = ${bind(sentAt.toLocalDate())}, sent_time = ${bind(sentAt.toLocalTime())} WHERE application_id = ${bind(applicationId)} RETURNING id"
+        )
+    }
         .toList<DecisionId>()
 }
 
@@ -277,31 +286,33 @@ fun Database.Transaction.updateDecisionGuardianDocumentKey(
     }
 }
 
-fun Database.Read.isDecisionBlocked(decisionId: DecisionId): Boolean =
-    createQuery {
-            sql(
-                """
+fun Database.Read.isDecisionBlocked(decisionId: DecisionId): Boolean = createQuery {
+    sql(
+        """
 SELECT count(*) > 0 AS blocked
 FROM decision
 WHERE status = 'PENDING' AND type = 'PRESCHOOL' AND id != ${bind(decisionId)}
 AND application_id = (SELECT application_id FROM decision WHERE id = ${bind(decisionId)})
 """
-            )
-        }
-        .exactlyOne()
+    )
+}
+    .exactlyOne()
 
-fun Database.Read.getDecisionLanguage(decisionId: DecisionId): OfficialLanguage =
-    createQuery {
-            sql(
-                """
-            SELECT daycare.language
+fun Database.Read.getDecisionLanguage(decisionId: DecisionId): OfficialLanguage = createQuery {
+    sql(
+        """
+            -- Decisions are issued in FI/SV only
+            SELECT CASE
+                WHEN daycare.language = 'en' THEN 'fi'
+                ELSE daycare.language::text
+            END
             FROM decision
                 INNER JOIN daycare ON unit_id = daycare.id
             WHERE decision.id = ${bind(decisionId)}
         """
-            )
-        }
-        .exactlyOne<OfficialLanguage>()
+    )
+}
+    .exactlyOne<OfficialLanguage>()
 
 fun Database.Transaction.markDecisionAccepted(
     user: AuthenticatedUser,
@@ -352,5 +363,7 @@ AND status = 'PENDING'
 }
 
 fun Database.Transaction.markDecisionAsArchived(id: DecisionId, now: HelsinkiDateTime) =
-    createUpdate { sql("UPDATE decision SET archived_at = ${bind(now)} WHERE id = ${bind(id)}") }
-        .updateExactlyOne()
+    createUpdate {
+        sql("UPDATE decision SET archived_at = ${bind(now)} WHERE id = ${bind(id)}")
+    }
+    .updateExactlyOne()

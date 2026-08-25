@@ -64,16 +64,24 @@ export const sv: typeof fi = {
     clubTerm: 'Klubbtermin',
     clubTerms: 'Klubbterminer',
     placementTool: 'Optimeringsverktyg',
-    outOfOffice: 'Frånvaromeddelande'
+    outOfOffice: 'Frånvaromeddelande',
+    decisionReasonings: 'Beslutsmotiveringar'
   },
   common: {
     yes: 'Ja',
     no: 'Nej',
     and: 'Ja',
-    loadingFailed: 'Hämtning av information misslyckades',
-    noAccess: 'Rättigheter saknas',
-    endpointDisabled:
-      'eVaka genomgår för närvarande ett partiellt underhållsavbrott. Vissa funktioner är inte tillgängliga just nu. Försök igen om en stund.',
+    loadingFailed: 'Datahämtningen misslyckades',
+    loadingFailedInfo:
+      'Försök att uppdatera sidan om en stund. Problemet är oftast tillfälligt.',
+    noAccess: 'Ingen tillgång',
+    noAccessInfo:
+      'Kontakta din chef eller systemadministratör om du behöver åtkomst.',
+    endpointDisabled: 'Delvis serviceavbrott',
+    endpointDisabledInfo:
+      'En del av funktionerna är inte tillgängliga just nu. Försök igen om en stund.',
+    networkError: 'Ingen internetanslutning',
+    networkErrorInfo: 'Kontrollera din internetanslutning och försök igen.',
     edit: 'Redigera',
     add: 'Lägg till',
     addNew: 'Lägg till ny',
@@ -427,6 +435,22 @@ export const sv: typeof fi = {
       confirmDecisionMailed: 'Markera som posterad',
       checked: (count: number) =>
         count === 1 ? `${count} ansökan vald` : `${count} ansökningar valda`
+    },
+    decisionReasoning: {
+      individualCountTooltip: (count: number) =>
+        count === 1
+          ? `Besluten har ${count} individuell motivering.`
+          : `Besluten har ${count} individuella motiveringar.`,
+      genericNotReadyTooltip:
+        'Den allmänna motiveringen för besluten är inte i bruk. Besluten kan skickas när motiveringen har tagits i bruk.',
+      sendBlockedTitle: (applicationCount: number): string =>
+        applicationCount === 1
+          ? 'Beslutet kunde inte skickas'
+          : 'Besluten kunde inte skickas',
+      sendBlockedText: (applicationCount: number): string =>
+        applicationCount === 1
+          ? 'Beslutets motiveringstexter är inte färdiga. Du kan skicka beslutet först när huvudanvändaren har färdigställt motiveringarna.'
+          : 'De valda ansökningarna har beslut vars motiveringstexter inte är färdiga. Du kan skicka besluten först när huvudanvändaren har färdigställt motiveringarna. Ingen ansökan flyttades vidare.'
     },
     distinctiveDetails: {
       SECONDARY: 'Visa även om enhet sökts som 2. eller 3. önskemål'
@@ -1769,6 +1793,7 @@ export const sv: typeof fi = {
       noIncomeStatements: 'Inga inkomstutredningar',
       incomeStatementHeading: 'Klientens inkomstutredningsblankett',
       sentAtHeading: 'Ankomstdatum',
+      citizenModifiedAtHeading: 'Redigerad',
       handledHeading: 'Behandlad',
       open: 'Öppna blankett',
       handled: 'Inkomstutredning behandlad',
@@ -1833,6 +1858,7 @@ export const sv: typeof fi = {
       ALIMONY: 'Underhållsbidrag eller -stöd',
       INTEREST_AND_INVESTMENT_INCOME: 'Ränte- och dividendinkomster',
       RENTAL_INCOME: 'Hyresinkomster',
+      GENERAL_SOCIAL_SECURITY_BENEFIT: 'Allmänt stöd',
       UNEMPLOYMENT_ALLOWANCE: 'Arbetslöshetsdagpenning',
       LABOUR_MARKET_SUBSIDY: 'Arbetsmarknadsstöd',
       ADJUSTED_DAILY_ALLOWANCE: 'Jämkad dagpenning',
@@ -1945,6 +1971,7 @@ export const sv: typeof fi = {
       HOME_CARE_ALLOWANCE: 'Beslut om hemvårdsstöd',
       FLEXIBLE_AND_PARTIAL_HOME_CARE_ALLOWANCE: 'Beslut om vårdpenning',
       ALIMONY: 'Underhållsavtal eller beslut om underhållsstöd',
+      GENERAL_SOCIAL_SECURITY_BENEFIT: 'Beslut om allmänt stöd',
       UNEMPLOYMENT_ALLOWANCE: 'Beslut om arbetslöshetsdagpenning',
       LABOUR_MARKET_SUBSIDY: 'Beslut om arbetsmarknadsstöd',
       ADJUSTED_DAILY_ALLOWANCE: 'Beslut om dagpenning',
@@ -2035,8 +2062,10 @@ export const sv: typeof fi = {
       role: 'Roll',
       name: 'Namn',
       email: 'E-postadress',
-      aclStartDate: 'Tillstånd börjar',
-      aclEndDate: 'Tillstånd upphör',
+      aclStartDate: 'Tillstånd till enheten börjar',
+      aclEndDate: 'Tillstånd till enheten upphör',
+      aclEndDateHelp:
+        'Efter slutdatumet upphör personens tillgång till enheten och alla grupper.',
       removeConfirmation:
         'Vill du ta bort åtkomsträttigheterna från den valda personen?',
       removeScheduledConfirmation: 'Vill du ta bort det kommande tillståndet?',
@@ -2053,6 +2082,8 @@ export const sv: typeof fi = {
       chooseRole: 'Välj roll',
       choosePerson: 'Välj person',
       chooseGroup: 'Välj grupp',
+      chooseGroupHelp:
+        'Tillståndet för gruppen gäller under samma tidsperiod som enhetens tillstånd.',
       temporaryEmployees: {
         title: 'Tillfälliga vikarier',
         previousEmployeesTitle: 'Tidigare tillfälliga vikarier',
@@ -2448,7 +2479,7 @@ export const sv: typeof fi = {
         groupNotesHeader: 'Gruppens anteckningar',
         stickyNotesHeader: 'Att uppmärksamma under närmaste dagarna',
         notesHint:
-          'Lekar, lyckanden, glädjeämnen och inlärda saker idag (inga hälsouppgifter eller sekretessbelagda uppgifter).',
+          'Lekar, aktiv rörelse, lyckanden, glädjeämnen och inlärda saker idag (inga hälsouppgifter eller sekretessbelagda uppgifter).',
         childStickyNoteHint:
           'Anteckning för personalen (inga hälsouppgifter eller sekretessbelagda uppgifter).',
         otherThings: 'Övriga ärenden',
@@ -2497,15 +2528,7 @@ export const sv: typeof fi = {
       requiresBackupCare: 'Gör reservplacering',
       openReservationModal: 'Gör återkommande reservation',
       childCount: 'Barn närvarande',
-      lastModifiedStaff: (date: string, name: string) => (
-        <div>
-          <p>*Anteckning gjord av personal</p>
-          <p>
-            Senast redigerad {date}; redigerare: {name}
-          </p>
-        </div>
-      ),
-      lastModifiedOther: (date: string, name: string) =>
+      lastModified: (date: string, name: string) =>
         `Senast redigerad ${date}; redigerare: ${name}`,
       reservationModal: {
         title: 'Gör reservation',
@@ -2625,6 +2648,8 @@ export const sv: typeof fi = {
       addedAt: 'Anteckning skapad',
       modifiedAt: 'Redigerad',
       departedAutomatically: 'Automatiskt avbruten',
+      departedAutomaticallyBanner: (count: number) =>
+        `${count} automatiska avbrott av närvaro denna vecka.`,
       hasStaffOccupancyEffect: 'Ansvarig för fostran'
     },
     error: {
@@ -3386,7 +3411,7 @@ export const sv: typeof fi = {
       BILLABLE: 'Småbarnspedagogik (avgiftsbelagd)'
     },
     modifiedByStaff: 'Personal',
-    modifiedByCitizen: 'Vårdnadshavare',
+    modifiedByCitizen: (name: string) => `${name} (vårdnadshavare)`,
     modal: {
       absenceSectionLabel: 'Orsak till frånvaro',
       placementSectionLabel: 'Verksamhetsform som frånvaron gäller',
@@ -3426,8 +3451,6 @@ export const sv: typeof fi = {
     absence: 'Frånvaro',
     reservation: 'Reservering',
     present: 'Närvarande',
-    guardian: 'Vårdnadshavare',
-    staff: 'Personal',
     dailyServiceTime: 'Avtalstid'
   },
   placementDraft: {
@@ -3462,6 +3485,14 @@ export const sv: typeof fi = {
   },
   decisionDraft: {
     title: 'Beslutets utarbetande och skickande',
+    titlePlural: 'Redigering av besluten',
+    titleSingle: 'Redigering av beslutet',
+    decisionsHeading: 'Besluten',
+    decisionsHeadingSingle: 'Beslut',
+    decisionsSubtitle:
+      'Välj de placeringar som beslut ska skickas för till kommunmedlemmen:',
+    unitInlineSummary: (address: string, manager: string) =>
+      `${address} · Ledare: ${manager}`,
     info1:
       'Genom att skicka beslutet godkänner du placeringsplanen. Kommunmedlemmen skickas de beslut som du har valt nedan.',
     info2:
@@ -3472,7 +3503,19 @@ export const sv: typeof fi = {
       'Skicka det utskrivna beslutet per post och markera det som postlagt.',
     unitInfo1: 'Enhetens uppgifter är bristfälliga.',
     unitInfo2:
-      'Bristfälliga uppgifter måste uppdateras innan besluten skapas. Kontakta huvudanvändaren',
+      'Bristfälliga uppgifter måste uppdateras innan besluten skickas. Kontakta huvudanvändaren',
+    unitFieldsMissingUnitName: 'Vald enhet',
+    unitFields: {
+      unit: 'Enhetens uppgifter hittades inte',
+      daycareDecisionName: 'Enhetens namn på beslut om småbarnspedagogik',
+      preschoolDecisionName: 'Enhetens namn på beslut om förskoleundervisning',
+      manager: 'Enhetens chef',
+      streetAddress: 'Besöksadress',
+      postalCode: 'Postnummer',
+      postOffice: 'Postanstalt',
+      decisionHandler: 'Beslutets handläggare',
+      decisionHandlerAddress: 'Beslutshandläggarens adress'
+    },
     notGuardianInfo1: 'Ansökans vårdnadshavare är inte barnets vårdnadshavare.',
     notGuardianInfo2:
       'Personen som är antecknad som vårdnadshavare i ansökan är inte barnets vårdnadshavare enligt befolkningsregistret. Beslutet måste skickas i pappersform.',
@@ -3499,6 +3542,7 @@ export const sv: typeof fi = {
     daycareDecisionName: 'Enhetens namn på beslut om småbarnspedagogik',
     unitManager: 'Enhetens ledare',
     unitAddress: 'Enhetens adress',
+    handler: 'Ärendets handläggare',
     handlerName: 'Handläggarens namn',
     handlerAddress: 'Handläggarens adress',
     receiver: 'Mottagare',
@@ -3506,7 +3550,26 @@ export const sv: typeof fi = {
     missingValue: 'Uppgift saknas.',
     noOtherGuardian: 'Det finns ingen andra vårdnadshavare',
     differentUnit:
-      'Enheten som visas på beslutet är en annan än i den ursprungliga placeringen.'
+      'Enheten som visas på beslutet är en annan än i den ursprungliga placeringen.',
+    reasonings: {
+      generic: 'Allmän motivering',
+      individual: 'Individuella motiveringar',
+      pickerButton: 'Välj',
+      noGenericForSlot:
+        'Inget publicerat motiveringsutkast finns för detta delområde.',
+      noIndividual:
+        'Inga individuella motiveringar har kopplats till beslutet.',
+      genericRangeOpen: (validFrom: string) =>
+        `Placeringar som börjar från ${validFrom}`,
+      genericRangeClosed: (validFrom: string, validUntil: string) =>
+        `Placeringar som börjar ${validFrom}–${validUntil}`,
+      modalTitle: 'Välj individuella motiveringar',
+      modalCloseButton: 'Stäng',
+      modalEntryTextLabel: 'Text som visas i beslutet',
+      removedFromUse: 'Tagen ur bruk',
+      unitLanguageUnsupported:
+        'Den valda enheten är svenskspråkig, men svenskspråkiga beslut är inte i bruk. Byt enhet eller kontakta administratören.'
+    }
   },
   reports: {
     title: 'Rapporter',
@@ -3548,6 +3611,7 @@ export const sv: typeof fi = {
       over3y: '3+',
       age: 'Ålder',
       dateOfBirth: 'Födelsedatum',
+      yearOfBirth: 'Födelseår',
       attendanceType: 'Närvaro',
       attendanceTypes: {
         RESERVATION: 'Reservering',
@@ -3569,7 +3633,7 @@ export const sv: typeof fi = {
     },
     childDocumentDecisions: {
       title: 'Stödbeslut',
-      description: 'Till beslutsfattaren skickade stödbeslut.',
+      description: 'Stödbeslut skickade till beslutsfattaren.',
       statusFilter: 'Status till påseende',
       otherFilters: 'Andra val',
       includeEnded: 'Visa avslutade beslut',
@@ -3605,7 +3669,7 @@ export const sv: typeof fi = {
         'Mindre bearbetat omfattande datamaterial, utifrån vilket man själv kan skapa olika rapporter.'
     },
     attendanceReservation: {
-      title: 'Dagliga barnets ankomst- och avgångstider',
+      title: 'Barnets dagliga ankomst- och avgångstider',
       description: 'Rapport om barnens reserveringar och behovet av personal',
       ungrouped: 'Barn som väntar på grupp',
       capacityFactor: 'Deb',
@@ -3677,9 +3741,6 @@ export const sv: typeof fi = {
           'Ansökningar (som andra vårdnads- havare)',
         'assistance_action.child_id': 'Stöd- åtgärder',
         'assistance_need.child_id': 'Stödbehov',
-        'assistance_need_decision.child_id': 'Stödbehov- beslut',
-        'assistance_need_decision_guardian.person_id':
-          'Vårdnads- havare i stödbeslut',
         'assistance_need_voucher_coefficient.child_id':
           'Stödets servicesedel- koefficienter',
         'attachment.uploaded_by_person': 'Bilagor',
@@ -3944,9 +4005,9 @@ export const sv: typeof fi = {
         'Förhöjd koefficient för småbarnspedagogik'
     },
     occupancies: {
-      title: 'Fyllnads- och utnyttjandegrader',
+      title: 'Beläggnings- och belastningsgrader',
       description:
-        'Rapporten erbjuder uppgifter om en serviceområdes och en månads utnyttjande- eller fyllnadsgrader.',
+        'Rapporten erbjuder uppgifter om en serviceområdes och en månads beläggnings- och belastningsgrader.',
       filters: {
         areaPlaceholder: 'Välj serviceområde',
         unitPlaceholder: 'Välj enhet',
@@ -3956,13 +4017,13 @@ export const sv: typeof fi = {
             CONFIRMED: 'Bekräftad beläggningsgrad i enheten',
             PLANNED: 'Planerad beläggningsgrad i enheten',
             DRAFT: 'Utkast till beläggningsgrad i enheten',
-            REALIZED: 'Beläggningsgrad i enheten'
+            REALIZED: 'Belastningsgrad i enheten'
           },
           GROUPS: {
             CONFIRMED: 'Bekräftad beläggningsgrad i grupper',
             PLANNED: 'Planerad beläggningsgrad i grupper',
             DRAFT: 'Utkast till beläggningsgrad i grupper',
-            REALIZED: 'Gruppernas belstningsgrad'
+            REALIZED: 'Gruppernas belastningsgrad'
           }
         },
         valueOnReport: 'Visa uppgifter',
@@ -4085,6 +4146,7 @@ export const sv: typeof fi = {
         'Rapport över placerade barn utan personbeteckning för kontroll av OID-uppgifter',
       childName: 'Barnets namn',
       dateOfBirth: 'Födelsedatum',
+      placementStartDate: 'Placeringens startdatum',
       personOid: 'Barnets uppgifters OID',
       lastSentToVarda: 'Exporterat till Varda senast',
       lastSentToKoski: 'Exporterat till Koski senast',
@@ -4107,8 +4169,9 @@ export const sv: typeof fi = {
       total: 'Totalt'
     },
     placementGuarantee: {
-      title: 'Platsgaranti för småbarnspedagogik',
-      description: 'Rapporten visar barn med platsgaranti för småbarnspedagogik'
+      title: 'Vårdplatsgaranti för småbarnspedagogik',
+      description:
+        'Rapporten visar barn med vårdplatsgaranti för småbarnspedagogik'
     },
     placementSketching: {
       title: 'Utkastrapport för förskoleplaceringar',
@@ -4162,7 +4225,7 @@ export const sv: typeof fi = {
     },
     titaniaErrors: {
       title: 'Titania-fel',
-      description: 'Fel funna i skiftlistor importerade från Titania',
+      description: 'Fel i arbetsturer',
       header: 'Titania-export',
       date: 'Datum',
       shift1: 'Första skiftet',
@@ -4257,6 +4320,33 @@ export const sv: typeof fi = {
         includeClosed: 'Visa avslutade enheter och grupper'
       }
     },
+    childAbsences: {
+      title: 'Frånvarorapport för barn',
+      description:
+        'Rapporten listar antalet heldagsfrånvaron för barn i dagar under vald tidsperiod. Hjälper t.ex. med uppföljning av oanmälda frånvaron.',
+      firstName: 'Förnamn',
+      lastName: 'Efternamn',
+      daycareName: 'Enhet',
+      groupName: 'Grupp',
+      days: '(dagar)',
+      total: 'Totalt',
+      filters: {
+        areaSelection: {
+          label: 'Område:',
+          placeHolder: 'Välj område'
+        },
+        daycareSelection: {
+          label: 'Enhet:',
+          placeholder: 'Välj enhet'
+        },
+        groupSelection: {
+          label: 'Grupp:',
+          placeholder: 'Välj grupp'
+        },
+        range: 'Tidsperiod:',
+        includeClosed: 'Visa avslutade enheter och grupper'
+      }
+    },
     preschoolApplications: {
       title: 'Föreslagen FO-rapport kommande förskolebarn',
       description:
@@ -4276,7 +4366,7 @@ export const sv: typeof fi = {
     holidayPeriodAttendance: {
       title: 'Semesterenkätsrapport',
       description:
-        'Enhetens uppföljning av närvaro på dagsnivå under tiden för semesterenkäten',
+        'Enhetens uppföljning av daglig närvaro under lovvårdsperioden',
       periodFilter: 'Semesterenkät',
       periodFilterPlaceholder: 'Välj semesterenkät',
       unitFilter: 'Enhet',
@@ -4401,7 +4491,7 @@ export const sv: typeof fi = {
       }
     },
     citizenDocumentResponseReport: {
-      title: 'Kommuninnvånarens dokument',
+      title: 'Kommuninvånarens dokument',
       description:
         'Rapporten listar gruppvis kommuninvånarens senaste dokumentsvar på ja/nej- eller flervalsfrågorna',
       filters: {
@@ -4612,6 +4702,38 @@ export const sv: typeof fi = {
     replyToThread: 'Svara på meddelande',
     archiveThread: 'Arkivera meddelandetråd',
     markUnread: 'Markera som oläst',
+    deletion: {
+      deleteButton: 'Radera meddelandet',
+      alreadyDeleted: 'Meddelandet hade redan raderats',
+      modal: {
+        title: 'Radera meddelandet',
+        intro:
+          'Funktionen är endast avsedd för situationer där ett meddelande av misstag har skickats till fel mottagare. Det raderade meddelandets innehåll ersätts hos varje mottagare i eVaka med följande text:',
+        stepsHeader: 'Åtgärder omedelbart efter raderingen',
+        stepsBody1:
+          'För ett meddelande som skickats till fel mottagare ska alltid en dataskyddsanmälan göras. Kontakta kommunens eVaka-stöd efter raderingen för fortsatta åtgärder.',
+        stepsBody2:
+          'Information om raderingen förmedlas till enhetsledarna och till eVaka-stödet.',
+        cancel: 'Avbryt',
+        confirm: 'Radera meddelandet'
+      },
+      afterDeletion: {
+        banner: (supportEmail: string | null): ReactNode =>
+          supportEmail ? (
+            <span>
+              Meddelandet har raderats. Kontakta omedelbart eVaka-stödet på
+              adressen <a href={`mailto:${supportEmail}`}>{supportEmail}</a>.
+            </span>
+          ) : (
+            'Meddelandet har raderats. Kontakta omedelbart eVaka-stödet.'
+          ),
+        viewLogWarning: 'Visning av ett raderat meddelande loggas i systemet.',
+        viewButton: 'Visa raderat meddelande',
+        hideButton: 'Dölj raderat meddelande',
+        threadTitlePrefix: 'Meddelandet raderat',
+        sentThreadTitlePrefix: 'Meddelandetrådens rubrik raderad'
+      }
+    },
     changeFolder: {
       button: 'Byt mapp',
       modalTitle: 'Välj mapp',
@@ -4636,7 +4758,7 @@ export const sv: typeof fi = {
         received: 'Mottagna',
         sent: 'Skickade',
         drafts: 'Utkast',
-        copies: 'Ledares/kommunens meddelanden',
+        copies: 'Ledarens/kommunens meddelanden',
         archive: 'Arkiv',
         thread: 'Meddelandetråd'
       },
@@ -4648,7 +4770,7 @@ export const sv: typeof fi = {
         received: 'Mottagna meddelanden',
         sent: 'Skickade meddelanden',
         drafts: 'Utkast',
-        copies: 'Ledares/kommunens meddelanden',
+        copies: 'Ledarens/kommunens meddelanden',
         archive: 'Arkiv',
         thread: 'Meddelandetråd'
       }
@@ -4700,7 +4822,7 @@ export const sv: typeof fi = {
       type: {
         label: 'Meddelandetyp',
         message: 'Meddelande',
-        bulletin: 'Nyhetsbrev (kan inte besvaras)'
+        bulletin: 'Infobrev (kan inte besvaras)'
       },
       flags: {
         heading: 'Meddelandets tilläggsmarkeringar',
@@ -4986,7 +5108,13 @@ export const sv: typeof fi = {
         'Uppgiftsklassens nummer som definierats i informationsstyrningsplanen. Lämna tomt om dokumentet inte arkiveras.',
       archiveDurationMonths: 'Arkiveringstid (månader)',
       archiveExternally: 'Ska överföras till externt arkiv före radering',
-      endDecisionWhenUnitChanges: 'Beslutet avbryts om barnet byter enhet'
+      endDecisionWhenUnitChanges: 'Beslutet avbryts om barnet byter enhet',
+      deletionRetentionDays: 'Bevarandetid i eVaka (dagar)',
+      deletionRetention: 'Bevarandetid i eVaka',
+      deletionRetentionBasis: {
+        PLACEMENT_END: 'från barnets senaste placerings slutdatum',
+        STATUS_TRANSITION: 'från dokumentets senaste statusbyte'
+      }
     },
     templateEditor: {
       confidential: 'Sekretessbelagt',
@@ -5169,49 +5297,6 @@ export const sv: typeof fi = {
     select: 'Välj tilltalsnamn',
     confirm: 'Bekräfta'
   },
-  metadata: {
-    title: 'Arkiverbar metadata',
-    notFound: 'Dokumentet har ingen arkiverbar metadata',
-    caseIdentifier: 'Ärendetunnus',
-    processName: 'Ärendeprocess',
-    organization: 'Organisation',
-    archiveDurationMonths: 'Arkiveringstid',
-    primaryDocument: 'Primärt dokument',
-    secondaryDocuments: 'Övriga dokument',
-    documentId: 'Dokumentidentifierare',
-    name: 'Dokumentnamn',
-    createdAt: 'Upprättandetidpunkt',
-    createdBy: 'Upprättare',
-    monthsUnit: 'månader',
-    confidentiality: 'Offentlighet',
-    confidential: 'Sekretessbelagt',
-    public: 'Offentligt',
-    notSet: 'Ej angiven',
-    confidentialityDuration: 'Sekretessperiod',
-    confidentialityBasis: 'Sekretessgrund',
-    years: 'år',
-    receivedBy: {
-      label: 'Ankomstsätt',
-      PAPER: 'På papper',
-      ELECTRONIC: 'Elektroniskt'
-    },
-    sfiDelivery: {
-      label: 'Suomi.fi -leveranser',
-      method: {
-        ELECTRONIC: 'Elektroniskt',
-        PAPER_MAIL: 'Per post',
-        PENDING: 'Väntar på leverans'
-      }
-    },
-    history: 'Processhistoria',
-    downloadPdf: 'Ladda ner PDF',
-    states: {
-      INITIAL: 'Ärendets initiering / -ankomst',
-      PREPARATION: 'Ärendeberedning',
-      DECIDING: 'Beslutfattande',
-      COMPLETED: 'Verkställighet / Avslutande / Stängning'
-    }
-  },
   systemNotifications: {
     title: {
       CITIZENS: 'Meddelande som syns för kommuninvånare',
@@ -5247,6 +5332,78 @@ export const sv: typeof fi = {
     validationErrors: {
       endBeforeToday: 'Kan inte upphöra i det förflutna'
     }
+  },
+  decisionReasonings: {
+    tabs: {
+      DAYCARE: 'Småbarnspedagogik',
+      PRESCHOOL: 'Förskoleundervisning',
+      CLUB: 'Klubb'
+    },
+    collectionInfo: {
+      DAYCARE:
+        'Småbarnspedagogikmotiveringar används i beslut som gäller placeringstyper:',
+      PRESCHOOL:
+        'Förskolemotiveringar används i beslut som gäller placeringstyper:',
+      CLUB: 'Klubbmotiveringar används i beslut som gäller placeringstyper:'
+    },
+    placementTypes: {
+      DAYCARE: [
+        'Småbarnspedagogikbeslut',
+        'Deltid småbarnspedagogik',
+        'Ansluten småbarnspedagogik'
+      ],
+      PRESCHOOL: ['Förskoleundervisning', 'Förberedande undervisning'],
+      CLUB: ['Klubb', 'Förskoleklubb']
+    },
+    generic: {
+      title: 'Allmänna motiveringar',
+      addNew: 'Lägg till allmän motivering',
+      dateSuffix: 'begynnande placeringar',
+      dateLabel: 'Gäller placeringar som börjar',
+      textFi: 'Text för beslutet',
+      textSv: 'Text för beslutet',
+      statusReady: 'I bruk',
+      statusNotReady: 'Inte i bruk',
+      statusOutdated: 'Föråldrad',
+      notReadyWarning:
+        'Beslut kan inte skickas innan motiveringen har tagits i bruk',
+      outdated: 'Föråldrade',
+      cancel: 'Avbryt',
+      saveAsNotReady: 'Spara utan att aktivera',
+      saveAndActivate: 'Ta i bruk',
+      saveAndActivateConfirmTitle: 'Ta motivering i bruk',
+      saveAndActivateConfirmText:
+        'Observera att en allmän motivering som tagits i bruk inte kan tas bort. En befintlig allmän motivering kan dock ersättas med en ny allmän motivering som tas i bruk för samma period. Vill du ta den allmänna motiveringen i bruk?',
+      edit: 'Redigera',
+      delete: 'Ta bort',
+      deleteConfirmTitle: 'Ta bort motivering',
+      deleteConfirmText: 'Vill du ta bort den allmänna motiveringen?',
+      remove: 'Ta ur bruk',
+      removeConfirmTitle: 'Ta motiveringen ur bruk',
+      removeConfirmText:
+        'En aktiv motivering kan tas ur bruk endast i testmiljöer'
+    },
+    individual: {
+      title: 'Individuella motiveringar',
+      addNew: 'Lägg till individuell motivering',
+      statusActive: 'Tillgänglig',
+      statusRemoved: 'Borttagen från bruk',
+      titleFi: 'Internt namn',
+      titleSv: 'Internt namn',
+      textFi: 'Text för beslutet',
+      textSv: 'Text för beslutet',
+      removed: 'Borttagen från bruk',
+      cancel: 'Avbryt',
+      saveAndActivate: 'Ta i bruk',
+      saveAndActivateConfirmTitle: 'Ta motivering i bruk',
+      saveAndActivateConfirmText:
+        'Observera att om en individuell motivering tas bort från bruk senare, försvinner den inte från beslut där den redan valts. Vill du ta den individuella motiveringen i bruk?',
+      removeConfirmTitle: 'Ta bort motivering från bruk',
+      removeConfirmText:
+        'Vill du ta bort den individuella motiveringen från bruk?'
+    },
+    fi: 'FI',
+    sv: 'SV'
   },
   components
 }

@@ -14,7 +14,7 @@ import LocalDate from 'lib-common/local-date'
 import { isValidCents, parseCents, parseCentsOrThrow } from 'lib-common/money'
 import { useMutationResult } from 'lib-common/query'
 import { AsyncButton } from 'lib-components/atoms/buttons/AsyncButton'
-import { LegacyButton } from 'lib-components/atoms/buttons/LegacyButton'
+import { Button } from 'lib-components/atoms/buttons/Button'
 import InputField from 'lib-components/atoms/form/InputField'
 import { Table, Tbody, Td, Th, Thead, Tr } from 'lib-components/layout/Table'
 import {
@@ -29,6 +29,7 @@ import { defaultMargins } from 'lib-components/white-space'
 import colors from 'lib-customizations/common'
 import { faQuestion } from 'lib-icons'
 
+import { useTranslation } from '../../state/i18n'
 import type { Translations } from '../../state/i18n'
 import type {
   FamilySize,
@@ -60,6 +61,7 @@ export default React.memo(function FeeThresholdsEditor({
   close: () => void
   existingThresholds: Result<FeeThresholdsWithId[]>
 }) {
+  const { lang } = useTranslation()
   const { mutateAsync: createFeeThresholds } = useMutationResult(
     createFeeThresholdsMutation
   )
@@ -103,7 +105,7 @@ export default React.memo(function FeeThresholdsEditor({
       <RowWithMargin $alignItems="center" $spacing="xs">
         <H3>{i18n.financeBasics.fees.validDuring}</H3>
         <DatePicker
-          locale="fi"
+          locale={lang}
           date={editorState.validFrom}
           onChange={(validFrom) =>
             setEditorState((previousState) => ({
@@ -117,7 +119,7 @@ export default React.memo(function FeeThresholdsEditor({
         />
         <span>-</span>
         <DatePicker
-          locale="fi"
+          locale={lang}
           date={editorState.validTo}
           onChange={(validTo) =>
             setEditorState((previousState) => ({
@@ -418,7 +420,7 @@ export default React.memo(function FeeThresholdsEditor({
         </SaveError>
       ) : null}
       <ButtonRow>
-        <LegacyButton text={i18n.common.cancel} onClick={close} />
+        <Button text={i18n.common.cancel} onClick={close} />
         <AsyncButton
           primary
           text={i18n.common.save}

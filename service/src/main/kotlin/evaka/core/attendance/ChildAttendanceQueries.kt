@@ -36,14 +36,14 @@ fun Database.Transaction.insertAttendance(
     createdById: EvakaUserId,
 ): ChildAttendanceId {
     return createUpdate {
-            sql(
-                """
+        sql(
+            """
                 INSERT INTO child_attendance (child_id, unit_id, date, start_time, end_time, modified_at, modified_by)
                 VALUES (${bind(childId)}, ${bind(unitId)}, ${bind(date)}, ${bind(range.start)}, ${bind(range.end)}, ${bind(now)}, ${bind(createdById)})
                 RETURNING id
                 """
-            )
-        }
+        )
+    }
         .executeAndReturnGeneratedKeys()
         .exactlyOne()
 }
@@ -53,22 +53,20 @@ fun Database.Read.getChildAttendanceId(
     unitId: DaycareId,
     now: HelsinkiDateTime,
 ): ChildAttendanceId? {
+    val today = now.toLocalDate()
+    val departedThreshold = now.toLocalTime().minusMinutes(30)
     return createQuery {
-            sql(
-                """
-        SELECT id
-        FROM child_attendance
-        WHERE child_id = :childId AND unit_id = :unitId
-        AND (end_time IS NULL OR (date = :date AND (start_time != '00:00'::time OR (start_time = '00:00'::time AND :departedThreshold < end_time))))
-        ORDER BY date, start_time DESC
-        LIMIT 1
+        sql(
+            """
+SELECT id
+FROM child_attendance
+WHERE child_id = ${bind(childId)} AND unit_id = ${bind(unitId)}
+AND (end_time IS NULL OR (date = ${bind(today)} AND (start_time != '00:00'::time OR (start_time = '00:00'::time AND ${bind(departedThreshold)} < end_time))))
+ORDER BY date, start_time DESC
+LIMIT 1
 """
-            )
-        }
-        .bind("childId", childId)
-        .bind("unitId", unitId)
-        .bind("date", now.toLocalDate())
-        .bind("departedThreshold", now.toLocalTime().minusMinutes(30))
+        )
+    }
         .exactlyOneOrNull()
 }
 
@@ -78,14 +76,14 @@ fun Database.Read.getCompletedAttendanceTimesForChild(
     date: LocalDate,
 ): List<TimeRange> {
     return createQuery {
-            sql(
-                """
+        sql(
+            """
         SELECT (start_time, end_time)::timerange
         FROM child_attendance
         WHERE child_id = ${bind(childId)} AND unit_id = ${bind(unitId)} AND date = ${bind(date)} AND end_time IS NOT NULL 
     """
-            )
-        }
+        )
+    }
         .toList()
 }
 
@@ -123,24 +121,22 @@ data class OngoingAttendance(
 fun Database.Read.getOngoingAttendanceForChild(
     childId: ChildId,
     unitId: DaycareId,
-): OngoingAttendance? =
-    createQuery {
-            sql(
-                "SELECT id, date, start_time FROM child_attendance WHERE child_id = ${bind(childId)} AND unit_id = ${bind(unitId)} AND end_time IS NULL"
-            )
-        }
-        .exactlyOneOrNull()
+): OngoingAttendance? = createQuery {
+    sql(
+        "SELECT id, date, start_time FROM child_attendance WHERE child_id = ${bind(childId)} AND unit_id = ${bind(unitId)} AND end_time IS NULL"
+    )
+}
+    .exactlyOneOrNull()
 
 fun Database.Read.getOngoingAttendanceForChildren(
     children: Set<ChildId>,
     unitId: DaycareId,
-): Map<ChildId, OngoingAttendance> =
-    createQuery {
-            sql(
-                "SELECT id, child_id, date, start_time FROM child_attendance WHERE child_id = ANY (${bind(children)}) AND unit_id = ${bind(unitId)} AND end_time IS NULL"
-            )
-        }
-        .toMap { column<ChildId>("child_id") to row<OngoingAttendance>() }
+): Map<ChildId, OngoingAttendance> = createQuery {
+    sql(
+        "SELECT id, child_id, date, start_time FROM child_attendance WHERE child_id = ANY (${bind(children)}) AND unit_id = ${bind(unitId)} AND end_time IS NULL"
+    )
+}
+    .toMap { column<ChildId>("child_id") to row<OngoingAttendance>() }
 
 data class OngoingAttendanceWithUnit(
     val id: ChildAttendanceId,
@@ -151,13 +147,12 @@ data class OngoingAttendanceWithUnit(
 
 fun Database.Read.getOngoingAttendanceInAnyUnitForChild(
     childId: ChildId
-): OngoingAttendanceWithUnit? =
-    createQuery {
-            sql(
-                "SELECT id, date, start_time, unit_id FROM child_attendance WHERE child_id = ${bind(childId)} AND end_time IS NULL"
-            )
-        }
-        .exactlyOneOrNull()
+): OngoingAttendanceWithUnit? = createQuery {
+    sql(
+        "SELECT id, date, start_time, unit_id FROM child_attendance WHERE child_id = ${bind(childId)} AND end_time IS NULL"
+    )
+}
+    .exactlyOneOrNull()
 
 data class ChildBasics(
     val id: ChildId,
@@ -205,8 +200,8 @@ data class ChildBasicsRow(
 fun Database.Read.fetchChildrenBasics(unitId: DaycareId, now: HelsinkiDateTime): List<ChildBasics> {
     val date = now.toLocalDate()
     return createQuery {
-            sql(
-                """
+        sql(
+            """
 WITH child_group_placement AS (
     -- Placed to unit
     SELECT
@@ -307,8 +302,8 @@ LEFT JOIN child_images cimg ON pe.id = cimg.child_id
 LEFT JOIN service_need sn ON sn.placement_id = c.placement_id
     AND daterange(sn.start_date, sn.end_date, '[]') @> ${bind(date)}
 """
-            )
-        }
+        )
+    }
         .toList { row<ChildBasicsRow>().toChildBasics() }
 }
 
@@ -392,10 +387,9 @@ private fun mergeOverNightRanges(attendances: List<AttendanceTimes>): List<Atten
 fun Database.Read.getUnitChildAbsences(
     unitId: DaycareId,
     date: LocalDate,
-): Map<ChildId, List<ChildAbsence>> =
-    createQuery {
-            sql(
-                """
+): Map<ChildId, List<ChildAbsence>> = createQuery {
+    sql(
+        """
 WITH placed_children AS (
     SELECT child_id FROM placement WHERE unit_id = ${bind(unitId)} AND ${bind(date)} BETWEEN start_date AND end_date
     UNION
@@ -408,24 +402,23 @@ FROM absence a
 WHERE a.child_id = ANY (SELECT child_id FROM placed_children) AND a.date = ${bind(date)}
 GROUP BY a.child_id
 """
-            )
-        }
-        .toMap { column<ChildId>("child_id") to jsonColumn<List<ChildAbsence>>("absences") }
+    )
+}
+    .toMap { column<ChildId>("child_id") to jsonColumn<List<ChildAbsence>>("absences") }
 
 fun Database.Read.getChildPlacementTypes(
     childIds: Set<ChildId>,
     today: LocalDate,
-): Map<ChildId, PlacementType> =
-    createQuery {
-            sql(
-                """
+): Map<ChildId, PlacementType> = createQuery {
+    sql(
+        """
 SELECT child_id, type AS placement_type
 FROM placement p
 WHERE p.child_id = ANY(${bind(childIds)}) AND ${bind(today)} BETWEEN p.start_date AND p.end_date
 """
-            )
-        }
-        .toMap { columnPair("child_id", "placement_type") }
+    )
+}
+    .toMap { columnPair("child_id", "placement_type") }
 
 fun Database.Transaction.unsetAttendanceEndTime(
     attendanceId: ChildAttendanceId,
@@ -465,63 +458,60 @@ fun Database.Transaction.deleteAttendance(id: ChildAttendanceId) {
 
 fun Database.Transaction.deleteAbsencesByDate(childId: ChildId, date: LocalDate): List<AbsenceId> =
     createUpdate {
-            sql(
-                """
+        sql(
+            """
         DELETE FROM absence
         WHERE child_id = ${bind(childId)} AND date = ${bind(date)}
         RETURNING id
         """
-            )
-        }
-        .executeAndReturnGeneratedKeys()
-        .toList()
+        )
+    }
+    .executeAndReturnGeneratedKeys()
+    .toList()
 
 fun Database.Transaction.deleteAttendancesByDate(
     childId: ChildId,
     date: LocalDate,
-): List<ChildAttendanceId> =
-    createUpdate {
-            sql(
-                "DELETE FROM child_attendance WHERE child_id = ${bind(childId)} AND date = ${bind(date)} RETURNING id"
-            )
-        }
-        .executeAndReturnGeneratedKeys()
-        .toList()
+): List<ChildAttendanceId> = createUpdate {
+    sql(
+        "DELETE FROM child_attendance WHERE child_id = ${bind(childId)} AND date = ${bind(date)} RETURNING id"
+    )
+}
+    .executeAndReturnGeneratedKeys()
+    .toList()
 
 fun Database.Transaction.deleteAbsencesByFiniteDateRange(
     childId: ChildId,
     dateRange: FiniteDateRange,
-): List<AbsenceId> =
-    createUpdate {
-            sql(
-                """
+): List<AbsenceId> = createUpdate {
+    sql(
+        """
 DELETE FROM absence
 WHERE child_id = ${bind(childId)} AND between_start_and_end(${bind(dateRange)}, date)
 RETURNING id
 """
-            )
-        }
-        .executeAndReturnGeneratedKeys()
-        .toList()
+    )
+}
+    .executeAndReturnGeneratedKeys()
+    .toList()
 
 fun Database.Read.childrenHaveAttendanceInRange(
     childIds: Set<PersonId>,
     range: FiniteDateRange,
 ): Boolean {
     return createQuery {
-            sql(
-                """
+        sql(
+            """
             SELECT EXISTS(SELECT FROM child_attendance WHERE child_id = any(${bind(childIds)}) AND between_start_and_end(${bind(range)}, date))
             """
-            )
-        }
+        )
+    }
         .exactlyOne()
 }
 
-fun Database.Read.getChildAttendances(where: Predicate): List<ChildAttendanceRow> =
-    createQuery {
-            sql(
-                """
+fun Database.Read.getChildAttendances(where: Predicate): List<ChildAttendanceRow> = createQuery {
+    sql(
+        """
 SELECT
     ca.child_id,
     ca.unit_id,
@@ -536,9 +526,9 @@ FROM child_attendance ca
 JOIN evaka_user e ON ca.modified_by = e.id
 WHERE ${predicate(where.forTable("ca"))}
 """
-            )
-        }
-        .toList()
+    )
+}
+    .toList()
 
 fun Database.Read.getChildAttendancesCitizen(
     today: LocalDate,

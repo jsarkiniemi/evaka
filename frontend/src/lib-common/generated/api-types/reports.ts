@@ -116,6 +116,7 @@ export interface AssistanceNeedsAndActionsReportRowByChild {
   childFirstName: string
   childId: PersonId
   childLastName: string
+  childYearOfBirth: number
   daycareAssistanceCounts: Partial<Record<DaycareAssistanceLevel, number>>
   documentDecisionCounts: Partial<Record<string, number>>
   groupId: GroupId
@@ -176,6 +177,29 @@ export interface AttendanceReservationReportRow {
   staffCount: number
   unknownChildCapacityFactor: number
   unknownChildCount: number
+}
+
+/**
+* Generated from evaka.core.reports.ChildAbsenceReport.ChildAbsenceReportBody
+*/
+export interface ChildAbsenceReportBody {
+  areaId: AreaId | null
+  groupId: GroupId | null
+  range: FiniteDateRange
+  unitId: DaycareId | null
+}
+
+/**
+* Generated from evaka.core.reports.ChildAbsenceReportRow
+*/
+export interface ChildAbsenceReportRow {
+  absenceCountsByType: Partial<Record<AbsenceType, number>>
+  childId: PersonId
+  daycareName: string
+  firstName: string
+  groupName: string
+  lastName: string
+  placementType: PlacementType
 }
 
 /**
@@ -627,6 +651,7 @@ export interface NonSsnChildrenReportRow {
   lastSentToKoski: HelsinkiDateTime | null
   lastSentToVarda: HelsinkiDateTime | null
   ophPersonOid: string | null
+  placementStartDate: LocalDate
 }
 
 /**
@@ -906,6 +931,7 @@ export type Report =
   | 'ASSISTANCE_NEEDS_AND_ACTIONS'
   | 'ASSISTANCE_NEEDS_AND_ACTIONS_BY_CHILD'
   | 'ATTENDANCE_RESERVATION'
+  | 'CHILD_ABSENCES'
   | 'CHILD_AGE_LANGUAGE'
   | 'CHILD_DOCUMENT_DECISIONS'
   | 'CHILD_DOCUMENTS'
@@ -1255,6 +1281,14 @@ export function deserializeJsonAttendanceReservationReportRow(json: JsonOf<Atten
 }
 
 
+export function deserializeJsonChildAbsenceReportBody(json: JsonOf<ChildAbsenceReportBody>): ChildAbsenceReportBody {
+  return {
+    ...json,
+    range: FiniteDateRange.parseJson(json.range)
+  }
+}
+
+
 export function deserializeJsonChildAttendanceReportRow(json: JsonOf<ChildAttendanceReportRow>): ChildAttendanceReportRow {
   return {
     ...json,
@@ -1346,7 +1380,8 @@ export function deserializeJsonNonSsnChildrenReportRow(json: JsonOf<NonSsnChildr
     ...json,
     dateOfBirth: LocalDate.parseIso(json.dateOfBirth),
     lastSentToKoski: (json.lastSentToKoski != null) ? HelsinkiDateTime.parseIso(json.lastSentToKoski) : null,
-    lastSentToVarda: (json.lastSentToVarda != null) ? HelsinkiDateTime.parseIso(json.lastSentToVarda) : null
+    lastSentToVarda: (json.lastSentToVarda != null) ? HelsinkiDateTime.parseIso(json.lastSentToVarda) : null,
+    placementStartDate: LocalDate.parseIso(json.placementStartDate)
   }
 }
 

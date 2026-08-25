@@ -32,6 +32,7 @@ import tools.jackson.databind.annotation.JsonTypeIdResolver
 data class Message(
     val id: MessageId,
     val threadId: MessageThreadId,
+    val contentId: MessageContentId,
     @Json val sender: MessageAccount,
     @Json val recipients: Set<MessageAccount>,
     val sentAt: HelsinkiDateTime,
@@ -39,6 +40,7 @@ data class Message(
     val readAt: HelsinkiDateTime? = null,
     @Json val attachments: List<Attachment>,
     val recipientNames: Set<String>? = null,
+    val contentDeletedAt: HelsinkiDateTime? = null,
 )
 
 data class MessageThread(
@@ -122,6 +124,8 @@ sealed interface CitizenMessageThread {
 data class SentMessage(
     val contentId: MessageContentId,
     val content: String,
+    val contentDeletedAt: HelsinkiDateTime?,
+    val firstMessageContentDeletedAt: HelsinkiDateTime?,
     val sentAt: HelsinkiDateTime,
     val threadTitle: String,
     val type: MessageType,
@@ -129,6 +133,12 @@ data class SentMessage(
     val sensitive: Boolean,
     val recipientNames: List<String>,
     @Json val attachments: List<Attachment>,
+)
+
+data class DeletedMessageContent(
+    val content: String,
+    @Json val attachments: List<Attachment>,
+    val title: String?,
 )
 
 enum class MessageType : DatabaseEnum {
@@ -152,7 +162,11 @@ data class SelectableRecipientsResponse(
     val receivers: List<SelectableRecipient>,
 )
 
-@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type")
+@JsonTypeInfo(
+    use = JsonTypeInfo.Id.NAME,
+    include = JsonTypeInfo.As.EXISTING_PROPERTY,
+    property = "type",
+)
 sealed class SelectableRecipient(val type: MessageRecipientType) {
     abstract val name: String
 
@@ -235,7 +249,11 @@ data class AuthorizedMessageAccount(
     @Nested("group_") val daycareGroup: Group?,
 )
 
-@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type")
+@JsonTypeInfo(
+    use = JsonTypeInfo.Id.NAME,
+    include = JsonTypeInfo.As.EXISTING_PROPERTY,
+    property = "type",
+)
 sealed class MessageRecipient(val type: MessageRecipientType) {
     abstract fun isStarter(): Boolean
 

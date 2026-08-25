@@ -5,6 +5,7 @@
 package evaka.instance.oulu
 
 import evaka.core.ScheduledJobsEnv
+import evaka.core.bi.BiTable
 import evaka.core.shared.async.AsyncJobRunner
 import evaka.core.shared.async.AsyncJobType
 import evaka.core.shared.async.removeUnclaimedJobs
@@ -15,6 +16,7 @@ import evaka.core.shared.job.ScheduledJobDefinition
 import evaka.core.shared.job.ScheduledJobSettings
 import evaka.instance.oulu.dw.DwQuery
 import io.github.oshai.kotlinlogging.KotlinLogging
+import java.time.Duration
 import java.time.LocalTime
 
 enum class OuluScheduledJob(
@@ -24,12 +26,17 @@ enum class OuluScheduledJob(
     PlanDwExportJobs(
         { jobs, db, clock -> jobs.planDwJobs(db, clock) },
         ScheduledJobSettings(enabled = false, schedule = JobSchedule.daily(LocalTime.of(20, 0))),
-    )
+    ),
+    PlanBiExportJobs(
+        { jobs, db, clock -> jobs.planBiJobs(db, clock) },
+        ScheduledJobSettings(enabled = false, schedule = JobSchedule.daily(LocalTime.of(1, 0))),
+    ),
 }
 
 class OuluScheduledJobs(
     private val asyncJobRunner: AsyncJobRunner<OuluAsyncJob>,
     env: ScheduledJobsEnv<OuluScheduledJob>,
+    private val biTables: List<BiTable>,
 ) : JobSchedule {
     private val logger = KotlinLogging.logger {}
 
@@ -45,6 +52,20 @@ class OuluScheduledJobs(
             asyncJobRunner.plan(
                 tx,
                 DwQuery.entries.asSequence().map(OuluAsyncJob::SendDWQuery),
+                runAt = clock.now(),
+                retryCount = 5,
+                retryInterval = Duration.ofMinutes(15),
+            )
+        }
+    }
+
+    fun planBiJobs(db: Database.Connection, clock: EvakaClock) {
+        logger.info { "Planning BI jobs for ${biTables.size} tables" }
+        db.transaction { tx ->
+            tx.removeUnclaimedJobs(setOf(AsyncJobType(OuluAsyncJob.SendBiTable::class)))
+            asyncJobRunner.plan(
+                tx,
+                biTables.asSequence().map(OuluAsyncJob::SendBiTable),
                 runAt = clock.now(),
                 retryCount = 1,
             )

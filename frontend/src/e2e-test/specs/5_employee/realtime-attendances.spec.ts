@@ -198,6 +198,18 @@ test.describe('Realtime staff attendances', () => {
         attendances: [['07:00', '15:00']]
       })
     })
+
+    test('The automatic-departures banner is hidden when there are no automatic departures', async () => {
+      await Fixture.realtimeStaffAttendance({
+        employeeId: groupStaff.id,
+        groupId,
+        arrived: mockedToday.toHelsinkiDateTime(LocalTime.of(7, 0)),
+        departed: mockedToday.toHelsinkiDateTime(LocalTime.of(15, 0)),
+        departedAutomatically: false
+      }).save()
+
+      await expect(staffAttendances.automaticDeparturesBanner).toBeHidden()
+    })
   })
 
   test.describe('Group staff attendances', () => {
@@ -206,7 +218,15 @@ test.describe('Realtime staff attendances', () => {
         id: randomId<StaffAttendancePlanId>(),
         employeeId: groupStaff.id,
         startTime: mockedToday.toHelsinkiDateTime(LocalTime.of(7, 0)),
-        endTime: mockedToday.toHelsinkiDateTime(LocalTime.of(15, 0))
+        endTime: mockedToday.toHelsinkiDateTime(LocalTime.of(12, 0))
+      }).save()
+
+      await Fixture.staffAttendancePlan({
+        id: randomId<StaffAttendancePlanId>(),
+        employeeId: groupStaff.id,
+        startTime: mockedToday.toHelsinkiDateTime(LocalTime.of(14, 0)),
+        endTime: mockedToday.toHelsinkiDateTime(LocalTime.of(15, 0)),
+        description: 'Iltavuoro'
       }).save()
 
       await Fixture.realtimeStaffAttendance({
@@ -225,17 +245,21 @@ test.describe('Realtime staff attendances', () => {
         rowIx: 0,
         nth: 2,
         name: staffName(groupStaff),
-        plannedAttendances: [['07:00', '15:00']],
+        plannedAttendances: [
+          ['07:00', '12:00'],
+          ['14:00', '15:00']
+        ],
         attendances: [['07:03', '–']]
       })
 
       const modal = await staffAttendances.openDetails(0, mockedToday)
+
       await expect
         .poll(() => modal.summary())
         .toEqual({
-          plan: '07:00 – 15:00',
+          plan: '07:00 – 12:00\n14:00 – 15:00 (Iltavuoro)',
           realized: '07:03 –',
-          hours: '10:57 (+2:57)'
+          hours: '10:57 (+4:57)'
         })
     })
 
@@ -367,8 +391,15 @@ test.describe('Realtime staff attendances', () => {
         rowIx: 0,
         nth: 1,
         name: staffName(groupStaff),
-        attendances: [['07:00', '20:00*']]
+        attendances: [['07:00', '20:00']]
       })
+
+      await expect(staffAttendances.automaticDeparturesBanner).toHaveText(
+        '1 läsnäolojen automaattikatkaisua tällä viikolla.'
+      )
+      await expect(
+        staffAttendances.departedAutomaticallyIcon(0, yesterday)
+      ).toBeVisible()
 
       await staffAttendances.assertDepartureTimeTooltip(
         0,
@@ -377,6 +408,10 @@ test.describe('Realtime staff attendances', () => {
       )
 
       const modal = await staffAttendances.openDetails(0, yesterday)
+      await expect(modal.departedAutomaticallyTime(0)).toHaveText('20:00')
+      await expect(modal.departedAutomaticallyLabel(0)).toHaveText(
+        'Automaattikatkaistu'
+      )
       await modal.setDepartureTime(0, '15:00')
       await modal.save()
       await staffAttendances.assertTableRow({
@@ -389,6 +424,57 @@ test.describe('Realtime staff attendances', () => {
         0,
         yesterday,
         'Muokattu 30.03.2022 18:00, Esimies Essi'
+      )
+    })
+
+    test('The banner in group view counts only attendances of the selected group', async () => {
+      const yesterday = mockedToday.subDays(1)
+
+      const group2Staff = await Fixture.employee({
+        email: 'gerda.group2@evaka.test',
+        firstName: 'Gerda',
+        lastName: 'Group2',
+        roles: []
+      })
+        .staff(daycare.id)
+        .groupAcl(groupId2)
+        .save()
+
+      // Auto-departure in groupId — should be counted.
+      await Fixture.realtimeStaffAttendance({
+        employeeId: groupStaff.id,
+        groupId,
+        type: 'PRESENT',
+        arrived: yesterday.toHelsinkiDateTime(LocalTime.of(7, 0)),
+        departed: yesterday.toHelsinkiDateTime(LocalTime.of(20, 0)),
+        departedAutomatically: true,
+        modifiedAt: null,
+        modifiedBy: null
+      }).save()
+
+      // Auto-departure in groupId2 — should NOT be counted when groupId is selected.
+      await Fixture.realtimeStaffAttendance({
+        employeeId: group2Staff.id,
+        groupId: groupId2,
+        type: 'PRESENT',
+        arrived: yesterday.toHelsinkiDateTime(LocalTime.of(7, 0)),
+        departed: yesterday.toHelsinkiDateTime(LocalTime.of(20, 0)),
+        departedAutomatically: true,
+        modifiedAt: null,
+        modifiedBy: null
+      }).save()
+
+      calendarPage = await openCalendar()
+      await calendarPage.selectGroup(groupId)
+      const staffAttendances = calendarPage.staffAttendances
+
+      await expect(staffAttendances.automaticDeparturesBanner).toHaveText(
+        '1 läsnäolojen automaattikatkaisua tällä viikolla.'
+      )
+
+      await calendarPage.selectGroup('staff')
+      await expect(staffAttendances.automaticDeparturesBanner).toHaveText(
+        '2 läsnäolojen automaattikatkaisua tällä viikolla.'
       )
     })
   })

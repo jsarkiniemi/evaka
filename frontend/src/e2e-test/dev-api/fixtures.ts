@@ -19,7 +19,7 @@ import type {
 } from 'lib-common/generated/api-types/assistance'
 import type { AssistanceNeedVoucherCoefficient } from 'lib-common/generated/api-types/assistanceneed'
 import type { HolidayPeriod } from 'lib-common/generated/api-types/holidayperiod'
-import { HolidayQuestionnaire } from 'lib-common/generated/api-types/holidayperiod'
+import type { HolidayQuestionnaire } from 'lib-common/generated/api-types/holidayperiod'
 import type {
   DecisionIncome,
   FeeDecision,
@@ -27,19 +27,18 @@ import type {
   FeeThresholds,
   IncomeNotification
 } from 'lib-common/generated/api-types/invoicing'
-import type { PlacementType } from 'lib-common/generated/api-types/placement'
 import type { DailyReservationRequest } from 'lib-common/generated/api-types/reservations'
 import type { ServiceNeedOption } from 'lib-common/generated/api-types/serviceneed'
 import type {
   ApplicationId,
   AreaId,
   DaycareId,
+  DecisionGenericReasoningId,
+  DecisionIndividualReasoningId,
   EmployeeId,
-  EvakaUserId,
   FeeDecisionId,
   GroupId,
   PersonId,
-  PlacementId,
   VoucherValueDecisionId
 } from 'lib-common/generated/api-types/shared'
 import type { EvakaUser } from 'lib-common/generated/api-types/user'
@@ -76,6 +75,8 @@ import {
   createDaycareGroups,
   createDaycarePlacements,
   createDaycares,
+  createDecisionReasoningGeneric,
+  createDecisionReasoningIndividual,
   createDecisions,
   createDocumentTemplate,
   createEmployee,
@@ -104,7 +105,6 @@ import {
   postReservations,
   postReservationsRaw,
   upsertStaffOccupancyCoefficient,
-  upsertVtjDataset,
   upsertWeakCredentials
 } from '../generated/api-clients'
 import type {
@@ -130,6 +130,8 @@ import type {
   DevDaycare,
   DevDaycareGroup,
   DevDaycareGroupPlacement,
+  DevDecisionReasoningGeneric,
+  DevDecisionReasoningIndividual,
   DevDocumentTemplate,
   DevEmployee,
   DevEmployeePin,
@@ -151,13 +153,12 @@ import type {
   NekkuCustomer,
   NekkuSpecialDiet,
   PlacementPlan,
-  PlacementSource,
   ReservationInsert,
   VoucherValueDecision
 } from '../generated/api-types'
-import { upsertDummyIdpUser } from '../utils/dummy-idp'
+import { upsertDummyIdpVtjDataset } from '../utils/dummy-idp'
 
-import FixedPeriodQuestionnaire = HolidayQuestionnaire.FixedPeriodQuestionnaire
+type FixedPeriodQuestionnaire = HolidayQuestionnaire.FixedPeriodQuestionnaire
 
 const uniqueLabel = (l = 7): string =>
   Math.random().toString(36).substring(0, l)
@@ -169,6 +170,28 @@ export const uuidv4 = (): string =>
     return v.toString(16)
   })
 
+const ssnChecksumChars = '0123456789ABCDEFHJKLMNPRSTUVWXY'
+let ssnIndividualCounter = 0
+
+// Valid Finnish SSN for the given date of birth with a unique individual
+// number from the 900-999 range reserved for artificial/test identities, so
+// fixture persons don't collide on the unique ssn index.
+export const uniqueSsn = (dateOfBirth: LocalDate): string => {
+  const dd = String(dateOfBirth.date).padStart(2, '0')
+  const mm = String(dateOfBirth.month).padStart(2, '0')
+  const yy = String(dateOfBirth.year % 100).padStart(2, '0')
+  // century marker: + for 1800s, - for 1900s, A for 2000s
+  const century =
+    dateOfBirth.year >= 2000 ? 'A' : dateOfBirth.year >= 1900 ? '-' : '+'
+  const individual = String(900 + (ssnIndividualCounter++ % 100)).padStart(
+    3,
+    '0'
+  )
+  const checksum =
+    ssnChecksumChars[parseInt(`${dd}${mm}${yy}${individual}`, 10) % 31]
+  return `${dd}${mm}${yy}${century}${individual}${checksum}`
+}
+
 type SemiPartial<T, K extends keyof T> = Partial<T> & Pick<T, K>
 
 export class Fixture {
@@ -178,15 +201,9 @@ export class Fixture {
       id: randomId(),
       name: `daycare_${id}`,
       type: ['CENTRE'],
-      dailyPreschoolTime: new TimeRange(
-        LocalTime.of(9, 0),
-        LocalTime.of(13, 0)
-      ),
-      dailyPreparatoryTime: new TimeRange(
-        LocalTime.of(9, 0),
-        LocalTime.of(14, 0)
-      ),
-      costCenter: `costCenter_${id}`,
+      dailyPreschoolTime: null,
+      dailyPreparatoryTime: null,
+      costCenter: null,
       visitingAddress: {
         streetAddress: `streetAddress_${id}`,
         postalCode: '02230',
@@ -236,17 +253,18 @@ export class Fixture {
         name: 'Unit Manager',
         phone: ''
       },
+      preschoolManagerName: '',
       financeDecisionHandler: null,
       clubApplyPeriod: null,
-      daycareApplyPeriod: new DateRange(LocalDate.of(2020, 3, 1), null),
-      preschoolApplyPeriod: new DateRange(LocalDate.of(2020, 3, 1), null),
+      daycareApplyPeriod: null,
+      preschoolApplyPeriod: null,
       email: null,
       phone: null,
       url: null,
-      ophUnitOid: '1.2.3.4.5',
-      ophOrganizerOid: '1.2.3.4.5',
+      ophUnitOid: null,
+      ophOrganizerOid: null,
       additionalInfo: null,
-      dwCostCenter: 'dw-test',
+      dwCostCenter: null,
       mealtimeBreakfast: null,
       mealtimeLunch: null,
       mealtimeSnack: null,
@@ -294,8 +312,8 @@ export class Fixture {
       id: randomId(),
       name: `Care Area ${id}`,
       shortName: `careArea_${id}`,
-      areaCode: 2230,
-      subCostCenter: `subCostCenter_${id}`,
+      areaCode: null,
+      subCostCenter: null,
       ...initial
     }
     return {
@@ -349,17 +367,18 @@ export class Fixture {
 
   static person(initial?: Partial<DevPerson>) {
     const id = uniqueLabel()
+    const dateOfBirth = initial?.dateOfBirth ?? LocalDate.of(2020, 5, 5)
     const value: DevPerson = {
       id: randomId(),
-      dateOfBirth: LocalDate.of(2020, 5, 5),
+      dateOfBirth,
       dateOfDeath: null,
-      ssn: '050520A999M',
-      email: `email_${id}@evaka.test`,
+      ssn: uniqueSsn(dateOfBirth),
+      email: null,
       verifiedEmail: null,
       firstName: `firstName_${id}`,
       preferredName: '',
       lastName: `lastName_${id}`,
-      language: `fi`,
+      language: null,
       nationalities: [],
       phone: '123456789',
       backupPhone: '',
@@ -391,42 +410,36 @@ export class Fixture {
       if (dependantSsns.length !== dependants.length) {
         throw new Error('All dependants must have SSNs')
       }
-      await upsertVtjDataset({
-        body: {
-          persons: [
-            {
-              firstNames: person.firstName,
-              lastName: person.lastName,
-              socialSecurityNumber: person.ssn || '',
-              address: {
-                streetAddress: person.streetAddress || '',
-                postalCode: person.postalCode || '',
-                postOffice: person.postOffice || '',
-                streetAddressSe: person.streetAddress || '',
-                postOfficeSe: person.postalCode || ''
-              },
-              dateOfDeath: person.dateOfDeath ?? null,
-              nationalities: [],
-              nativeLanguage: null,
-              residenceCode:
-                person.residenceCode ??
-                `${person.streetAddress ?? ''}${person.postalCode ?? ''}${
-                  person.postOffice ?? ''
-                }`.replace(' ', ''),
-              municipalityOfResidence: person.municipalityOfResidence,
-              restrictedDetails: {
-                enabled: person.restrictedDetailsEnabled || false,
-                endDate: person.restrictedDetailsEndDate || null
-              }
+      await upsertDummyIdpVtjDataset({
+        persons: [
+          {
+            firstNames: person.firstName,
+            lastName: person.lastName,
+            socialSecurityNumber: person.ssn || '',
+            address: {
+              streetAddress: person.streetAddress || '',
+              postalCode: person.postalCode || '',
+              postOffice: person.postOffice || '',
+              streetAddressSe: person.streetAddress || '',
+              postOfficeSe: person.postalCode || ''
+            },
+            dateOfDeath: person.dateOfDeath?.formatIso() ?? null,
+            nationalities: [],
+            nativeLanguage: null,
+            residenceCode:
+              person.residenceCode ??
+              `${person.streetAddress ?? ''}${person.postalCode ?? ''}${
+                person.postOffice ?? ''
+              }`.replace(' ', ''),
+            municipalityOfResidence: person.municipalityOfResidence ?? null,
+            restrictedDetails: {
+              enabled: person.restrictedDetailsEnabled || false,
+              endDate: person.restrictedDetailsEndDate?.formatIso() ?? null
             }
-          ],
-          guardianDependants:
-            dependantSsns.length > 0
-              ? {
-                  [person.ssn || '']: dependantSsns
-                }
-              : {}
-        }
+          }
+        ],
+        guardianDependants:
+          dependantSsns.length > 0 ? { [person.ssn || '']: dependantSsns } : {}
       })
       return value
     }
@@ -442,15 +455,6 @@ export class Fixture {
         await createPerson({ body: value, type: 'ADULT' })
         if (opts.updateMockVtjWithDependants !== undefined) {
           await updateMockVtj(opts.updateMockVtjWithDependants)
-          if (value.ssn) {
-            await upsertDummyIdpUser({
-              ssn: value.ssn,
-              commonName: `${value.firstName} ${value.lastName}`,
-              givenName: value.firstName,
-              surname: value.lastName,
-              comment: `${opts.updateMockVtjWithDependants.length} huollettavaa`
-            })
-          }
         }
         if (opts.updateWeakCredentials) {
           await upsertWeakCredentials({
@@ -505,7 +509,7 @@ export class Fixture {
     const id = uniqueLabel()
     const value: DevEmployee = {
       id: randomId(),
-      email: `email_${id}@evaka.test`,
+      email: null,
       externalId: `espoo-ad:${randomId()}`,
       firstName: `first_name_${id}`,
       lastName: `last_name_${id}`,
@@ -513,7 +517,7 @@ export class Fixture {
       active: true,
       employeeNumber: null,
       created: HelsinkiDateTime.now(),
-      lastLogin: HelsinkiDateTime.now(),
+      lastLogin: null,
       preferredFirstName: null,
       ssn: null,
       ...initial
@@ -636,6 +640,8 @@ export class Fixture {
       startDate: LocalDate.of(2020, 1, 1),
       endDate: LocalDate.of(2021, 1, 1),
       status: 'PENDING',
+      genericReasoningId: null,
+      individualReasoningIds: [],
       ...initial
     }
     return {
@@ -697,7 +703,7 @@ export class Fixture {
       terminationRequestedDate: null,
       createdAt: HelsinkiDateTime.now(),
       createdBy: systemInternalUser.id,
-      source: 'MANUAL',
+      source: null,
       sourceApplicationId: null,
       sourceServiceApplicationId: null,
       modifiedAt: HelsinkiDateTime.now(),
@@ -801,7 +807,7 @@ export class Fixture {
       realizedOccupancyCoefficient: 0,
       realizedOccupancyCoefficientUnder3y: 0,
       partDay: false,
-      partWeek: false,
+      partWeek: null,
       updated: HelsinkiDateTime.now(),
       validPlacementType: 'DAYCARE',
       voucherValueDescriptionFi: `Test service need option ${id}`,
@@ -953,7 +959,7 @@ export class Fixture {
     const value: DevChildAttendance = {
       date: LocalDate.todayInHelsinkiTz(),
       arrived: LocalTime.nowInHelsinkiTz(),
-      departed: LocalTime.nowInHelsinkiTz(),
+      departed: null,
       modifiedAt: HelsinkiDateTime.now(),
       modifiedBy: systemInternalUser.id,
       ...initial
@@ -1009,7 +1015,7 @@ export class Fixture {
     const value: DevIncome = {
       id: randomId(),
       validFrom: LocalDate.todayInSystemTz(),
-      validTo: LocalDate.todayInSystemTz().addYears(1),
+      validTo: null,
       data: {
         MAIN_INCOME: {
           multiplier: 1,
@@ -1229,6 +1235,7 @@ export class Fixture {
   ) {
     const value: DevDailyServiceTimeNotification = {
       id: randomId(),
+      createdAt: HelsinkiDateTime.now(),
       ...initial
     }
     return {
@@ -1448,6 +1455,8 @@ export class Fixture {
       archiveDurationMonths: null,
       archiveExternally: false,
       endDecisionWhenUnitChanges: null,
+      deletionRetentionDays: 3650,
+      deletionRetentionBasis: 'PLACEMENT_END',
       content: {
         sections: [
           {
@@ -1506,7 +1515,7 @@ export class Fixture {
   static assistanceActionOption(initial?: Partial<DevAssistanceActionOption>) {
     const value: DevAssistanceActionOption = {
       id: randomId(),
-      descriptionFi: 'a description',
+      descriptionFi: null,
       nameFi: 'a test assistance action option',
       value: 'TEST_ASSISTANCE_ACTION_OPTION',
       category: 'DAYCARE',
@@ -1534,6 +1543,7 @@ export class Fixture {
       status: 'DRAFT',
       modifiedAt: HelsinkiDateTime.now(),
       modifiedBy: systemInternalUser.id,
+      statusModifiedAt: HelsinkiDateTime.now(),
       contentLockedAt: HelsinkiDateTime.now(),
       contentLockedBy: null,
       content: {
@@ -1702,7 +1712,7 @@ export class Fixture {
     const value: NekkuSpecialDiet[] = initial
 
     return {
-      ...value,
+      diets: value,
       async save() {
         await createNekkuSpecialDiets({ body: value })
         return value
@@ -1717,6 +1727,83 @@ export class Fixture {
       ...value,
       async save() {
         await createNekkuCustomer({ body: value })
+        return value
+      }
+    }
+  }
+
+  static decisionReasoningGeneric(
+    initial: SemiPartial<
+      DevDecisionReasoningGeneric,
+      'collectionType' | 'validFrom' | 'textFi' | 'textSv'
+    >
+  ) {
+    const value: DevDecisionReasoningGeneric = {
+      id: randomId(),
+      ready: true,
+      createdAt: HelsinkiDateTime.now(),
+      modifiedAt: HelsinkiDateTime.now(),
+      ...initial
+    }
+    return {
+      ...value,
+      async save() {
+        await createDecisionReasoningGeneric({ body: [value] })
+        return value
+      }
+    }
+  }
+
+  static decisionReasoningGenericDefaults() {
+    const valueDaycare: DevDecisionReasoningGeneric = {
+      id: randomId(),
+      ready: true,
+      createdAt: HelsinkiDateTime.now(),
+      modifiedAt: HelsinkiDateTime.now(),
+      collectionType: 'DAYCARE',
+      validFrom: LocalDate.of(2000, 1, 1),
+      textFi: 'Varhaiskasvatuksen perustelu',
+      textSv: 'Småbarnspedagogikmotivering'
+    }
+    const valuePreschool: DevDecisionReasoningGeneric = {
+      id: randomId(),
+      ready: true,
+      createdAt: HelsinkiDateTime.now(),
+      modifiedAt: HelsinkiDateTime.now(),
+      collectionType: 'PRESCHOOL',
+      validFrom: LocalDate.of(2000, 1, 1),
+      textFi: 'Esiopetuksen perustelu',
+      textSv: 'Förskolemotivering'
+    }
+    return {
+      daycare: valueDaycare,
+      preschool: valuePreschool,
+      async save() {
+        await createDecisionReasoningGeneric({
+          body: [valueDaycare, valuePreschool]
+        })
+        return [valueDaycare, valuePreschool]
+      }
+    }
+  }
+
+  static decisionReasoningIndividual(
+    initial: SemiPartial<
+      DevDecisionReasoningIndividual,
+      'collectionType' | 'titleFi' | 'titleSv' | 'textFi' | 'textSv'
+    >
+  ) {
+    const value: DevDecisionReasoningIndividual = {
+      id: randomId(),
+      removedAt: null,
+      createdAt: HelsinkiDateTime.now(),
+      modifiedAt: HelsinkiDateTime.now(),
+      ...initial
+    }
+    return {
+      ...value,
+      async save() {
+        await createDecisionReasoningIndividual({ body: [value] })
         return value
       }
     }
@@ -1966,10 +2053,7 @@ export const testClub = Fixture.daycare({
   email: null,
   phone: null,
   url: null,
-  ophUnitOid: '1.2.3.4.5',
-  ophOrganizerOid: '1.2.3.4.5',
   additionalInfo: null,
-  dwCostCenter: 'dw-test',
   mealtimeBreakfast: null,
   mealtimeLunch: null,
   mealtimeSnack: null,
@@ -2063,10 +2147,7 @@ export const testDaycare = Fixture.daycare({
   email: null,
   phone: null,
   url: null,
-  ophUnitOid: '1.2.3.4.5',
-  ophOrganizerOid: '1.2.3.4.5',
   additionalInfo: null,
-  dwCostCenter: 'dw-test',
   mealtimeBreakfast: null,
   mealtimeLunch: null,
   mealtimeSnack: null,
@@ -2150,10 +2231,7 @@ export const testDaycare2 = Fixture.daycare({
   email: null,
   phone: null,
   url: null,
-  ophUnitOid: '1.2.3.4.5',
-  ophOrganizerOid: '1.2.3.4.5',
   additionalInfo: null,
-  dwCostCenter: 'dw-test',
   mealtimeBreakfast: null,
   mealtimeLunch: null,
   mealtimeSnack: null,
@@ -2237,10 +2315,7 @@ export const testDaycarePrivateVoucher = Fixture.daycare({
   email: null,
   phone: null,
   url: null,
-  ophUnitOid: '1.2.3.4.5',
-  ophOrganizerOid: '1.2.3.4.5',
   additionalInfo: null,
-  dwCostCenter: 'dw-test',
   mealtimeBreakfast: null,
   mealtimeLunch: null,
   mealtimeSnack: null,
@@ -2322,10 +2397,7 @@ export const testPreschool = Fixture.daycare({
   email: null,
   phone: null,
   url: null,
-  ophUnitOid: '1.2.3.4.5',
-  ophOrganizerOid: '1.2.3.4.5',
   additionalInfo: null,
-  dwCostCenter: 'dw-test',
   mealtimeBreakfast: null,
   mealtimeLunch: null,
   mealtimeSnack: null,
@@ -2765,7 +2837,7 @@ export const applicationFixtureId = fromUuid<ApplicationId>(
 export const applicationFixture = (
   child: DevPerson,
   guardian: DevPerson,
-  otherGuardian: DevPerson | undefined = undefined,
+  otherGuardian?: DevPerson,
   type: 'DAYCARE' | 'PRESCHOOL' | 'CLUB' = 'DAYCARE',
   otherGuardianAgreementStatus: OtherGuardianAgreementStatus | null = null,
   preferredUnits: DaycareId[] = [testDaycare.id],
@@ -2822,7 +2894,11 @@ export const decisionFixture = (
   employeeId: EmployeeId,
   applicationId: ApplicationId,
   startDate: LocalDate,
-  endDate: LocalDate
+  endDate: LocalDate,
+  reasoning?: {
+    genericReasoningId?: DecisionGenericReasoningId
+    individualReasoningIds?: DecisionIndividualReasoningId[]
+  }
 ): DecisionRequest => ({
   id: fromUuid('9dd0e1ba-9b3b-11ea-bb37-0242ac130987'),
   employeeId,
@@ -2831,7 +2907,9 @@ export const decisionFixture = (
   type: 'DAYCARE',
   startDate: startDate,
   endDate: endDate,
-  status: 'PENDING'
+  status: 'PENDING',
+  genericReasoningId: reasoning?.genericReasoningId ?? null,
+  individualReasoningIds: reasoning?.individualReasoningIds ?? []
 })
 
 export const feeDecisionsFixture = (
@@ -2965,41 +3043,6 @@ export const testDaycareGroup = Fixture.daycareGroup({
   aromiCustomerId: null,
   nekkuCustomerNumber: null
 })
-
-/**
- *  @deprecated Use `Fixture.placement()` instead
- **/
-export function createDaycarePlacementFixture(
-  id: PlacementId,
-  childId: PersonId,
-  unitId: DaycareId,
-  startDate = LocalDate.of(2022, 5, 1),
-  endDate = LocalDate.of(2023, 8, 31),
-  type: PlacementType = 'DAYCARE',
-  placeGuarantee = false,
-  createdAt = HelsinkiDateTime.now(),
-  createdBy = systemInternalUser.id,
-  source: PlacementSource = 'MANUAL',
-  modifiedAt: HelsinkiDateTime | null = HelsinkiDateTime.now(),
-  modifiedBy: EvakaUserId | null = systemInternalUser.id
-): DevPlacement {
-  return Fixture.placement({
-    id,
-    type,
-    childId,
-    unitId,
-    startDate,
-    endDate,
-    placeGuarantee,
-    createdAt,
-    createdBy,
-    source,
-    modifiedAt,
-    modifiedBy,
-    terminationRequestedDate: null,
-    terminatedBy: null
-  })
-}
 
 export const DecisionIncomeFixture = (total: number): DecisionIncome => ({
   id: null,

@@ -55,6 +55,7 @@ JOIN daycare d ON d.id = dg.daycare_id
 JOIN mobile_device_push_group mdpg ON mdpg.daycare_group = dg.id
 JOIN mobile_device md ON mdpg.device = md.id
 WHERE mr.read_at IS NULL
+AND m.content_deleted_at IS NULL
 AND ma.type = 'GROUP'
 AND mt.is_copy IS FALSE
 AND 'PUSH_NOTIFICATIONS' = ANY(d.enabled_pilot_features)
@@ -105,31 +106,29 @@ WHERE notification.message = ANY(${bind(messages)})
     private fun Database.Read.getNotification(
         messageRecipient: MessageRecipientId,
         device: MobileDeviceId,
-    ): GroupMessageNotification? =
-        createQuery {
-                sql(
-                    """
+    ): GroupMessageNotification? = createQuery {
+        sql(
+            """
 SELECT group_id, group_name, sender_name, mdps.endpoint, mdps.auth_secret, mdps.ecdh_key
 FROM (${subquery(getPendingPushNotifications())}) notification
 JOIN mobile_device_push_subscription mdps ON mdps.device = notification.device
 WHERE notification.recipient = ${bind(messageRecipient)}
 AND notification.device = ${bind(device)}
 """
-                )
-            }
-            .exactlyOneOrNull {
-                GroupMessageNotification(
-                    groupId = column("group_id"),
-                    groupName = column("group_name"),
-                    senderName = column("sender_name"),
-                    WebPushEndpoint(
-                        uri = column("endpoint"),
-                        ecdhPublicKey =
-                            WebPushCrypto.decodePublicKey(column<ByteArray>("ecdh_key")),
-                        authSecret = column("auth_secret"),
-                    ),
-                )
-            }
+        )
+    }
+        .exactlyOneOrNull {
+            GroupMessageNotification(
+                groupId = column("group_id"),
+                groupName = column("group_name"),
+                senderName = column("sender_name"),
+                WebPushEndpoint(
+                    uri = column("endpoint"),
+                    ecdhPublicKey = WebPushCrypto.decodePublicKey(column<ByteArray>("ecdh_key")),
+                    authSecret = column("auth_secret"),
+                ),
+            )
+        }
 
     fun send(
         dbc: Database.Connection,

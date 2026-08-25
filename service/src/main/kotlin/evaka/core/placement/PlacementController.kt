@@ -64,6 +64,15 @@ class PlacementController(
                         childId,
                     )
 
+                    val canReadServiceNeeds =
+                        accessControl.hasPermissionFor(
+                            tx,
+                            user,
+                            clock,
+                            Action.Child.READ_SERVICE_NEEDS,
+                            childId,
+                        )
+
                     val authorizedDaycares =
                         tx.getDaycares(
                                 clock,
@@ -90,12 +99,17 @@ class PlacementController(
                         .toSet()
                         .let { placements ->
                             val placementIds = placements.map { placement -> placement.id }
-                            val serviceNeedIds =
-                                placements.flatMap { placement ->
-                                    placement.serviceNeeds.map { serviceNeed -> serviceNeed.id }
+                            val serviceNeedIds = placements.flatMap { placement ->
+                                placement.serviceNeedDetail?.serviceNeeds.orEmpty().map {
+                                    serviceNeed ->
+                                    serviceNeed.id
                                 }
+                            }
+                            val responsePlacements =
+                                if (canReadServiceNeeds) placements
+                                else placements.map { it.copy(serviceNeedDetail = null) }.toSet()
                             PlacementResponse(
-                                placements = placements,
+                                placements = responsePlacements,
                                 permittedPlacementActions =
                                     accessControl.getPermittedActions(
                                         tx,
@@ -133,56 +147,53 @@ class PlacementController(
             throw BadRequest("Placement start date cannot be after the end date")
         val now = clock.now()
 
-        val placements =
-            db.connect { dbc ->
-                dbc.transaction { tx ->
-                    accessControl.requirePermissionFor(
-                        tx,
-                        user,
-                        clock,
-                        Action.Unit.CREATE_PLACEMENT,
-                        body.unitId,
+        val placements = db.connect { dbc ->
+            dbc.transaction { tx ->
+                accessControl.requirePermissionFor(
+                    tx,
+                    user,
+                    clock,
+                    Action.Unit.CREATE_PLACEMENT,
+                    body.unitId,
+                )
+                if (tx.getChild(body.childId) == null) {
+                    tx.createChild(
+                        Child(id = body.childId, additionalInformation = AdditionalInformation()),
+                        clock.now(),
                     )
-                    if (tx.getChild(body.childId) == null) {
-                        tx.createChild(
-                            Child(
-                                id = body.childId,
-                                additionalInformation = AdditionalInformation(),
-                            )
+                }
+
+                createPlacement(
+                        tx,
+                        childId = body.childId,
+                        unitId = body.unitId,
+                        period = FiniteDateRange(body.startDate, body.endDate),
+                        type = body.type,
+                        useFiveYearsOldDaycare = useFiveYearsOldDaycare,
+                        placeGuarantee = body.placeGuarantee,
+                        now = now,
+                        userId = user.evakaUserId,
+                        source = PlacementSource.MANUAL,
+                    )
+                    .also {
+                        tx.deleteFutureReservationsAndAbsencesOutsideValidPlacements(
+                            body.childId,
+                            now.toLocalDate(),
+                        )
+                        generateAbsencesFromIrregularDailyServiceTimes(tx, now, body.childId)
+                        asyncJobRunner.plan(
+                            tx,
+                            listOf(
+                                AsyncJob.GenerateFinanceDecisions.forChild(
+                                    body.childId,
+                                    DateRange(body.startDate, body.endDate),
+                                )
+                            ),
+                            runAt = now,
                         )
                     }
-
-                    createPlacement(
-                            tx,
-                            childId = body.childId,
-                            unitId = body.unitId,
-                            period = FiniteDateRange(body.startDate, body.endDate),
-                            type = body.type,
-                            useFiveYearsOldDaycare = useFiveYearsOldDaycare,
-                            placeGuarantee = body.placeGuarantee,
-                            now = now,
-                            userId = user.evakaUserId,
-                            source = PlacementSource.MANUAL,
-                        )
-                        .also {
-                            tx.deleteFutureReservationsAndAbsencesOutsideValidPlacements(
-                                body.childId,
-                                now.toLocalDate(),
-                            )
-                            generateAbsencesFromIrregularDailyServiceTimes(tx, now, body.childId)
-                            asyncJobRunner.plan(
-                                tx,
-                                listOf(
-                                    AsyncJob.GenerateFinanceDecisions.forChild(
-                                        body.childId,
-                                        DateRange(body.startDate, body.endDate),
-                                    )
-                                ),
-                                runAt = now,
-                            )
-                        }
-                }
             }
+        }
         Audit.PlacementCreate.log(
             targetId = AuditId(listOf(body.childId, body.unitId)),
             objectId = AuditId(placements.map { it.id }),

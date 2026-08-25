@@ -4,6 +4,7 @@
 
 import type { ApplicationFormData } from 'lib-common/api-types/application/ApplicationFormData'
 import type { ServiceNeedOption } from 'lib-common/generated/api-types/application'
+import type { Language } from 'lib-common/generated/api-types/daycare'
 import type { PlacementType } from 'lib-common/generated/api-types/placement'
 import type { ApplicationId } from 'lib-common/generated/api-types/shared'
 import { fromUuid } from 'lib-common/id-type'
@@ -14,7 +15,14 @@ import { expect } from '../../playwright'
 import type { FormInput, Section } from '../../utils/application-forms'
 import { sections } from '../../utils/application-forms'
 import type { Page, Element } from '../../utils/page'
-import { Checkbox, Radio, TextInput, FileUpload } from '../../utils/page'
+import {
+  Checkbox,
+  MultiSelect,
+  Radio,
+  SelectionChip,
+  TextInput,
+  FileUpload
+} from '../../utils/page'
 
 export default class CitizenApplicationsPage {
   #createNewApplicationButton: Element
@@ -142,6 +150,12 @@ export default class CitizenApplicationsPage {
   async viewApplicationMetadata(id: string) {
     await this.#applicationToggleMetadataButton(id).click()
     await expect(this.page.findByDataQa('process-number-field')).toBeVisible()
+    await expect(
+      this.page.findAllByDataQa('metadata-document-name').first()
+    ).toHaveText('Varhaiskasvatus- ja palvelusetelihakemus')
+    await expect(this.page.findByDataQa('metadata-process-name')).toHaveText(
+      'Varhaiskasvatushakemus / palvelusetelihakemus varhaiskasvatukseen'
+    )
   }
 }
 
@@ -150,6 +164,7 @@ class CitizenApplicationReadView {
   urgencyAttachments: Element
   shiftCareAttachments: Element
   unitPreferenceSection: Element
+  otherGuardianAgreementSection: Element
   assistanceNeedDescription: TextInput
 
   constructor(readonly page: Page) {
@@ -161,6 +176,9 @@ class CitizenApplicationReadView {
       'service-need-shift-care-attachments'
     )
     this.unitPreferenceSection = page.findByDataQa('unit-preference-section')
+    this.otherGuardianAgreementSection = page.findByDataQa(
+      'other-guardian-agreement-section'
+    )
     this.assistanceNeedDescription = new TextInput(
       page.findByDataQa('assistance-need-description')
     )
@@ -178,6 +196,7 @@ class CitizenApplicationEditor {
   #preferredStartDateWarning: Element
   #preferredStartDateInfo: Element
   #preferredUnitsInput: TextInput
+  #preferredUnitsSelect: MultiSelect
   #partTimeLimitError: Element
   saveAsDraftButton: Element
   modalOkBtn: Element
@@ -205,6 +224,9 @@ class CitizenApplicationEditor {
     )
     this.#preferredUnitsInput = new TextInput(
       page.find('[data-qa="preferredUnits-input"] input')
+    )
+    this.#preferredUnitsSelect = new MultiSelect(
+      page.findByDataQa('preferredUnits-input')
     )
     this.#partTimeLimitError = page.findByDataQa('part-time-limit-error')
     this.saveAsDraftButton = page.findByDataQa('save-as-draft-btn')
@@ -335,10 +357,10 @@ class CitizenApplicationEditor {
               await this.selectUnit(unit.name)
             }
           } else if (field === 'partTime') {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+            // oxlint-disable-next-line typescript/no-unsafe-argument
             await this.selectBooleanRadio(field, value)
           } else if (field === 'siblingBasis') {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+            // oxlint-disable-next-line typescript/no-unsafe-argument
             await this.setCheckbox(field, value)
             await new Checkbox(this.page.findByDataQa('other-sibling')).click()
           } else if (field === 'otherGuardianAgreementStatus' && value) {
@@ -407,6 +429,52 @@ class CitizenApplicationEditor {
         `[data-qa*="${this.serviceNeedOptionDataQaPrefix(placementType)}"]`
       )
     ).toHaveText(options.map((option) => option.nameFi))
+  }
+
+  unitLanguageFilterChip(language: Language) {
+    return new SelectionChip(
+      this.page.findByDataQa(`unit-language-filter-${language}`)
+    )
+  }
+
+  #languageFilterGroup = () => this.page.findByDataQa('unit-language-filter')
+
+  async assertLanguageFilterVisible(visible: boolean) {
+    if (visible) {
+      await expect(this.#languageFilterGroup()).toBeVisible()
+    } else {
+      await expect(this.#languageFilterGroup()).toBeHidden()
+    }
+  }
+
+  async setUnitLanguageFilter(language: Language, selected: boolean) {
+    const chip = this.unitLanguageFilterChip(language)
+    if (selected) {
+      await chip.check()
+    } else {
+      await chip.uncheck()
+    }
+  }
+
+  async assertPreferredUnitOptions(unitNames: string[]) {
+    await this.#preferredUnitsSelect.click()
+    await this.#preferredUnitsSelect.assertOptionsContain(unitNames)
+    await this.#preferredUnitsSelect.close()
+  }
+
+  async assertHiddenFromPreferredUnits(unitNames: string[]) {
+    await this.#preferredUnitsSelect.click()
+    const options = this.#preferredUnitsSelect.findAllByDataQa('option')
+    for (const name of unitNames) {
+      await expect(options.locator.filter({ hasText: name })).toHaveCount(0)
+    }
+    await this.#preferredUnitsSelect.close()
+  }
+
+  async assertNoPreferredUnitOptions() {
+    await this.#preferredUnitsSelect.click()
+    await this.#preferredUnitsSelect.assertNoOptions()
+    await this.#preferredUnitsSelect.close()
   }
 
   async assertSelectedPreferredUnits(unitIds: UUID[]) {

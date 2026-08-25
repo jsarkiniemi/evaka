@@ -22,6 +22,7 @@ import ChildDocumentEditView from './components/child-documents/ChildDocumentEdi
 import ChildDocumentReadView from './components/child-documents/ChildDocumentReadView'
 import ChildInformation from './components/child-information/ChildInformation'
 import DecisionPage from './components/decision-draft/DecisionDraft'
+import DecisionReasoningsPage from './components/decision-reasonings/DecisionReasoningsPage'
 import DocumentTemplatesPage from './components/document-templates/template-editor/DocumentTemplatesPage'
 import TemplateEditorPage from './components/document-templates/template-editor/TemplateEditorPage'
 import EmployeePinCodePage from './components/employee-pin-code/EmployeePinCodePage'
@@ -52,6 +53,7 @@ import ReportApplications from './components/reports/Applications'
 import ReportAssistanceNeedsAndActions from './components/reports/AssistanceNeedsAndActions'
 import AttendanceReservation from './components/reports/AttendanceReservation'
 import AttendanceReservationByChild from './components/reports/AttendanceReservationByChild'
+import ChildAbsenceReport from './components/reports/ChildAbsenceReport'
 import ReportChildAgeLanguage from './components/reports/ChildAgeLanguage'
 import ChildAttendanceReport from './components/reports/ChildAttendanceReport'
 import ReportChildDocumentDecisions from './components/reports/ChildDocumentDecisionsReport'
@@ -97,12 +99,12 @@ import VoucherServiceProviders from './components/reports/VoucherServiceProvider
 import SettingsPage from './components/settings/SettingsPage'
 import SystemNotificationsPage from './components/system-notifications/SystemNotificationsPage'
 import TimelinePage from './components/timeline/TimelinePage'
+import UnitFeaturesPage from './components/unit-features/UnitFeaturesPage'
 import GroupCaretakers from './components/unit/group-caretakers/GroupCaretakers'
 import DiscussionReservationSurveyWrapper from './components/unit/tab-calendar/discussion-surveys/DiscussionSurveyWrapper'
 import DiscussionReservationSurveysPage from './components/unit/tab-calendar/discussion-surveys/DiscussionSurveysPage'
 import CreateUnitPage from './components/unit/unit-details/CreateUnitPage'
 import UnitDetailsPage from './components/unit/unit-details/UnitDetailsPage'
-import UnitFeaturesPage from './components/unit-features/UnitFeaturesPage'
 import VoucherValueDecisionPage from './components/voucher-value-decision/VoucherValueDecisionPage'
 import VoucherValueDecisionsPage from './components/voucher-value-decisions/VoucherValueDecisionsPage'
 
@@ -335,6 +337,11 @@ const routes: EmployeeRoute[] = [
     title: 'reports'
   },
   {
+    path: '/reports/child-absence',
+    component: ChildAbsenceReport,
+    title: 'reports'
+  },
+  {
     path: '/reports/preschool-absence',
     component: PreschoolAbsenceReport,
     title: 'reports'
@@ -416,6 +423,11 @@ const routes: EmployeeRoute[] = [
   { path: '/employees', component: EmployeesPage, title: 'employees' },
   { path: '/employees/:id', component: EmployeePage, title: 'employees' },
   { path: '/welcome', component: WelcomePage, title: 'welcomePage' },
+  {
+    path: '/decision-reasonings',
+    component: DecisionReasoningsPage,
+    title: 'decisionReasonings'
+  },
   {
     path: '/document-templates',
     component: DocumentTemplatesPage,

@@ -176,8 +176,9 @@ class TitaniaServiceTest : AbstractVesilahtiIntegrationTest() {
                 TitaniaPeriod.from(date),
                 TitaniaStampedPersonRequest(employeeId = "1234"),
             )
-        val response =
-            db.transaction { tx -> titaniaService.getStampedWorkingTimeEvents(tx, request) }
+        val response = db.transaction { tx ->
+            titaniaService.getStampedWorkingTimeEvents(tx, request)
+        }
         assertThat(response)
             .isEqualTo(
                 newGetResponse(
@@ -227,5 +228,7 @@ private fun newGetResponse(vararg person: TitaniaStampedPersonResponse) =
         schedulingUnit = listOf(TitaniaStampedUnitResponse(code = "x", person = person.toList()))
     )
 
-private fun Database.Read.getDevEmployees(): List<DevEmployee> =
-    createQuery { sql("SELECT * FROM employee") }.toList<DevEmployee>()
+private fun Database.Read.getDevEmployees(): List<DevEmployee> = createQuery {
+    sql("SELECT * FROM employee")
+}
+    .toList<DevEmployee>()

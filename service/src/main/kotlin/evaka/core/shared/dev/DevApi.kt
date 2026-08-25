@@ -5,6 +5,8 @@
 package evaka.core.shared.dev
 
 import com.fasterxml.jackson.annotation.JsonIgnore
+import evaka.core.AuditContext
+import evaka.core.CitizenCalendarEnv
 import evaka.core.EvakaEnv
 import evaka.core.ExcludeCodeGen
 import evaka.core.Sensitive
@@ -50,7 +52,10 @@ import evaka.core.decision.DecisionStatus
 import evaka.core.decision.DecisionType
 import evaka.core.decision.getDecision
 import evaka.core.decision.getDecisionsByApplication
+import evaka.core.decision.reasoning.DecisionReasoningCollectionType
+import evaka.core.decision.reasoning.setDecisionReasoningIndividualSelections
 import evaka.core.document.ChildDocumentType
+import evaka.core.document.DocumentDeletionBasis
 import evaka.core.document.DocumentTemplate
 import evaka.core.document.DocumentTemplateContent
 import evaka.core.document.childdocument.ChildDocumentDecisionStatus
@@ -169,9 +174,7 @@ import evaka.core.user.EvakaUser
 import evaka.core.user.EvakaUserType
 import evaka.core.user.updateLastStrongLogin
 import evaka.core.user.updateWeakLoginCredentials
-import evaka.core.vtjclient.dto.VtjPerson
-import evaka.core.vtjclient.service.persondetails.MockPersonDetailsService
-import evaka.core.vtjclient.service.persondetails.MockVtjDataset
+import evaka.core.vtjclient.service.persondetails.DummyIdpPersonDetailsService
 import evaka.core.webpush.PushNotificationCategory
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.math.BigDecimal
@@ -196,6 +199,7 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RequestPart
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.multipart.MultipartFile
+import tools.jackson.databind.json.JsonMapper
 
 private val fakeAdmin =
     AuthenticatedUser.Employee(
@@ -216,12 +220,16 @@ class DevApi(
     private val decisionService: DecisionService,
     private val documentClient: DocumentService,
     private val env: EvakaEnv,
+    private val citizenCalendarEnv: CitizenCalendarEnv,
     private val emailMessageProvider: IEmailMessageProvider,
     private val invoiceGenerator: InvoiceGenerator,
     private val featureConfig: FeatureConfig,
     private val passwordService: PasswordService,
     private val templateDbManager: TemplateDbManager,
+    private val jsonMapper: JsonMapper,
 ) {
+    private val personDetailsService: DummyIdpPersonDetailsService =
+        DummyIdpPersonDetailsService(env.vtjMockUrl, jsonMapper)
     private val digitransit = MockDigitransit()
 
     private fun runAllAsyncJobs(clock: EvakaClock) {
@@ -239,8 +247,11 @@ class DevApi(
 
     @PostMapping("/test-mode")
     fun setTestMode(db: Database, @RequestParam enabled: Boolean) {
-        if (!enabled) {
+        if (enabled) {
+            personDetailsService.enterTestMode()
+        } else {
             templateDbManager.resetToOriginal()
+            personDetailsService.exitTestMode()
         }
         asyncJobRunners.forEach {
             if (enabled) {
@@ -257,7 +268,7 @@ class DevApi(
     fun resetServiceState() {
         templateDbManager.resetToTemplate()
         MockEmailClient.clear()
-        MockPersonDetailsService.reset()
+        personDetailsService.clearAll()
     }
 
     @PostMapping("/run-jobs")
@@ -421,6 +432,8 @@ UPDATE placement SET end_date = ${bind(req.endDate)}, termination_requested_date
         val startDate: LocalDate,
         val endDate: LocalDate,
         val status: DecisionStatus,
+        val genericReasoningId: DecisionGenericReasoningId? = null,
+        val individualReasoningIds: List<DecisionIndividualReasoningId> = emptyList(),
     )
 
     @PostMapping("/decisions")
@@ -448,8 +461,17 @@ UPDATE placement SET end_date = ${bind(req.endDate)}, termination_requested_date
                             resolved = null,
                             pendingDecisionEmailsSentCount = null,
                             pendingDecisionEmailSent = null,
+                            genericReasoningId = decision.genericReasoningId,
                         )
                     )
+                    if (decision.individualReasoningIds.isNotEmpty()) {
+                        tx.setDecisionReasoningIndividualSelections(
+                            decision.id,
+                            decision.individualReasoningIds.toSet(),
+                            evakaClock.now(),
+                            EvakaUserId(decision.employeeId.raw),
+                        )
+                    }
                 }
             }
         }
@@ -472,11 +494,28 @@ UPDATE placement SET end_date = ${bind(req.endDate)}, termination_requested_date
                     tx,
                     AuthenticatedUser.Citizen(application.guardianId, CitizenAuthLevel.STRONG),
                     clock,
+                    AuditContext(),
                     application.id,
                     id,
                 )
             }
         }
+    }
+
+    @PostMapping("/decision-reasonings/generic")
+    fun createDecisionReasoningGeneric(
+        db: Database,
+        @RequestBody rows: List<DevDecisionReasoningGeneric>,
+    ) {
+        db.connect { dbc -> dbc.transaction { tx -> rows.forEach { tx.insert(it) } } }
+    }
+
+    @PostMapping("/decision-reasonings/individual")
+    fun createDecisionReasoningIndividual(
+        db: Database,
+        @RequestBody rows: List<DevDecisionReasoningIndividual>,
+    ) {
+        db.connect { dbc -> dbc.transaction { tx -> rows.forEach { tx.insert(it) } } }
     }
 
     @GetMapping("/applications/{applicationId}")
@@ -646,28 +685,15 @@ UPDATE placement SET end_date = ${bind(req.endDate)}, termination_requested_date
         return db.connect { dbc -> dbc.transaction { it.insert(body) } }
     }
 
-    @ExcludeCodeGen // used from api-gw
-    @GetMapping("/citizen")
-    fun getCitizens(): List<Citizen> =
-        MockPersonDetailsService.getAllPersons()
-            .filter { it.guardians.isEmpty() }
-            .map(Citizen::from)
-
-    @ExcludeCodeGen // used from api-gw
-    @GetMapping("/vtj-person")
-    fun getVtjPersons(): List<VtjPersonSummary> =
-        MockPersonDetailsService.getAllPersons()
-            .filter { it.guardians.isEmpty() }
-            .map(VtjPersonSummary::from)
-
     @PostMapping("/guardian")
     fun insertGuardians(db: Database, @RequestBody guardians: List<DevGuardian>) {
         db.connect { dbc -> dbc.transaction { tx -> guardians.forEach { tx.insert(it) } } }
     }
 
     @PostMapping("/child")
-    fun insertChild(db: Database, @RequestBody body: DevPerson): ChildId =
-        db.connect { dbc -> dbc.transaction { it.insert(body, DevPersonType.CHILD) } }
+    fun insertChild(db: Database, @RequestBody body: DevPerson): ChildId = db.connect { dbc ->
+        dbc.transaction { it.insert(body, DevPersonType.CHILD) }
+    }
 
     @PostMapping("/message-account/upsert-all")
     fun createMessageAccounts(db: Database) {
@@ -737,46 +763,45 @@ UPDATE placement SET end_date = ${bind(req.endDate)}, termination_requested_date
         db: Database,
         clock: EvakaClock,
         @RequestBody applications: List<DevApplicationWithForm>,
-    ): List<ApplicationId> =
-        db.connect { dbc ->
-            val metadata = CaseProcessMetadataService(featureConfig)
-            val enteredBy: EvakaUserId = AuthenticatedUser.SystemInternalUser.evakaUserId
-            dbc.transaction { tx ->
-                applications.map { application ->
-                    val id = tx.insertApplication(application)
-                    if (application.status != ApplicationStatus.CREATED) {
-                        metadata
-                            .getProcessParams(
-                                ArchiveProcessType.fromApplicationType(application.type),
-                                clock.today().year,
-                            )
-                            ?.let { tx.insertCaseProcess(it) }
-                            ?.also { tx.setApplicationProcessId(id, it.id, clock.now(), enteredBy) }
-                        tx.updateApplicationDates(
-                            id,
-                            sentDate = application.sentDate ?: application.createdAt.toLocalDate(),
-                            sentTime = application.sentTime ?: application.createdAt.toLocalTime(),
-                            dueDate = application.dueDate,
-                            now = clock.now(),
-                            modifiedBy = enteredBy,
+    ): List<ApplicationId> = db.connect { dbc ->
+        val metadata = CaseProcessMetadataService(featureConfig)
+        val enteredBy: EvakaUserId = AuthenticatedUser.SystemInternalUser.evakaUserId
+        dbc.transaction { tx ->
+            applications.map { application ->
+                val id = tx.insertApplication(application)
+                if (application.status != ApplicationStatus.CREATED) {
+                    metadata
+                        .getProcessParams(
+                            ArchiveProcessType.fromApplicationType(application.type),
+                            clock.today().year,
                         )
-                    }
-                    application.otherGuardians.forEach { otherGuardianId ->
-                        tx.createUpdate {
-                                sql(
-                                    "INSERT INTO application_other_guardian (application_id, guardian_id) VALUES (${bind(id)}, ${
+                        ?.let { tx.insertCaseProcess(it) }
+                        ?.also { tx.setApplicationProcessId(id, it.id, clock.now(), enteredBy) }
+                    tx.updateApplicationDates(
+                        id,
+                        sentDate = application.sentDate ?: application.createdAt.toLocalDate(),
+                        sentTime = application.sentTime ?: application.createdAt.toLocalTime(),
+                        dueDate = application.dueDate,
+                        now = clock.now(),
+                        modifiedBy = enteredBy,
+                    )
+                }
+                application.otherGuardians.forEach { otherGuardianId ->
+                    tx.createUpdate {
+                            sql(
+                                "INSERT INTO application_other_guardian (application_id, guardian_id) VALUES (${bind(id)}, ${
                                     bind(
                                         otherGuardianId
                                     )
                                 })"
-                                )
-                            }
-                            .execute()
-                    }
-                    id
+                            )
+                        }
+                        .execute()
                 }
+                id
             }
         }
+    }
 
     @PostMapping("/placement-plan/{applicationId}")
     fun createPlacementPlan(
@@ -822,19 +847,15 @@ UPDATE placement SET end_date = ${bind(req.endDate)}, termination_requested_date
         MockSfiMessagesClient.reset()
     }
 
-    @PostMapping("/vtj-persons")
-    fun upsertVtjDataset(db: Database, @RequestBody dataset: MockVtjDataset) {
-        MockPersonDetailsService.add(dataset)
-    }
-
     @PostMapping("/persons/{person}/force-full-vtj-refresh")
-    fun forceFullVtjRefresh(db: Database, @PathVariable person: PersonId) {
+    fun forceFullVtjRefresh(db: Database, clock: EvakaClock, @PathVariable person: PersonId) {
+        val now = clock.now()
         db.connect { dbc ->
             dbc.transaction { tx ->
                 val user = AuthenticatedUser.SystemInternalUser
                 personService.getUpToDatePersonFromVtj(tx, user, person)
-                personService.getGuardians(tx, user, person)
-                personService.getPersonWithChildren(tx, user, person)
+                personService.getGuardians(tx, user, now, person)
+                personService.getPersonWithChildren(tx, user, now, person)
             }
         }
     }
@@ -854,7 +875,14 @@ UPDATE placement SET end_date = ${bind(req.endDate)}, termination_requested_date
         db.connect { dbc ->
             dbc.transaction { tx ->
                 tx.ensureFakeAdminExists()
-                applicationStateService.doSimpleAction(tx, fakeAdmin, clock, action, applicationId)
+                applicationStateService.doSimpleAction(
+                    tx,
+                    fakeAdmin,
+                    clock,
+                    AuditContext(),
+                    action,
+                    applicationId,
+                )
             }
         }
         runAllAsyncJobs(clock)
@@ -874,6 +902,7 @@ UPDATE placement SET end_date = ${bind(req.endDate)}, termination_requested_date
                     tx,
                     fakeAdmin,
                     clock,
+                    AuditContext(),
                     applicationId,
                     body,
                 )
@@ -904,6 +933,7 @@ UPDATE placement SET end_date = ${bind(req.endDate)}, termination_requested_date
                             tx,
                             fakeAdmin,
                             clock,
+                            AuditContext(),
                             applicationId,
                             it,
                         )
@@ -1040,8 +1070,10 @@ UPDATE placement SET end_date = ${bind(req.endDate)}, termination_requested_date
                     tx,
                     clock.now(),
                     fakeAdmin,
+                    AuditContext(),
                     body,
                     featureConfig.citizenReservationThresholdHours,
+                    citizenCalendarEnv.calendarOpenBeforePlacementDays,
                     plannedAbsenceEnabledForHourBasedServiceNeeds = true,
                 )
             }
@@ -1313,7 +1345,9 @@ UPDATE placement SET end_date = ${bind(req.endDate)}, termination_requested_date
 
     @PostMapping("/attendances")
     fun postAttendances(db: Database, @RequestBody attendances: List<DevChildAttendance>) =
-        db.connect { dbc -> dbc.transaction { tx -> attendances.forEach { tx.insert(it) } } }
+        db.connect { dbc ->
+            dbc.transaction { tx -> attendances.forEach { tx.insert(it) } }
+        }
 
     @PostMapping("/occupancy-coefficient")
     fun upsertStaffOccupancyCoefficient(
@@ -1337,63 +1371,66 @@ ON CONFLICT (daycare_id, employee_id) DO UPDATE SET coefficient = EXCLUDED.coeff
     }
 
     @GetMapping("/realtime-staff-attendance")
-    fun getStaffAttendances(db: Database) =
-        db.connect { dbc -> dbc.transaction { it.getRealtimeStaffAttendances() } }
+    fun getStaffAttendances(db: Database) = db.connect { dbc ->
+        dbc.transaction { it.getRealtimeStaffAttendances() }
+    }
 
     @PostMapping("/realtime-staff-attendance")
     fun addStaffAttendance(db: Database, @RequestBody body: DevStaffAttendance) =
-        db.connect { dbc -> dbc.transaction { it.insert(body) } }
+        db.connect { dbc ->
+            dbc.transaction { it.insert(body) }
+        }
 
     @PostMapping("/staff-attendance-plan")
     fun addStaffAttendancePlan(db: Database, @RequestBody body: DevStaffAttendancePlan) =
-        db.connect { dbc -> dbc.transaction { it.insert(body) } }
+        db.connect { dbc ->
+            dbc.transaction { it.insert(body) }
+        }
 
     @PostMapping("/daily-service-time")
     fun addDailyServiceTime(db: Database, @RequestBody body: DevDailyServiceTimes) =
-        db.connect { dbc -> dbc.transaction { it.insert(body) } }
+        db.connect { dbc ->
+            dbc.transaction { it.insert(body) }
+        }
 
     @PostMapping("/daily-service-time-notification")
     fun addDailyServiceTimeNotification(
         db: Database,
         @RequestBody body: DevDailyServiceTimeNotification,
-    ) =
-        db.connect { dbc ->
-            dbc.transaction {
-                it.createUpdate {
-                        sql(
-                            """
-INSERT INTO daily_service_time_notification (id, guardian_id)
-VALUES (${bind(body.id)}, ${bind(body.guardianId)})
-"""
-                        )
-                    }
-                    .execute()
-            }
-        }
+    ) = db.connect { dbc -> dbc.transaction { it.insert(body) } }
 
     @PostMapping("/payments")
-    fun addPayment(db: Database, @RequestBody body: DevPayment) =
-        db.connect { dbc -> dbc.transaction { it.insert(body) } }
+    fun addPayment(db: Database, @RequestBody body: DevPayment) = db.connect { dbc ->
+        dbc.transaction { it.insert(body) }
+    }
 
     @PostMapping("/calendar-event")
-    fun addCalendarEvent(db: Database, @RequestBody body: DevCalendarEvent) =
-        db.connect { dbc -> dbc.transaction { it.insert(body) } }
+    fun addCalendarEvent(db: Database, @RequestBody body: DevCalendarEvent) = db.connect { dbc ->
+        dbc.transaction { it.insert(body) }
+    }
 
     @PostMapping("/calendar-event-attendee")
     fun addCalendarEventAttendee(db: Database, @RequestBody body: DevCalendarEventAttendee) =
-        db.connect { dbc -> dbc.transaction { it.insert(body) } }
+        db.connect { dbc ->
+            dbc.transaction { it.insert(body) }
+        }
 
     @PostMapping("/calendar-event-time")
     fun addCalendarEventTime(db: Database, @RequestBody body: DevCalendarEventTime) =
-        db.connect { dbc -> dbc.transaction { it.insert(body) } }
+        db.connect { dbc ->
+            dbc.transaction { it.insert(body) }
+        }
 
     @PostMapping("/absence")
-    fun addAbsence(db: Database, @RequestBody body: DevAbsence) =
-        db.connect { dbc -> dbc.transaction { it.insert(body) } }
+    fun addAbsence(db: Database, @RequestBody body: DevAbsence) = db.connect { dbc ->
+        dbc.transaction { it.insert(body) }
+    }
 
     @GetMapping("/absences")
     fun getAbsences(db: Database, @RequestParam childId: ChildId, @RequestParam date: LocalDate) =
-        db.connect { dbc -> dbc.transaction { it.getAbsencesOfChildByDate(childId, date) } }
+        db.connect { dbc ->
+            dbc.transaction { it.getAbsencesOfChildByDate(childId, date) }
+        }
 
     @PostMapping("/club-term")
     fun createClubTerm(db: Database, @RequestBody body: DevClubTerm) {
@@ -1649,19 +1686,18 @@ $form
     data class DevPersonEmail(val personId: PersonId, val email: String?)
 
     @PostMapping("/person-email")
-    fun setPersonEmail(db: Database, @RequestBody body: DevPersonEmail) =
-        db.connect { dbc ->
-            dbc.transaction {
-                it.createUpdate {
-                        sql(
-                            """
+    fun setPersonEmail(db: Database, @RequestBody body: DevPersonEmail) = db.connect { dbc ->
+        dbc.transaction {
+            it.createUpdate {
+                    sql(
+                        """
 UPDATE person SET email=${bind(body.email)} WHERE id=${bind(body.personId)}            
 """
-                        )
-                    }
-                    .execute()
-            }
+                    )
+                }
+                .execute()
         }
+    }
 
     @PostMapping("/generate-replacement-draft-invoices")
     fun generateReplacementDraftInvoices(db: Database, clock: EvakaClock) {
@@ -1800,28 +1836,27 @@ private fun Database.Connection.waitUntilNoQueriesRunning(timeout: Duration) {
     error("Timed out while waiting for database activity to finish: $connections")
 }
 
-private fun Database.Read.getActiveConnections(): List<ActiveConnection> =
-    createQuery {
-            sql(
-                """
+private fun Database.Read.getActiveConnections(): List<ActiveConnection> = createQuery {
+    sql(
+        """
 SELECT state, xact_start, query_start, left(query, 100) AS query FROM pg_stat_activity
 WHERE pid <> pg_backend_pid() AND datname = current_database() AND usename = current_user AND backend_type = 'client backend'
 AND state != 'idle'
     """
-            )
-        }
-        .toList<ActiveConnection>()
+    )
+}
+    .toList<ActiveConnection>()
 
 fun Database.Transaction.ensureFakeAdminExists() {
     createUpdate {
-            sql(
-                """
+        sql(
+            """
 INSERT INTO employee (id, first_name, last_name, email, external_id, roles, active)
 VALUES (${bind(fakeAdmin.id)}, 'Dev', 'API', 'dev.api@espoo.fi', 'espoo-ad:' || ${bind(fakeAdmin.id)}, '{ADMIN, SERVICE_WORKER}'::user_role[], TRUE)
 ON CONFLICT DO NOTHING
 """
-            )
-        }
+        )
+    }
         .execute()
     upsertEmployeeUser(fakeAdmin.id)
 }
@@ -1886,21 +1921,20 @@ INSERT INTO service_need_option_voucher_value (service_need_option_id, validity,
     }
 }
 
-fun Database.Transaction.updateFeeDecisionSentAt(feeDecision: FeeDecision) =
-    createUpdate {
-            sql(
-                """
+fun Database.Transaction.updateFeeDecisionSentAt(feeDecision: FeeDecision) = createUpdate {
+    sql(
+        """
 UPDATE fee_decision SET sent_at = ${bind(feeDecision.sentAt)} WHERE id = ${bind(feeDecision.id)}    
 """
-            )
-        }
-        .execute()
+    )
+}
+    .execute()
 
 data class DevCareArea(
     val id: AreaId = AreaId(UUID.randomUUID()),
     val name: String = "Test Care Area",
     val shortName: String = "test_area",
-    val areaCode: Int? = 200,
+    val areaCode: Int? = null,
     val subCostCenter: String? = "00",
 )
 
@@ -1944,12 +1978,11 @@ data class DevDaycare(
     val openingDate: LocalDate? = null,
     val closingDate: LocalDate? = null,
     val areaId: AreaId,
-    val type: Set<CareType> =
-        setOf(CareType.CENTRE, CareType.PRESCHOOL, CareType.PREPARATORY_EDUCATION),
-    val dailyPreschoolTime: TimeRange? = TimeRange(LocalTime.of(9, 0), LocalTime.of(13, 0)),
-    val dailyPreparatoryTime: TimeRange? = TimeRange(LocalTime.of(9, 0), LocalTime.of(14, 0)),
-    val daycareApplyPeriod: DateRange? = DateRange(LocalDate.of(2020, 3, 1), null),
-    val preschoolApplyPeriod: DateRange? = DateRange(LocalDate.of(2020, 3, 1), null),
+    val type: Set<CareType> = setOf(CareType.CENTRE),
+    val dailyPreschoolTime: TimeRange? = null,
+    val dailyPreparatoryTime: TimeRange? = null,
+    val daycareApplyPeriod: DateRange? = null,
+    val preschoolApplyPeriod: DateRange? = null,
     val clubApplyPeriod: DateRange? = null,
     val providerType: ProviderType = ProviderType.MUNICIPAL,
     val capacity: Int = 0,
@@ -1960,7 +1993,7 @@ data class DevDaycare(
     val uploadToKoski: Boolean = true,
     val invoicedByMunicipality: Boolean = true,
     val costCenter: String? = "31500",
-    val dwCostCenter: String? = "dw-test",
+    val dwCostCenter: String? = null,
     val additionalInfo: String? = null,
     val phone: String? = null,
     val email: String? = null,
@@ -1970,6 +2003,7 @@ data class DevDaycare(
     val location: Coordinate? = null,
     val mailingAddress: MailingAddress = MailingAddress(),
     val unitManager: UnitManager = UnitManager(name = "Unit Manager", phone = "", email = ""),
+    val preschoolManagerName: String = "",
     val decisionCustomization: DaycareDecisionCustomization =
         DaycareDecisionCustomization(
             daycareName = name,
@@ -1977,8 +2011,8 @@ data class DevDaycare(
             handler = "Decision Handler",
             handlerAddress = "Decision Handler Street 1",
         ),
-    val ophUnitOid: String? = "1.2.3.4.5",
-    val ophOrganizerOid: String? = "1.2.3.4.5",
+    val ophUnitOid: String? = null,
+    val ophOrganizerOid: String? = null,
     val operationTimes: List<TimeRange?> =
         listOf(
             TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
@@ -2079,7 +2113,7 @@ data class DevPlacement(
     val createdBy: EvakaUserId? = AuthenticatedUser.SystemInternalUser.evakaUserId,
     val modifiedAt: HelsinkiDateTime? = HelsinkiDateTime.now(),
     val modifiedBy: EvakaUserId? = AuthenticatedUser.SystemInternalUser.evakaUserId,
-    val source: PlacementSource? = PlacementSource.MANUAL,
+    val source: PlacementSource? = null,
     val sourceApplicationId: ApplicationId? = null,
     val sourceServiceApplicationId: ServiceApplicationId? = null,
 )
@@ -2184,12 +2218,12 @@ data class DevEmployee(
     val preferredFirstName: String? = null,
     val firstName: String = "Test",
     val lastName: String = "Person",
-    val email: String? = "test.person@espoo.fi",
+    val email: String? = null,
     val externalId: ExternalId? = null,
     val employeeNumber: String? = null,
     val roles: Set<UserRole> = setOf(),
     val created: HelsinkiDateTime = HelsinkiDateTime.now(),
-    val lastLogin: HelsinkiDateTime? = HelsinkiDateTime.now(),
+    val lastLogin: HelsinkiDateTime? = null,
     val active: Boolean = true,
     val ssn: String? = null,
 ) {
@@ -2338,8 +2372,9 @@ data class DevDailyServiceTimes(
 )
 
 data class DevDailyServiceTimeNotification(
-    val id: DailyServiceTimeNotificationId,
+    val id: DailyServiceTimeNotificationId = DailyServiceTimeNotificationId(UUID.randomUUID()),
     val guardianId: PersonId,
+    val createdAt: HelsinkiDateTime = HelsinkiDateTime.now(),
 )
 
 data class DevPayment(
@@ -2426,6 +2461,8 @@ data class DevDocumentTemplate(
     @Json val content: DocumentTemplateContent,
     val archiveExternally: Boolean = false,
     val endDecisionWhenUnitChanges: Boolean? = null,
+    val deletionRetentionDays: Int = 10 * 365,
+    val deletionRetentionBasis: DocumentDeletionBasis = DocumentDeletionBasis.PLACEMENT_END,
 ) {
     fun toDocumentTemplate() =
         DocumentTemplate(
@@ -2443,6 +2480,8 @@ data class DevDocumentTemplate(
             content = content,
             archiveExternally = archiveExternally,
             endDecisionWhenUnitChanges = endDecisionWhenUnitChanges,
+            deletionRetentionDays = deletionRetentionDays,
+            deletionRetentionBasis = deletionRetentionBasis,
         )
 }
 
@@ -2456,6 +2495,7 @@ data class DevChildDocument(
     @Json val content: DocumentContent,
     val modifiedAt: HelsinkiDateTime,
     val modifiedBy: EvakaUserId,
+    val statusModifiedAt: HelsinkiDateTime? = null,
     val contentLockedAt: HelsinkiDateTime,
     val contentLockedBy: EmployeeId?,
     val answeredAt: HelsinkiDateTime? = null,
@@ -2484,34 +2524,6 @@ data class DevChildDocumentDecision(
     val validity: DateRange?,
     val daycareId: DaycareId?,
 )
-
-data class Citizen(
-    val ssn: String,
-    val firstName: String,
-    val lastName: String,
-    val dependantCount: Int,
-) {
-    companion object {
-        fun from(vtjPerson: VtjPerson) =
-            Citizen(
-                ssn = vtjPerson.socialSecurityNumber,
-                firstName = vtjPerson.firstNames,
-                lastName = vtjPerson.lastName,
-                dependantCount = vtjPerson.dependants.size,
-            )
-    }
-}
-
-data class VtjPersonSummary(val ssn: String, val firstName: String, val lastName: String) {
-    companion object {
-        fun from(vtjPerson: VtjPerson) =
-            VtjPersonSummary(
-                ssn = vtjPerson.socialSecurityNumber,
-                firstName = vtjPerson.firstNames,
-                lastName = vtjPerson.lastName,
-            )
-    }
-}
 
 data class DevAssistanceFactor(
     val id: AssistanceFactorId = AssistanceFactorId(UUID.randomUUID()),
@@ -2708,6 +2720,7 @@ data class DevSfiMessageEvent(
     val eventType: EventType,
     val createdAt: HelsinkiDateTime = HelsinkiDateTime.now(),
     val updatedAt: HelsinkiDateTime = HelsinkiDateTime.now(),
+    val eventTime: HelsinkiDateTime = HelsinkiDateTime.now(),
 )
 
 data class DevHolidayQuestionnaire(
@@ -2734,4 +2747,27 @@ data class DevHolidayQuestionnaireAnswer(
     val childId: ChildId,
     val fixedPeriod: FiniteDateRange?,
     val openRanges: List<FiniteDateRange> = listOf(),
+)
+
+data class DevDecisionReasoningGeneric(
+    val id: DecisionGenericReasoningId = DecisionGenericReasoningId(UUID.randomUUID()),
+    val collectionType: DecisionReasoningCollectionType,
+    val validFrom: LocalDate,
+    val textFi: String,
+    val textSv: String,
+    val ready: Boolean = true,
+    val createdAt: HelsinkiDateTime = HelsinkiDateTime.now(),
+    val modifiedAt: HelsinkiDateTime = HelsinkiDateTime.now(),
+)
+
+data class DevDecisionReasoningIndividual(
+    val id: DecisionIndividualReasoningId = DecisionIndividualReasoningId(UUID.randomUUID()),
+    val collectionType: DecisionReasoningCollectionType,
+    val titleFi: String,
+    val titleSv: String,
+    val textFi: String,
+    val textSv: String,
+    val removedAt: HelsinkiDateTime? = null,
+    val createdAt: HelsinkiDateTime = HelsinkiDateTime.now(),
+    val modifiedAt: HelsinkiDateTime = HelsinkiDateTime.now(),
 )

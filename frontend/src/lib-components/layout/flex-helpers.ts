@@ -10,7 +10,7 @@ import type { SpacingSize } from '../white-space'
 import { defaultMargins, isSpacingSize } from '../white-space'
 
 interface FixedSpaceRowProps {
-  // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+  // oxlint-disable-next-line typescript/no-redundant-type-constituents
   $spacing?: SpacingSize | string
   $justifyContent?: Property.JustifyContent
   $alignItems?: Property.AlignItems
@@ -28,7 +28,7 @@ export const FixedSpaceRow = styled.div<FixedSpaceRowProps>`
   ${(p) => (p.$flexWrap ? `flex-wrap: ${p.$flexWrap};` : '')}
   ${(p) => (p.$gap ? `gap: ${p.$gap};` : '')}
 
-  >* {
+  > * {
     margin-right: ${(p) =>
       p.$spacing
         ? isSpacingSize(p.$spacing)
@@ -63,11 +63,11 @@ export const MobileFixedSpaceRow = styled(FixedSpaceRow)`
 `
 
 interface FixedSpaceColumnProps {
-  // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+  // oxlint-disable-next-line typescript/no-redundant-type-constituents
   $spacing?: SpacingSize | string
   $justifyContent?: Property.JustifyContent
   $alignItems?: Property.AlignItems
-  // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+  // oxlint-disable-next-line typescript/no-redundant-type-constituents
   $marginRight?: SpacingSize | string
   $fullWidth?: boolean
 }
@@ -88,7 +88,7 @@ export const FixedSpaceColumn = styled.div<FixedSpaceColumnProps>`
         };`
       : ''}
 
-  >* {
+  > * {
     margin-bottom: ${(p) =>
       p.$spacing
         ? isSpacingSize(p.$spacing)
@@ -121,13 +121,11 @@ export const FixedSpaceFlexWrap = styled.div<FixedSpaceFlexWrapProps>`
   align-items: flex-start;
 
   margin-bottom: -${(p) =>
-      p.$verticalSpacing
-        ? defaultMargins[p.$verticalSpacing]
-        : defaultMargins.s};
+    p.$verticalSpacing ? defaultMargins[p.$verticalSpacing] : defaultMargins.s};
   margin-right: -${(p) =>
-      p.$horizontalSpacing
-        ? defaultMargins[p.$horizontalSpacing]
-        : defaultMargins.s};
+    p.$horizontalSpacing
+      ? defaultMargins[p.$horizontalSpacing]
+      : defaultMargins.s};
 
   > * {
     margin-bottom: ${(p) =>

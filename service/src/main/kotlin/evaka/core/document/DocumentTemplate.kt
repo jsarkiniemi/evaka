@@ -21,6 +21,8 @@ import java.time.format.DateTimeFormatter
 import org.jdbi.v3.core.mapper.Nested
 import org.jdbi.v3.json.Json
 
+const val CITIZEN_DOCUMENT_CREATION_DAYS_BEFORE_PLACEMENT = 60
+
 private data class Translations(val yes: String, val no: String)
 
 private val translationsFi = Translations(yes = "Kyllä", no = "Ei")
@@ -47,7 +49,11 @@ enum class QuestionType {
     GROUPED_TEXT_FIELDS,
 }
 
-@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type")
+@JsonTypeInfo(
+    use = JsonTypeInfo.Id.NAME,
+    include = JsonTypeInfo.As.EXISTING_PROPERTY,
+    property = "type",
+)
 sealed class Question(val type: QuestionType) {
     abstract val id: String
 
@@ -422,6 +428,14 @@ enum class ChildDocumentType(
     override val sqlType: String = "document_template_type"
 }
 
+@ConstList("documentDeletionBases")
+enum class DocumentDeletionBasis : DatabaseEnum {
+    PLACEMENT_END,
+    STATUS_TRANSITION;
+
+    override val sqlType: String = "document_deletion_basis"
+}
+
 data class DocumentTemplate(
     val id: DocumentTemplateId,
     val name: String,
@@ -436,6 +450,8 @@ data class DocumentTemplate(
     val archiveDurationMonths: Int?,
     val archiveExternally: Boolean,
     val endDecisionWhenUnitChanges: Boolean?,
+    val deletionRetentionDays: Int,
+    val deletionRetentionBasis: DocumentDeletionBasis,
     @Json val content: DocumentTemplateContent,
 )
 
@@ -451,6 +467,8 @@ data class ExportedDocumentTemplate(
     val archiveDurationMonths: Int?,
     val archiveExternally: Boolean,
     val endDecisionWhenUnitChanges: Boolean?,
+    val deletionRetentionDays: Int,
+    val deletionRetentionBasis: DocumentDeletionBasis,
     @Json val content: DocumentTemplateContent,
 )
 
@@ -467,6 +485,8 @@ sealed interface DocumentTemplateBasicsRequest {
     val validity: DateRange
     val archiveExternally: Boolean
     val endDecisionWhenUnitChanges: Boolean?
+    val deletionRetentionDays: Int
+    val deletionRetentionBasis: DocumentDeletionBasis
 
     @JsonTypeName("REGULAR")
     data class Regular(
@@ -480,8 +500,14 @@ sealed interface DocumentTemplateBasicsRequest {
         override val processDefinitionNumber: String? = null,
         override val archiveDurationMonths: Int? = null,
         override val endDecisionWhenUnitChanges: Boolean?,
+        override val deletionRetentionDays: Int,
+        override val deletionRetentionBasis: DocumentDeletionBasis,
     ) : DocumentTemplateBasicsRequest {
         override val archiveExternally = false
+
+        init {
+            require(deletionRetentionDays >= 1) { "deletionRetentionDays must be at least 1" }
+        }
     }
 
     @JsonTypeName("ARCHIVED_EXTERNALLY")
@@ -496,8 +522,14 @@ sealed interface DocumentTemplateBasicsRequest {
         override val processDefinitionNumber: String,
         override val archiveDurationMonths: Int,
         override val endDecisionWhenUnitChanges: Boolean?,
+        override val deletionRetentionDays: Int,
+        override val deletionRetentionBasis: DocumentDeletionBasis,
     ) : DocumentTemplateBasicsRequest {
         override val archiveExternally = true
+
+        init {
+            require(deletionRetentionDays >= 1) { "deletionRetentionDays must be at least 1" }
+        }
     }
 }
 

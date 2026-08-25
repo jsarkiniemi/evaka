@@ -41,6 +41,7 @@ import evaka.core.shared.dev.DevDaycare
 import evaka.core.shared.dev.DevDaycareGroup
 import evaka.core.shared.dev.DevDaycareGroupPlacement
 import evaka.core.shared.dev.DevEmployee
+import evaka.core.shared.dev.DevHolidayPeriod
 import evaka.core.shared.dev.DevMobileDevice
 import evaka.core.shared.dev.DevPerson
 import evaka.core.shared.dev.DevPersonType
@@ -50,6 +51,7 @@ import evaka.core.shared.dev.DevReservation
 import evaka.core.shared.dev.DevServiceNeed
 import evaka.core.shared.dev.insert
 import evaka.core.shared.dev.insertTestChildAttendance
+import evaka.core.shared.domain.BadRequest
 import evaka.core.shared.domain.DateRange
 import evaka.core.shared.domain.EvakaClock
 import evaka.core.shared.domain.FiniteDateRange
@@ -484,7 +486,13 @@ class AttendanceReservationsControllerIntegrationTest :
                             childId = child1.id,
                             reservations = emptyList(),
                             attendances = emptyList(),
-                            absenceBillable = AbsenceTypeResponse(AbsenceType.OTHER_ABSENCE, true),
+                            absenceBillable =
+                                AbsenceTypeResponse(
+                                    AbsenceType.OTHER_ABSENCE,
+                                    true,
+                                    employee.evakaUser.name,
+                                    now,
+                                ),
                             absenceNonbillable = null,
                             possibleAbsenceCategories = setOf(AbsenceCategory.BILLABLE),
                             shiftCare = ShiftCareType.NONE,
@@ -950,36 +958,35 @@ class AttendanceReservationsControllerIntegrationTest :
 
     @Test
     fun `get confirmed range reservations returns correct data`() {
-        val mobileDeviceId =
-            db.transaction { tx ->
-                tx.insert(
-                    DevPlacement(
-                        childId = child1.id,
-                        unitId = daycare.id,
-                        startDate = mon,
-                        endDate = fri,
-                        type = PlacementType.PRESCHOOL_DAYCARE,
-                    )
+        val mobileDeviceId = db.transaction { tx ->
+            tx.insert(
+                DevPlacement(
+                    childId = child1.id,
+                    unitId = daycare.id,
+                    startDate = mon,
+                    endDate = fri,
+                    type = PlacementType.PRESCHOOL_DAYCARE,
                 )
-                tx.insert(
-                    DevReservation(
-                        childId = child1.id,
-                        date = tue,
-                        startTime = LocalTime.of(9, 0),
-                        endTime = LocalTime.of(11, 0),
-                        createdBy = employee.evakaUserId,
-                        createdAt = clock.now(),
-                    )
+            )
+            tx.insert(
+                DevReservation(
+                    childId = child1.id,
+                    date = tue,
+                    startTime = LocalTime.of(9, 0),
+                    endTime = LocalTime.of(11, 0),
+                    createdBy = employee.evakaUserId,
+                    createdAt = clock.now(),
                 )
-                tx.insert(
-                    DevAbsence(
-                        childId = child1.id,
-                        date = tue,
-                        absenceCategory = AbsenceCategory.BILLABLE,
-                    )
+            )
+            tx.insert(
+                DevAbsence(
+                    childId = child1.id,
+                    date = tue,
+                    absenceCategory = AbsenceCategory.BILLABLE,
                 )
-                tx.insert(DevMobileDevice(unitId = daycare.id))
-            }
+            )
+            tx.insert(DevMobileDevice(unitId = daycare.id))
+        }
         val reservations =
             attendanceReservationController.getConfirmedRangeData(
                 dbInstance(),
@@ -1031,46 +1038,86 @@ class AttendanceReservationsControllerIntegrationTest :
     }
 
     @Test
+    fun `citizen-marked absence includes the citizen's name`() {
+        db.transaction { tx ->
+            tx.insert(adult, DevPersonType.ADULT)
+            tx.insert(
+                DevPlacement(
+                    childId = child1.id,
+                    unitId = daycare.id,
+                    startDate = mon,
+                    endDate = fri,
+                )
+            )
+            tx.insert(
+                DevAbsence(
+                    childId = child1.id,
+                    date = tue,
+                    absenceType = AbsenceType.SICKLEAVE,
+                    modifiedAt = now,
+                    modifiedBy = adult.evakaUserId(),
+                    absenceCategory = AbsenceCategory.BILLABLE,
+                )
+            )
+        }
+
+        val child =
+            getAttendanceReservations()
+                .days
+                .first { it.date == tue }
+                .children
+                .single { it.childId == child1.id }
+        assertEquals(
+            AbsenceTypeResponse(
+                absenceType = AbsenceType.SICKLEAVE,
+                staffCreated = false,
+                modifiedByName = adult.evakaUser().name,
+                modifiedAt = now,
+            ),
+            child.absenceBillable,
+        )
+    }
+
+    @Test
     fun `set confirmed range reservation does not update any fields when form values remain the same`() {
         val initialCreatedAt = clock.now()
         val mobileDevice = DevMobileDevice(unitId = daycare.id)
         val mobileDeviceEvakaUser = mobileDevice.evakaUser
         val parent = adult
-        val mobileDeviceId =
-            db.transaction { tx ->
-                tx.insert(adult, DevPersonType.ADULT)
-                tx.insertGuardian(parent.id, child1.id)
-                tx.insert(
-                    DevPlacement(
-                        childId = child1.id,
-                        unitId = daycare.id,
-                        startDate = mon,
-                        endDate = fri,
-                        type = PlacementType.PRESCHOOL_DAYCARE,
-                    )
+        val mobileDeviceId = db.transaction { tx ->
+            tx.insert(adult, DevPersonType.ADULT)
+            tx.insertGuardian(parent.id, child1.id)
+            tx.insert(
+                DevPlacement(
+                    childId = child1.id,
+                    unitId = daycare.id,
+                    startDate = mon,
+                    endDate = fri,
+                    type = PlacementType.PRESCHOOL_DAYCARE,
                 )
-                tx.insert(
-                    DevReservation(
-                        childId = child1.id,
-                        date = wed,
-                        startTime = LocalTime.of(9, 0),
-                        endTime = LocalTime.of(11, 0),
-                        createdBy = parent.evakaUserId(),
-                        createdAt = initialCreatedAt,
-                    )
+            )
+            tx.insert(
+                DevReservation(
+                    childId = child1.id,
+                    date = wed,
+                    startTime = LocalTime.of(9, 0),
+                    endTime = LocalTime.of(11, 0),
+                    createdBy = parent.evakaUserId(),
+                    createdAt = initialCreatedAt,
                 )
-                tx.insert(
-                    DevReservation(
-                        childId = child1.id,
-                        date = thu,
-                        startTime = LocalTime.of(8, 0),
-                        endTime = LocalTime.of(16, 0),
-                        createdBy = employee.evakaUserId,
-                        createdAt = initialCreatedAt,
-                    )
+            )
+            tx.insert(
+                DevReservation(
+                    childId = child1.id,
+                    date = thu,
+                    startTime = LocalTime.of(8, 0),
+                    endTime = LocalTime.of(16, 0),
+                    createdBy = employee.evakaUserId,
+                    createdAt = initialCreatedAt,
                 )
-                tx.insert(mobileDevice)
-            }
+            )
+            tx.insert(mobileDevice)
+        }
 
         clock.tick(Duration.ofDays(1))
 
@@ -1156,41 +1203,40 @@ class AttendanceReservationsControllerIntegrationTest :
         val mobileDevice = DevMobileDevice(unitId = daycare.id)
         val mobileDeviceEvakaUser = mobileDevice.evakaUser
         val parent = adult
-        val mobileDeviceId =
-            db.transaction { tx ->
-                tx.insert(adult, DevPersonType.ADULT)
-                tx.insertGuardian(parent.id, child1.id)
-                tx.insert(
-                    DevPlacement(
-                        childId = child1.id,
-                        unitId = daycare.id,
-                        startDate = mon,
-                        endDate = fri,
-                        type = PlacementType.PRESCHOOL_DAYCARE,
-                    )
+        val mobileDeviceId = db.transaction { tx ->
+            tx.insert(adult, DevPersonType.ADULT)
+            tx.insertGuardian(parent.id, child1.id)
+            tx.insert(
+                DevPlacement(
+                    childId = child1.id,
+                    unitId = daycare.id,
+                    startDate = mon,
+                    endDate = fri,
+                    type = PlacementType.PRESCHOOL_DAYCARE,
                 )
-                tx.insert(
-                    DevReservation(
-                        childId = child1.id,
-                        date = wed,
-                        startTime = LocalTime.of(9, 0),
-                        endTime = LocalTime.of(11, 0),
-                        createdBy = parent.evakaUserId(),
-                        createdAt = initialCreatedAt,
-                    )
+            )
+            tx.insert(
+                DevReservation(
+                    childId = child1.id,
+                    date = wed,
+                    startTime = LocalTime.of(9, 0),
+                    endTime = LocalTime.of(11, 0),
+                    createdBy = parent.evakaUserId(),
+                    createdAt = initialCreatedAt,
                 )
-                tx.insert(
-                    DevReservation(
-                        childId = child1.id,
-                        date = thu,
-                        startTime = LocalTime.of(8, 0),
-                        endTime = LocalTime.of(16, 0),
-                        createdBy = employee.evakaUserId,
-                        createdAt = initialCreatedAt,
-                    )
+            )
+            tx.insert(
+                DevReservation(
+                    childId = child1.id,
+                    date = thu,
+                    startTime = LocalTime.of(8, 0),
+                    endTime = LocalTime.of(16, 0),
+                    createdBy = employee.evakaUserId,
+                    createdAt = initialCreatedAt,
                 )
-                tx.insert(mobileDevice)
-            }
+            )
+            tx.insert(mobileDevice)
+        }
 
         clock.tick(Duration.ofDays(1))
 
@@ -1292,41 +1338,40 @@ class AttendanceReservationsControllerIntegrationTest :
         val mobileDevice = DevMobileDevice(unitId = daycare.id)
         val mobileDeviceEvakaUser = mobileDevice.evakaUser
         val parent = adult
-        val mobileDeviceId =
-            db.transaction { tx ->
-                tx.insert(adult, DevPersonType.ADULT)
-                tx.insertGuardian(parent.id, child1.id)
-                tx.insert(
-                    DevPlacement(
-                        childId = child1.id,
-                        unitId = daycare.id,
-                        startDate = mon,
-                        endDate = fri,
-                        type = PlacementType.PRESCHOOL_DAYCARE,
-                    )
+        val mobileDeviceId = db.transaction { tx ->
+            tx.insert(adult, DevPersonType.ADULT)
+            tx.insertGuardian(parent.id, child1.id)
+            tx.insert(
+                DevPlacement(
+                    childId = child1.id,
+                    unitId = daycare.id,
+                    startDate = mon,
+                    endDate = fri,
+                    type = PlacementType.PRESCHOOL_DAYCARE,
                 )
-                tx.insert(
-                    DevReservation(
-                        childId = child1.id,
-                        date = wed,
-                        startTime = LocalTime.of(9, 0),
-                        endTime = LocalTime.of(11, 0),
-                        createdBy = parent.evakaUserId(),
-                        createdAt = initialCreatedAt,
-                    )
+            )
+            tx.insert(
+                DevReservation(
+                    childId = child1.id,
+                    date = wed,
+                    startTime = LocalTime.of(9, 0),
+                    endTime = LocalTime.of(11, 0),
+                    createdBy = parent.evakaUserId(),
+                    createdAt = initialCreatedAt,
                 )
-                tx.insert(
-                    DevReservation(
-                        childId = child1.id,
-                        date = thu,
-                        startTime = LocalTime.of(8, 0),
-                        endTime = LocalTime.of(12, 0),
-                        createdBy = employee.evakaUserId,
-                        createdAt = initialCreatedAt,
-                    )
+            )
+            tx.insert(
+                DevReservation(
+                    childId = child1.id,
+                    date = thu,
+                    startTime = LocalTime.of(8, 0),
+                    endTime = LocalTime.of(12, 0),
+                    createdBy = employee.evakaUserId,
+                    createdAt = initialCreatedAt,
                 )
-                tx.insert(mobileDevice)
-            }
+            )
+            tx.insert(mobileDevice)
+        }
 
         clock.tick(Duration.ofDays(1))
 
@@ -1414,6 +1459,126 @@ class AttendanceReservationsControllerIntegrationTest :
     }
 
     @Test
+    fun `set confirmed range reservation accepts NO_TIMES reservation on a holiday period day`() {
+        val mobileDevice = DevMobileDevice(unitId = daycare.id)
+        val mobileDeviceId = db.transaction { tx ->
+            tx.insert(
+                DevHolidayPeriod(
+                    period = FiniteDateRange(wed, thu),
+                    reservationsOpenOn = mon,
+                    reservationDeadline = mon,
+                )
+            )
+            tx.insert(
+                DevPlacement(
+                    childId = child1.id,
+                    unitId = daycare.id,
+                    startDate = mon,
+                    endDate = fri,
+                    type = PlacementType.PRESCHOOL_DAYCARE,
+                )
+            )
+            tx.insert(mobileDevice)
+        }
+
+        attendanceReservationController.setConfirmedRangeReservations(
+            dbInstance(),
+            AuthenticatedUser.MobileDevice(id = mobileDeviceId),
+            clock,
+            child1.id,
+            listOf(
+                ConfirmedRangeDateUpdate(
+                    date = wed,
+                    reservations = listOf(Reservation.NoTimes),
+                    absenceType = null,
+                )
+            ),
+        )
+
+        val reservations =
+            attendanceReservationController.getConfirmedRangeData(
+                dbInstance(),
+                AuthenticatedUser.MobileDevice(id = mobileDeviceId),
+                clock,
+                child1.id,
+            )
+        assertEquals(
+            listOf(
+                ReservationResponse.NoTimes(
+                    staffCreated = true,
+                    modifiedBy = mobileDevice.evakaUser,
+                    modifiedAt = clock.now(),
+                )
+            ),
+            reservations.single { it.date == wed }.reservations,
+        )
+    }
+
+    @Test
+    fun `set confirmed range reservation rejects invalid NO_TIMES reservations`() {
+        val mobileDeviceId = db.transaction { tx ->
+            tx.insert(
+                DevHolidayPeriod(
+                    period = FiniteDateRange(wed, thu),
+                    reservationsOpenOn = mon,
+                    reservationDeadline = mon,
+                )
+            )
+            tx.insert(
+                DevPlacement(
+                    childId = child1.id,
+                    unitId = daycare.id,
+                    startDate = mon,
+                    endDate = fri,
+                    type = PlacementType.PRESCHOOL_DAYCARE,
+                )
+            )
+            tx.insert(DevMobileDevice(unitId = daycare.id))
+        }
+        val user = AuthenticatedUser.MobileDevice(id = mobileDeviceId)
+
+        // NO_TIMES mixed with a timed reservation on a holiday period day
+        assertThrows<BadRequest> {
+            attendanceReservationController.setConfirmedRangeReservations(
+                dbInstance(),
+                user,
+                clock,
+                child1.id,
+                listOf(
+                    ConfirmedRangeDateUpdate(
+                        date = wed,
+                        reservations =
+                            listOf(
+                                Reservation.NoTimes,
+                                Reservation.Times(
+                                    TimeRange(LocalTime.of(9, 0), LocalTime.of(11, 0))
+                                ),
+                            ),
+                        absenceType = null,
+                    )
+                ),
+            )
+        }
+
+        // NO_TIMES outside holiday periods
+        assertThrows<BadRequest> {
+            attendanceReservationController.setConfirmedRangeReservations(
+                dbInstance(),
+                user,
+                clock,
+                child1.id,
+                listOf(
+                    ConfirmedRangeDateUpdate(
+                        date = fri,
+                        reservations = listOf(Reservation.NoTimes),
+                        absenceType = null,
+                    )
+                ),
+            )
+        }
+    }
+
+    @Test
     fun `post child date presence - insert, update and delete reservation, attendance and absence`() {
         val testNow = HelsinkiDateTime.of(wed, LocalTime.of(18, 0))
         val testClock = MockEvakaClock(testNow)
@@ -1476,8 +1641,20 @@ class AttendanceReservationsControllerIntegrationTest :
                             employee.evakaUser,
                         )
                     ),
-                absenceBillable = AbsenceTypeResponse(AbsenceType.OTHER_ABSENCE, true),
-                absenceNonbillable = AbsenceTypeResponse(AbsenceType.OTHER_ABSENCE, true),
+                absenceBillable =
+                    AbsenceTypeResponse(
+                        AbsenceType.OTHER_ABSENCE,
+                        true,
+                        employee.evakaUser.name,
+                        testNow,
+                    ),
+                absenceNonbillable =
+                    AbsenceTypeResponse(
+                        AbsenceType.OTHER_ABSENCE,
+                        true,
+                        employee.evakaUser.name,
+                        testNow,
+                    ),
                 possibleAbsenceCategories =
                     setOf(AbsenceCategory.NONBILLABLE, AbsenceCategory.BILLABLE),
                 shiftCare = null,
@@ -1540,8 +1717,20 @@ class AttendanceReservationsControllerIntegrationTest :
                             employee2.evakaUser,
                         )
                     ),
-                absenceBillable = AbsenceTypeResponse(AbsenceType.FORCE_MAJEURE, true),
-                absenceNonbillable = AbsenceTypeResponse(AbsenceType.OTHER_ABSENCE, true),
+                absenceBillable =
+                    AbsenceTypeResponse(
+                        AbsenceType.FORCE_MAJEURE,
+                        true,
+                        employee2.evakaUser.name,
+                        testNow,
+                    ),
+                absenceNonbillable =
+                    AbsenceTypeResponse(
+                        AbsenceType.OTHER_ABSENCE,
+                        true,
+                        employee.evakaUser.name,
+                        testNow,
+                    ),
                 possibleAbsenceCategories =
                     setOf(AbsenceCategory.NONBILLABLE, AbsenceCategory.BILLABLE),
                 shiftCare = null,
@@ -1605,8 +1794,9 @@ class AttendanceReservationsControllerIntegrationTest :
 
     @Test
     fun `get non-reservable reservations throws forbidden when child doesn't have placement`() {
-        val mobileDeviceId =
-            db.transaction { tx -> tx.insert(DevMobileDevice(unitId = daycare.id)) }
+        val mobileDeviceId = db.transaction { tx ->
+            tx.insert(DevMobileDevice(unitId = daycare.id))
+        }
         assertThrows<Forbidden> {
             attendanceReservationController.getConfirmedRangeData(
                 dbInstance(),
@@ -1619,18 +1809,17 @@ class AttendanceReservationsControllerIntegrationTest :
 
     @Test
     fun `get non-reservable reservations throws forbidden when child has placement to other unit`() {
-        val mobileDeviceId =
-            db.transaction { tx ->
-                tx.insert(
-                    DevPlacement(
-                        childId = child1.id,
-                        unitId = daycare2.id,
-                        startDate = mon,
-                        endDate = fri,
-                    )
+        val mobileDeviceId = db.transaction { tx ->
+            tx.insert(
+                DevPlacement(
+                    childId = child1.id,
+                    unitId = daycare2.id,
+                    startDate = mon,
+                    endDate = fri,
                 )
-                tx.insert(DevMobileDevice(unitId = daycare.id))
-            }
+            )
+            tx.insert(DevMobileDevice(unitId = daycare.id))
+        }
         assertThrows<Forbidden> {
             attendanceReservationController.getConfirmedRangeData(
                 dbInstance(),
@@ -1643,18 +1832,17 @@ class AttendanceReservationsControllerIntegrationTest :
 
     @Test
     fun `set non-reservable reservations updates correct data`() {
-        val mobileDeviceId =
-            db.transaction { tx ->
-                tx.insert(
-                    DevPlacement(
-                        childId = child1.id,
-                        unitId = daycare.id,
-                        startDate = mon,
-                        endDate = fri,
-                    )
+        val mobileDeviceId = db.transaction { tx ->
+            tx.insert(
+                DevPlacement(
+                    childId = child1.id,
+                    unitId = daycare.id,
+                    startDate = mon,
+                    endDate = fri,
                 )
-                tx.insert(DevMobileDevice(unitId = daycare.id))
-            }
+            )
+            tx.insert(DevMobileDevice(unitId = daycare.id))
+        }
         attendanceReservationController.setConfirmedRangeReservations(
             dbInstance(),
             AuthenticatedUser.MobileDevice(id = mobileDeviceId),
@@ -1937,34 +2125,34 @@ class AttendanceReservationsControllerIntegrationTest :
                 LocalDate.of(2024, 5, 20), // Mon
                 LocalDate.of(2024, 5, 26), // Sun
             )
-        val daycareId =
-            db.transaction { tx ->
-                val areaId = tx.insert(DevCareArea(name = "Shift Care Area", shortName = "area"))
-                val daycareId =
-                    tx.insert(
-                        DevDaycare(
-                            areaId = areaId,
-                            // mon-fri
-                            operationTimes =
-                                listOf(fullDay, fullDay, fullDay, fullDay, fullDay, null, null),
-                            // mon-sat
-                            shiftCareOperationTimes =
-                                listOf(fullDay, fullDay, fullDay, fullDay, fullDay, fullDay, null),
-                        )
+        val daycareId = db.transaction { tx ->
+            val areaId = tx.insert(DevCareArea(name = "Shift Care Area", shortName = "area"))
+            val daycareId =
+                tx.insert(
+                    DevDaycare(
+                        areaId = areaId,
+                        // mon-fri
+                        operationTimes =
+                            listOf(fullDay, fullDay, fullDay, fullDay, fullDay, null, null),
+                        // mon-sat
+                        shiftCareOperationTimes =
+                            listOf(fullDay, fullDay, fullDay, fullDay, fullDay, fullDay, null),
                     )
-                tx.insertDaycareAclRow(daycareId, employee.id, UserRole.STAFF)
-                daycareId
-            }
+                )
+            tx.insertDaycareAclRow(daycareId, employee.id, UserRole.STAFF)
+            daycareId
+        }
         val groupId = db.transaction { it.insert(DevDaycareGroup(daycareId = daycareId)) }
         val mobileDeviceId = insertMobileDevice(daycareId)
-        val normalChild =
-            db.transaction { insertChildData(it, range, daycareId, groupId, ShiftCareType.NONE) }
-        val shiftCareChild =
-            db.transaction { insertChildData(it, range, daycareId, groupId, ShiftCareType.FULL) }
-        val intermittentShiftCareChild =
-            db.transaction {
-                insertChildData(it, range, daycareId, groupId, ShiftCareType.INTERMITTENT)
-            }
+        val normalChild = db.transaction {
+            insertChildData(it, range, daycareId, groupId, ShiftCareType.NONE)
+        }
+        val shiftCareChild = db.transaction {
+            insertChildData(it, range, daycareId, groupId, ShiftCareType.FULL)
+        }
+        val intermittentShiftCareChild = db.transaction {
+            insertChildData(it, range, daycareId, groupId, ShiftCareType.INTERMITTENT)
+        }
 
         range.dates().take(5).forEach { date ->
             getConfirmedChildReservationsForDay(date, daycareId, mobileDeviceId, clock).also { res
@@ -2003,23 +2191,21 @@ class AttendanceReservationsControllerIntegrationTest :
 
     @Test
     fun `shift care filter on getReservationStatisticsForConfirmedDays returns only shift care statistics`() {
-        val daycareId =
-            db.transaction { tx ->
-                val areaId =
-                    tx.insert(DevCareArea(name = "Shift Care Stats Area", shortName = "area"))
-                val daycareId =
-                    tx.insert(
-                        DevDaycare(
-                            areaId = areaId,
-                            operationTimes =
-                                listOf(fullDay, fullDay, fullDay, fullDay, fullDay, null, null),
-                            shiftCareOperationTimes =
-                                listOf(fullDay, fullDay, fullDay, fullDay, fullDay, fullDay, null),
-                        )
+        val daycareId = db.transaction { tx ->
+            val areaId = tx.insert(DevCareArea(name = "Shift Care Stats Area", shortName = "area"))
+            val daycareId =
+                tx.insert(
+                    DevDaycare(
+                        areaId = areaId,
+                        operationTimes =
+                            listOf(fullDay, fullDay, fullDay, fullDay, fullDay, null, null),
+                        shiftCareOperationTimes =
+                            listOf(fullDay, fullDay, fullDay, fullDay, fullDay, fullDay, null),
                     )
-                tx.insertDaycareAclRow(daycareId, employee.id, UserRole.STAFF)
-                daycareId
-            }
+                )
+            tx.insertDaycareAclRow(daycareId, employee.id, UserRole.STAFF)
+            daycareId
+        }
         val groupId = db.transaction { it.insert(DevDaycareGroup(daycareId = daycareId)) }
         val mobileDeviceId = insertMobileDevice(daycareId)
         val confirmedRangeStart =
@@ -2074,56 +2260,54 @@ class AttendanceReservationsControllerIntegrationTest :
     @Test
     fun `shift care filter on getChildReservationsForDay returns only shift care children`() {
         val range = FiniteDateRange(LocalDate.of(2024, 5, 20), LocalDate.of(2024, 5, 26))
-        val daycareId =
-            db.transaction { tx ->
-                val areaId =
-                    tx.insert(DevCareArea(name = "Shift Care Filter Area", shortName = "area"))
-                val daycareId =
-                    tx.insert(
-                        DevDaycare(
-                            areaId = areaId,
-                            operationTimes =
-                                listOf(fullDay, fullDay, fullDay, fullDay, fullDay, null, null),
-                            shiftCareOperationTimes =
-                                listOf(fullDay, fullDay, fullDay, fullDay, fullDay, fullDay, null),
-                        )
+        val daycareId = db.transaction { tx ->
+            val areaId = tx.insert(DevCareArea(name = "Shift Care Filter Area", shortName = "area"))
+            val daycareId =
+                tx.insert(
+                    DevDaycare(
+                        areaId = areaId,
+                        operationTimes =
+                            listOf(fullDay, fullDay, fullDay, fullDay, fullDay, null, null),
+                        shiftCareOperationTimes =
+                            listOf(fullDay, fullDay, fullDay, fullDay, fullDay, fullDay, null),
                     )
-                tx.insertDaycareAclRow(daycareId, employee.id, UserRole.STAFF)
-                daycareId
-            }
+                )
+            tx.insertDaycareAclRow(daycareId, employee.id, UserRole.STAFF)
+            daycareId
+        }
         val groupId = db.transaction { it.insert(DevDaycareGroup(daycareId = daycareId)) }
         val mobileDeviceId = insertMobileDevice(daycareId)
-        val normalChild =
-            db.transaction { insertChildData(it, range, daycareId, groupId, ShiftCareType.NONE) }
-        val shiftCareChild =
-            db.transaction { insertChildData(it, range, daycareId, groupId, ShiftCareType.FULL) }
-        val intermittentShiftCareChild =
-            db.transaction {
-                insertChildData(it, range, daycareId, groupId, ShiftCareType.INTERMITTENT)
-            }
-        val childWithoutServiceNeed =
-            db.transaction { tx ->
-                val childId = tx.insert(DevPerson(), DevPersonType.CHILD)
-                tx.insert(
-                        DevPlacement(
-                            childId = childId,
-                            unitId = daycareId,
+        val normalChild = db.transaction {
+            insertChildData(it, range, daycareId, groupId, ShiftCareType.NONE)
+        }
+        val shiftCareChild = db.transaction {
+            insertChildData(it, range, daycareId, groupId, ShiftCareType.FULL)
+        }
+        val intermittentShiftCareChild = db.transaction {
+            insertChildData(it, range, daycareId, groupId, ShiftCareType.INTERMITTENT)
+        }
+        val childWithoutServiceNeed = db.transaction { tx ->
+            val childId = tx.insert(DevPerson(), DevPersonType.CHILD)
+            tx.insert(
+                    DevPlacement(
+                        childId = childId,
+                        unitId = daycareId,
+                        startDate = range.start,
+                        endDate = range.end,
+                    )
+                )
+                .also { placementId ->
+                    tx.insert(
+                        DevDaycareGroupPlacement(
+                            daycarePlacementId = placementId,
+                            daycareGroupId = groupId,
                             startDate = range.start,
                             endDate = range.end,
                         )
                     )
-                    .also { placementId ->
-                        tx.insert(
-                            DevDaycareGroupPlacement(
-                                daycarePlacementId = placementId,
-                                daycareGroupId = groupId,
-                                startDate = range.start,
-                                endDate = range.end,
-                            )
-                        )
-                    }
-                childId
-            }
+                }
+            childId
+        }
 
         val weekday = range.start // Monday
         val withoutFilter =
@@ -2160,33 +2344,33 @@ class AttendanceReservationsControllerIntegrationTest :
                 LocalDate.of(2024, 5, 20), // Mon
                 LocalDate.of(2024, 5, 26), // Sun
             )
-        val daycareId =
-            db.transaction { tx ->
-                val areaId = tx.insert(DevCareArea(name = "Shift Care Area", shortName = "area"))
-                val daycareId =
-                    tx.insert(
-                        DevDaycare(
-                            areaId = areaId,
-                            // mon-fri
-                            operationTimes =
-                                listOf(fullDay, fullDay, fullDay, fullDay, fullDay, null, null),
-                            // mon-sat
-                            shiftCareOperationTimes =
-                                listOf(fullDay, fullDay, fullDay, fullDay, fullDay, fullDay, null),
-                        )
+        val daycareId = db.transaction { tx ->
+            val areaId = tx.insert(DevCareArea(name = "Shift Care Area", shortName = "area"))
+            val daycareId =
+                tx.insert(
+                    DevDaycare(
+                        areaId = areaId,
+                        // mon-fri
+                        operationTimes =
+                            listOf(fullDay, fullDay, fullDay, fullDay, fullDay, null, null),
+                        // mon-sat
+                        shiftCareOperationTimes =
+                            listOf(fullDay, fullDay, fullDay, fullDay, fullDay, fullDay, null),
                     )
-                tx.insertDaycareAclRow(daycareId, employee.id, UserRole.STAFF)
-                daycareId
-            }
+                )
+            tx.insertDaycareAclRow(daycareId, employee.id, UserRole.STAFF)
+            daycareId
+        }
         val groupId = db.transaction { it.insert(DevDaycareGroup(daycareId = daycareId)) }
-        val normalChild =
-            db.transaction { insertChildData(it, range, daycareId, groupId, ShiftCareType.NONE) }
-        val shiftCareChild =
-            db.transaction { insertChildData(it, range, daycareId, groupId, ShiftCareType.FULL) }
-        val intermittentShiftCareChild =
-            db.transaction {
-                insertChildData(it, range, daycareId, groupId, ShiftCareType.INTERMITTENT)
-            }
+        val normalChild = db.transaction {
+            insertChildData(it, range, daycareId, groupId, ShiftCareType.NONE)
+        }
+        val shiftCareChild = db.transaction {
+            insertChildData(it, range, daycareId, groupId, ShiftCareType.FULL)
+        }
+        val intermittentShiftCareChild = db.transaction {
+            insertChildData(it, range, daycareId, groupId, ShiftCareType.INTERMITTENT)
+        }
 
         val result =
             getAttendanceReservations(

@@ -55,6 +55,7 @@ test.describe('Service Worker Messaging', () => {
 
   test.beforeEach(async ({ newEvakaPage }) => {
     await resetServiceState()
+    await Fixture.decisionReasoningGenericDefaults().save()
     await testCareArea.save()
     await testDaycare.save()
     await Fixture.family({
@@ -120,6 +121,45 @@ test.describe('Service Worker Messaging', () => {
       )
       await citizenMessagesPage.openFirstThread()
       await citizenMessagesPage.assertThreadContent({ title, content })
+    })
+
+    test('should not send a bulletin when the sender is switched to the municipal account and back', async () => {
+      await openStaffPage(mockedTime, messagingAndServiceWorker)
+      const applReadView = new ApplicationReadView(staffPage)
+      await applReadView.navigateToApplication(applicationFixtureId)
+      const messageEditor = (
+        await applReadView.openMessagesPage()
+      ).getMessageEditor()
+
+      // Switching the sender to the municipal account selects the bulletin type...
+      await messageEditor.senderSelection.fillAndSelectFirst('Espoon kaupunki')
+      await messageEditor.messageTypeBulletin.waitUntilChecked()
+
+      // ...and switching back hides the type selection and reverts the type to
+      // a regular message
+      await messageEditor.senderSelection.fillAndSelectFirst(
+        'Varhaiskasvatuksen palveluohjaus'
+      )
+      await messageEditor.assertSimpleViewVisible()
+      await messageEditor.assertMessageType('MESSAGE')
+
+      const title = 'Message to citizen'
+      const content = 'Hello citizen!'
+      await messageEditor.inputTitle.fill(title)
+      await messageEditor.inputContent.fill(content)
+      await messageEditor.sendButton.click()
+      await expect(messageEditor).toBeHidden()
+      await runPendingAsyncJobs(mockedTime.addMinutes(1))
+
+      // The citizen can reply, so the message was not sent as a bulletin
+      await openCitizenPage(mockedTime.addHours(1), '/messages')
+      const citizenMessagesPage = new CitizenMessagesPage(
+        citizenPage,
+        'desktop'
+      )
+      await citizenMessagesPage.openFirstThread()
+      await citizenMessagesPage.assertThreadContent({ title, content })
+      await citizenMessagesPage.replyToFirstThread('Reply from citizen')
     })
 
     test('should NOT be possible for a citizen without placed children to send new messages', async () => {

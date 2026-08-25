@@ -17,6 +17,8 @@ import evaka.core.attachment.AttachmentService
 import evaka.core.attendance.addMissingStaffAttendanceDepartures
 import evaka.core.calendarevent.CalendarEventNotificationService
 import evaka.core.caseprocess.migrateProcessMetadata
+import evaka.core.dailyservicetimes.deleteOldDailyServiceTimeNotifications
+import evaka.core.dataremoval.DataRemovalService
 import evaka.core.daycare.controllers.removeDaycareAclForRole
 import evaka.core.document.archival.planChildDocumentArchival
 import evaka.core.document.childdocument.ChildDocumentService
@@ -33,6 +35,7 @@ import evaka.core.nekku.NekkuService
 import evaka.core.note.child.daily.deleteExpiredNotes
 import evaka.core.pis.cleanUpInactivePeople
 import evaka.core.pis.deactivateInactiveEmployees
+import evaka.core.pis.deleteExpiredEmailVerifications
 import evaka.core.reports.freezeVoucherValueReportRows
 import evaka.core.reservations.MissingHolidayReservationsReminders
 import evaka.core.reservations.MissingReservationsReminders
@@ -230,10 +233,7 @@ enum class ScheduledJob(
     ),
     SendNewCustomerIncomeNotification(
         ScheduledJobs::sendNewCustomerIncomeNotifications,
-        ScheduledJobSettings(
-            enabled = false,
-            schedule = JobSchedule.cron("0 45 6 1 * *"), // first day of month, 6:45
-        ),
+        ScheduledJobSettings(enabled = false, schedule = JobSchedule.daily(LocalTime.of(6, 45))),
     ),
     SendCalendarEventDigests(
         ScheduledJobs::sendCalendarEventDigests,
@@ -308,6 +308,18 @@ enum class ScheduledJob(
         ScheduledJobs::archiveEligibleChildDocuments,
         ScheduledJobSettings(enabled = false, schedule = JobSchedule.nightly()),
     ),
+    PlanDataRemoval(
+        ScheduledJobs::planDataRemoval,
+        ScheduledJobSettings(enabled = false, schedule = JobSchedule.nightly()),
+    ),
+    DeleteExpiredEmailVerifications(
+        ScheduledJobs::deleteExpiredEmailVerifications,
+        ScheduledJobSettings(enabled = true, schedule = JobSchedule.nightly()),
+    ),
+    DeleteOldDailyServiceTimeNotifications(
+        ScheduledJobs::deleteOldDailyServiceTimeNotifications,
+        ScheduledJobSettings(enabled = true, schedule = JobSchedule.nightly()),
+    ),
 }
 
 private val logger = KotlinLogging.logger {}
@@ -338,6 +350,7 @@ class ScheduledJobs(
     private val asyncJobRunner: AsyncJobRunner<AsyncJob>,
     private val tracer: Tracer,
     private val childDocumentArchivalEnv: ChildDocumentArchivalEnv,
+    private val dataRemovalService: DataRemovalService,
     env: ScheduledJobsEnv<ScheduledJob>,
 ) : JobSchedule {
     override val jobs: List<ScheduledJobDefinition> =
@@ -451,15 +464,14 @@ WHERE id IN (SELECT id FROM attendances_to_end)
     }
 
     fun cancelOutdatedTransferApplications(db: Database.Connection, clock: EvakaClock) {
-        val canceledApplications =
-            db.transaction {
-                val applicationIds =
-                    it.cancelOutdatedSentTransferApplications(
-                        clock,
-                        AuthenticatedUser.SystemInternalUser.evakaUserId,
-                    )
-                applicationIds
-            }
+        val canceledApplications = db.transaction {
+            val applicationIds =
+                it.cancelOutdatedSentTransferApplications(
+                    clock,
+                    AuthenticatedUser.SystemInternalUser.evakaUserId,
+                )
+            applicationIds
+        }
         logger.info {
             "Canceled ${canceledApplications.size} outdated transfer applications (ids: ${canceledApplications.joinToString(", ")})"
         }
@@ -520,6 +532,20 @@ WHERE id IN (SELECT id FROM attendances_to_end)
 
     fun removeExpiredNotes(db: Database.Connection, clock: EvakaClock) {
         db.transaction { it.deleteExpiredNotes(clock.now()) }
+    }
+
+    fun deleteExpiredEmailVerifications(db: Database.Connection, clock: EvakaClock) {
+        db.transaction { tx ->
+            val count = tx.deleteExpiredEmailVerifications(clock.now())
+            logger.info { "Deleted $count expired email verifications" }
+        }
+    }
+
+    fun deleteOldDailyServiceTimeNotifications(db: Database.Connection, clock: EvakaClock) {
+        db.transaction { tx ->
+            val count = tx.deleteOldDailyServiceTimeNotifications(clock.now())
+            logger.info { "Deleted $count old daily service time notifications" }
+        }
     }
 
     fun removeOldAsyncJobs(db: Database.Connection, clock: EvakaClock) {
@@ -600,7 +626,9 @@ WHERE id IN (SELECT id FROM attendances_to_end)
     }
 
     fun scheduleOrphanAttachmentDeletion(db: Database.Connection, clock: EvakaClock) =
-        db.transaction { attachmentService.scheduleOrphanAttachmentDeletion(it, clock) }
+        db.transaction {
+            attachmentService.scheduleOrphanAttachmentDeletion(it, clock)
+        }
 
     fun scheduleMigrateBulletinMessageThreads(db: Database.Connection, clock: EvakaClock) =
         db.transaction { tx ->
@@ -612,14 +640,16 @@ WHERE id IN (SELECT id FROM attendances_to_end)
             )
         }
 
-    fun databaseSanityChecks(db: Database.Connection, clock: EvakaClock) =
-        db.transaction { runSanityChecks(it, clock) }
+    fun databaseSanityChecks(db: Database.Connection, clock: EvakaClock) = db.transaction {
+        runSanityChecks(it, clock)
+    }
 
     fun rotateSfiMessagesPassword(db: Database.Connection, clock: EvakaClock) =
         sfiMessagesClient?.rotatePassword()
 
-    fun cleanTitaniaErrors(db: Database.Connection, clock: EvakaClock) =
-        db.transaction { it.cleanTitaniaErrors(clock.now()) }
+    fun cleanTitaniaErrors(db: Database.Connection, clock: EvakaClock) = db.transaction {
+        it.cleanTitaniaErrors(clock.now())
+    }
 
     fun generateReplacementDraftInvoices(db: Database.Connection, clock: EvakaClock) =
         invoiceGenerator.generateAllReplacementDraftInvoices(db, clock.today())
@@ -629,25 +659,17 @@ WHERE id IN (SELECT id FROM attendances_to_end)
             passwordBlacklist.importBlacklists(db, Path.of(directory))
         }
 
-    fun syncAclRows(db: Database.Connection, clock: EvakaClock) =
-        db.transaction { tx ->
-            val now = clock.now()
-            val today = now.toLocalDate()
+    fun syncAclRows(db: Database.Connection, clock: EvakaClock) = db.transaction { tx ->
+        val now = clock.now()
+        val today = now.toLocalDate()
 
-            tx.getEndedDaycareAclRows(today).forEach {
-                removeDaycareAclForRole(
-                    tx,
-                    asyncJobRunner,
-                    now,
-                    it.daycareId,
-                    it.employeeId,
-                    it.role,
-                )
-            }
-
-            val employeeIds = tx.upsertAclRowsFromScheduled(today)
-            employeeIds.forEach { tx.upsertEmployeeMessageAccount(it) }
+        tx.getEndedDaycareAclRows(today).forEach {
+            removeDaycareAclForRole(tx, asyncJobRunner, now, it.daycareId, it.employeeId, it.role)
         }
+
+        val employeeIds = tx.upsertAclRowsFromScheduled(today)
+        employeeIds.forEach { tx.upsertEmployeeMessageAccount(it) }
+    }
 
     fun getSfiEvents(db: Database.Connection, clock: EvakaClock) {
         sfiAsyncJobs.getEvents(db, clock)
@@ -673,4 +695,7 @@ WHERE id IN (SELECT id FROM attendances_to_end)
             childDocumentArchivalEnv.limit,
         )
     }
+
+    fun planDataRemoval(db: Database.Connection, clock: EvakaClock) =
+        dataRemovalService.planDataRemoval(db, clock)
 }

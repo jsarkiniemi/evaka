@@ -201,35 +201,34 @@ class PreschoolAbsenceReport(private val accessControl: AccessControl) {
         dailyPreschoolTime: TimeRange,
         dailyPreparatoryTime: TimeRange,
     ): List<ChildPreschoolAbsenceRow> {
-        val hourlyRows =
-            absenceRows.map { r ->
-                val dailyTimeInMinutes =
-                    when (r.placementType) {
-                        PlacementType.PREPARATORY,
-                        PlacementType.PREPARATORY_DAYCARE -> {
-                            dailyPreparatoryTime.duration.toMinutes()
-                        }
-
-                        else -> {
-                            dailyPreschoolTime.duration.toMinutes()
-                        }
+        val hourlyRows = absenceRows.map { r ->
+            val dailyTimeInMinutes =
+                when (r.placementType) {
+                    PlacementType.PREPARATORY,
+                    PlacementType.PREPARATORY_DAYCARE -> {
+                        dailyPreparatoryTime.duration.toMinutes()
                     }
-                val childAttendanceDeviationMinutes =
-                    if (r.absenceType == AbsenceType.OTHER_ABSENCE) {
-                        val childDeviations = deviationsByChild[r.childId] ?: emptyList()
-                        childDeviations.sumOf { it.missingMinutes }
-                    } else 0
-                PreschoolAbsenceReportRow(
-                    r.childId,
-                    r.firstName,
-                    r.lastName,
-                    r.placementType,
-                    r.absenceType,
-                    (r.absenceCount * dailyTimeInMinutes + childAttendanceDeviationMinutes)
-                        .floorDiv(60)
-                        .toInt(),
-                )
-            }
+
+                    else -> {
+                        dailyPreschoolTime.duration.toMinutes()
+                    }
+                }
+            val childAttendanceDeviationMinutes =
+                if (r.absenceType == AbsenceType.OTHER_ABSENCE) {
+                    val childDeviations = deviationsByChild[r.childId] ?: emptyList()
+                    childDeviations.sumOf { it.missingMinutes }
+                } else 0
+            PreschoolAbsenceReportRow(
+                r.childId,
+                r.firstName,
+                r.lastName,
+                r.placementType,
+                r.absenceType,
+                (r.absenceCount * dailyTimeInMinutes + childAttendanceDeviationMinutes)
+                    .floorDiv(60)
+                    .toInt(),
+            )
+        }
 
         return hourlyRows
             .groupBy { row -> row.childId }
@@ -240,7 +239,8 @@ class PreschoolAbsenceReport(private val accessControl: AccessControl) {
                     firstName = k.value[0].firstName,
                     lastName = k.value[0].lastName,
                     placementType = k.value[0].placementType,
-                    hourlyTypeResults = k.value.associateBy({ it.absenceType }, { it.absenceHours }),
+                    hourlyTypeResults =
+                        k.value.associateBy({ it.absenceType }, { it.absenceHours }),
                 )
             }
     }
@@ -362,7 +362,8 @@ SELECT ppc.id AS child_id,
     ppc.placement_type
 FROM preschool_placement_children ppc
     LEFT JOIN unnest(${bind(absenceTypes)}::absence_type[]) AS types (absence_type) ON TRUE
-    LEFT JOIN absence ab ON ppc.examination_range @> ab.date
+    LEFT JOIN absence ab ON ${bind(preschoolTerm)} @> ab.date
+        AND ppc.examination_range @> ab.date
         AND ppc.id = ab.child_id
         AND ab.absence_type = types.absence_type
         AND ab.category = 'NONBILLABLE'
@@ -414,7 +415,8 @@ SELECT
     pgpc.placement_type
 FROM preschool_group_placement_children pgpc
     LEFT JOIN unnest(${bind(absenceTypes)}::absence_type[]) AS types (absence_type) ON TRUE
-    LEFT JOIN absence ab ON pgpc.examination_range @> ab.date
+    LEFT JOIN absence ab ON ${bind(preschoolTerm)} @> ab.date
+        AND pgpc.examination_range @> ab.date
         AND pgpc.id = ab.child_id
         AND ab.absence_type = types.absence_type
         AND ab.category = 'NONBILLABLE'

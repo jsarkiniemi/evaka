@@ -26,7 +26,6 @@ import Tooltip from 'lib-components/atoms/Tooltip'
 import { AsyncButton } from 'lib-components/atoms/buttons/AsyncButton'
 import { Button } from 'lib-components/atoms/buttons/Button'
 import { IconOnlyButton } from 'lib-components/atoms/buttons/IconOnlyButton'
-import { LegacyButton } from 'lib-components/atoms/buttons/LegacyButton'
 import Select from 'lib-components/atoms/dropdowns/Select'
 import Checkbox from 'lib-components/atoms/form/Checkbox'
 import TimeInput from 'lib-components/atoms/form/TimeInput'
@@ -40,14 +39,19 @@ import {
   ModalCloseButton,
   PlainModal
 } from 'lib-components/molecules/modals/BaseModal'
-import { H1, H2, H3, LabelLike } from 'lib-components/typography'
+import { fontWeights, H1, H2, H3, LabelLike } from 'lib-components/typography'
 import { defaultMargins, Gap } from 'lib-components/white-space'
 import colors from 'lib-customizations/common'
 import {
   isStaffAttendanceTypesEnabled,
   staffAttendanceTypes as allowedStaffAttendanceTypes
 } from 'lib-customizations/employee'
-import { faExclamationTriangle, faPlus, faTrash } from 'lib-icons'
+import {
+  faExclamationTriangle,
+  faPlus,
+  fasExclamationTriangle,
+  faTrash
+} from 'lib-icons'
 
 import { useTranslation } from '../../../state/i18n'
 import { errorToInputInfo } from '../../../utils/validation/input-info-helper'
@@ -58,6 +62,7 @@ export interface ModalAttendance {
   groupId: GroupId | null
   arrived: HelsinkiDateTime
   departed: HelsinkiDateTime | null
+  departedAutomatically: boolean
   type: StaffAttendanceType
   occupancyCoefficient: number
 }
@@ -65,6 +70,7 @@ export interface ModalAttendance {
 export interface ModalPlannedAttendance {
   start: HelsinkiDateTime
   end: HelsinkiDateTime
+  description: string | null
 }
 
 interface Props<
@@ -220,29 +226,38 @@ function StaffAttendanceDetailsModal<
           {
             arrived: HelsinkiDateTime
             departed: HelsinkiDateTime | null
+            departedAutomatically: boolean
           }[][]
-        >(
-          (prev, { arrived, departed }) =>
-            prev.length === 0 || !last(last(prev))?.departed?.isEqual(arrived)
-              ? [
-                  ...prev,
-                  [
-                    {
-                      arrived,
-                      departed
-                    }
-                  ]
-                ]
-              : [
-                  ...initial(prev),
-                  [...(last(prev) ?? []), { arrived, departed }]
-                ],
-          []
-        )
-        .map((gaplessPeriod) => ({
-          arrived: gaplessPeriod[0].arrived,
-          departed: last(gaplessPeriod)?.departed ?? null
-        })),
+        >((prev, { arrived, departed, departedAutomatically }) => {
+          if (
+            prev.length === 0 ||
+            !last(last(prev))?.departed?.isEqual(arrived)
+          ) {
+            prev.push([
+              {
+                arrived,
+                departed,
+                departedAutomatically
+              }
+            ])
+            return prev
+          }
+          return [
+            ...initial(prev),
+            [
+              ...(last(prev) ?? []),
+              { arrived, departed, departedAutomatically }
+            ]
+          ]
+        }, [])
+        .map((gaplessPeriod) => {
+          const lastEntry = last(gaplessPeriod)
+          return {
+            arrived: gaplessPeriod[0].arrived,
+            departed: lastEntry?.departed ?? null,
+            departedAutomatically: lastEntry?.departedAutomatically ?? false
+          }
+        }),
     [sortedAttendances]
   )
 
@@ -381,10 +396,11 @@ function StaffAttendanceDetailsModal<
               <LabelLike>{i18n.unit.staffAttendance.plan}</LabelLike>
               <FixedSpaceColumn data-qa="staff-attendance-summary-plan">
                 {plannedAttendances.length > 0
-                  ? plannedAttendances.map(({ end, start }, i) => (
+                  ? plannedAttendances.map(({ end, start, description }, i) => (
                       <div key={i}>
                         {formatDate(start, date)} –{' '}
                         {end ? formatDate(end, date) : ''}
+                        {description ? <i> ({description})</i> : null}
                       </div>
                     ))
                   : '–'}
@@ -392,12 +408,43 @@ function StaffAttendanceDetailsModal<
               <LabelLike>{i18n.unit.staffAttendance.realized}</LabelLike>
               <FixedSpaceColumn data-qa="staff-attendance-summary-realized">
                 {gaplessAttendances.length > 0
-                  ? gaplessAttendances.map(({ arrived, departed }, i) => (
-                      <div key={i}>
-                        {arrived ? formatDate(arrived, date) : ''} –{' '}
-                        {departed ? formatDate(departed, date) : ''}
-                      </div>
-                    ))
+                  ? gaplessAttendances.map(
+                      ({ arrived, departed, departedAutomatically }, i) => (
+                        <div key={i}>
+                          <div>
+                            {arrived ? formatDate(arrived, date) : ''} –{' '}
+                            {departed ? (
+                              <DepartedTime
+                                $automaticDeparture={departedAutomatically}
+                                data-qa={
+                                  departedAutomatically
+                                    ? 'departed-automatically-time'
+                                    : undefined
+                                }
+                              >
+                                {formatDate(departed, date)}
+                              </DepartedTime>
+                            ) : (
+                              ''
+                            )}
+                          </div>
+                          {departedAutomatically && (
+                            <AutomaticDepartureLabel data-qa="departed-automatically-label">
+                              <FontAwesomeIcon
+                                icon={fasExclamationTriangle}
+                                color={colors.status.warning}
+                              />
+                              <span>
+                                {
+                                  i18n.unit.staffAttendance
+                                    .departedAutomatically
+                                }
+                              </span>
+                            </AutomaticDepartureLabel>
+                          )}
+                        </div>
+                      )
+                    )
                   : '–'}
               </FixedSpaceColumn>
               <LabelLike>{i18n.unit.staffAttendance.hours}</LabelLike>
@@ -698,7 +745,7 @@ function StaffAttendanceDetailsModal<
         </ListGrid>
         <Gap $size="L" />
         <ModalActions>
-          <LegacyButton text={i18n.common.cancel} onClick={onClose} />
+          <Button text={i18n.common.cancel} onClick={onClose} />
           <AsyncButton
             primary
             text={i18n.unit.staffAttendance.saveChanges}
@@ -776,4 +823,19 @@ const DateInfoDiv = styled(TimeDiv)`
 const ContinuationInfo = styled.div`
   color: ${(p) => p.theme.colors.grayscale.g70};
   font-style: italic;
+`
+
+const DepartedTime = styled.span<{ $automaticDeparture: boolean }>`
+  ${(p) =>
+    p.$automaticDeparture
+      ? `color: ${colors.accents.a2orangeDark}; font-weight: ${fontWeights.semibold};`
+      : ''}
+`
+
+const AutomaticDepartureLabel = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${defaultMargins.xs};
+  font-weight: ${fontWeights.semibold};
+  color: ${colors.accents.a2orangeDark};
 `

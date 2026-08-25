@@ -156,7 +156,7 @@ function validateOption(
 }
 
 export default React.memo(function AssistanceActionForm(props: Props) {
-  const { i18n } = useTranslation()
+  const { i18n, lang } = useTranslation()
   const { clearUiMode, setErrorMessage } = useContext(UIContext)
 
   const initialFormState: FormState = useMemo(
@@ -212,15 +212,15 @@ export default React.memo(function AssistanceActionForm(props: Props) {
   const sortedOptions = useMemo(
     () =>
       assistanceActionOptionCategories.reduce(
-        (acc, category) => ({
-          ...acc,
-          [category]: sortBy(
-            optionsWithValidation.filter(
-              (o) => o.category === category && o.validation !== false
-            ),
-            [(o) => o.displayOrder, (o) => o.nameFi]
-          )
-        }),
+        (acc, category) =>
+          Object.assign(acc, {
+            [category]: sortBy(
+              optionsWithValidation.filter(
+                (o) => o.category === category && o.validation !== false
+              ),
+              [(o) => o.displayOrder, (o) => o.nameFi]
+            )
+          }),
         {} as Record<
           AssistanceActionOptionCategory,
           typeof optionsWithValidation
@@ -315,13 +315,13 @@ export default React.memo(function AssistanceActionForm(props: Props) {
                   <DatePicker
                     date={form.startDate}
                     onChange={(startDate) => updateFormState({ startDate })}
-                    locale="fi"
+                    locale={lang}
                   />
                   <DatePickerSpacer />
                   <DatePicker
                     date={form.endDate}
                     onChange={(endDate) => updateFormState({ endDate })}
-                    locale="fi"
+                    locale={lang}
                   />
                 </FixedSpaceRow>
 
@@ -363,7 +363,7 @@ export default React.memo(function AssistanceActionForm(props: Props) {
                       label={option.nameFi}
                       checked={form.actions.includes(option.value)}
                       onChange={(value) => {
-                        const actions = new Set([...form.actions])
+                        const actions = new Set(form.actions)
                         if (value) actions.add(option.value)
                         else actions.delete(option.value)
                         updateFormState({ actions: Array.from(actions) })

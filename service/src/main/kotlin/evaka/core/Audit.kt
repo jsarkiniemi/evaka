@@ -7,6 +7,8 @@ package evaka.core
 import evaka.core.shared.Id
 import fi.espoo.voltti.logging.loggers.audit
 import io.github.oshai.kotlinlogging.KotlinLogging
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 import kotlin.reflect.KProperty1
 
@@ -50,37 +52,7 @@ enum class Audit(
     private val securityEvent: Boolean = false,
     private val securityLevel: String = "low",
 ) {
-    AbsenceApplicationAccept,
-    AbsenceApplicationCreate,
-    AbsenceApplicationDelete,
-    AbsenceApplicationPossibleRead,
-    AbsenceApplicationRead,
-    AbsenceApplicationReject,
-    AbsenceCitizenCreate,
-    AbsenceRead,
-    AbsenceDelete,
-    AbsenceDeleteRange,
-    AbsenceUpsert,
-    AddressPageDownloadPdf,
-    ApplicationAdminDetailsUpdate,
-    ApplicationCancel,
-    ApplicationConfirmDecisionsMailed,
-    ApplicationCreate,
-    ApplicationDelete,
-    ApplicationPlacementDraftDelete,
-    ApplicationPlacementDraftUpdate,
     ApplicationReadMetadata,
-    ApplicationReadNotifications,
-    ApplicationReadDuplicates,
-    ApplicationReadActivePlacementsByType,
-    ApplicationReturnToSent,
-    ApplicationReturnToWaitingPlacement,
-    ApplicationReturnToWaitingDecision,
-    ApplicationSearch,
-    ApplicationSend,
-    ApplicationSendDecisionsWithoutProposal,
-    ApplicationUpdate,
-    ApplicationVerify,
     ApplicationsReportRead,
     AssistanceActionOptionsRead,
     // AssistanceBasisOptionsRead,
@@ -99,10 +71,8 @@ enum class Audit(
     AttachmentsUploadForMessage,
     AttachmentsUploadForMessageDraft,
     AttachmentsUploadForPedagogicalDocument,
-    AttendanceReservationCitizenCreate,
     AttendanceReservationCitizenRead,
     AttendanceReservationDelete,
-    AttendanceReservationEmployeeCreate,
     AttendanceReservationReportRead,
     BackupCareDelete,
     BackupCareUpdate,
@@ -117,6 +87,7 @@ enum class Audit(
     CalendarEventTimeReservationCreate,
     CalendarEventTimeReservationDelete,
     CalendarEventTimeReservationUpdate,
+    ChildAbsenceReport,
     ChildAdditionalInformationRead,
     ChildAdditionalInformationUpdate,
     ChildAgeLanguageReportRead,
@@ -154,7 +125,6 @@ enum class Audit(
     ChildDailyServiceTimesRead,
     ChildDailyServiceTimeNotificationsRead,
     ChildDailyServiceTimeNotificationsDismiss,
-    ChildDatePresenceUpsert,
     ChildDatePresenceExpectedAbsencesCheck,
     ChildDocumentProposeDecision,
     ChildDocumentAcceptDecision,
@@ -195,9 +165,6 @@ enum class Audit(
     ChildDocumentsReportRead,
     ChildDocumentsReportTemplatesRead,
     ChildSensitiveInfoRead,
-    ChildServiceApplicationsRead,
-    ChildServiceApplicationAccept,
-    ChildServiceApplicationReject,
     ChildServiceNeedsRead,
     ChildStickyNoteCreate,
     ChildStickyNoteUpdate,
@@ -213,6 +180,7 @@ enum class Audit(
     CitizenDocumentResponseReportRead,
     CitizenDocumentResponseReportGroupOptionsRead,
     CitizenEmailVerificationStatusRead,
+    CitizenFamilyRead(securityEvent = true, securityLevel = "high"),
     CitizenFeeDecisionDownloadPdf,
     CitizenNotificationSettingsRead,
     // CitizenNotificationSettingsUpdate,
@@ -231,6 +199,8 @@ enum class Audit(
     ClubTermDelete,
     // ClubTermRead,
     CustomerFeesReportRead,
+    DataRemovalExpiredDelete,
+    DataRemovalExpiredUnset,
     DaycareAssistanceCreate,
     DaycareAssistanceUpdate,
     DaycareAssistanceDelete,
@@ -238,13 +208,7 @@ enum class Audit(
     DaycareGroupPlacementDelete,
     DaycareGroupPlacementTransfer,
     // DaycareBackupCareRead,
-    DecisionAccept,
-    DecisionDownloadPdf,
-    DecisionDraftRead,
-    DecisionDraftUpdate,
-    DecisionRead,
-    DecisionReadByApplication,
-    DecisionReject,
+    // DecisionReadByApplication,
     DecisionsReportRead,
     DuplicatePeopleReportRead,
     DocumentTemplateCopy,
@@ -385,6 +349,9 @@ enum class Audit(
     MessagingCitizenFetchReceiversForAccount,
     MessagingCitizenSendMessage,
     MessagingMessageThreadRead,
+    MessagingDeleteContent,
+    MessagingViewDeletedContent,
+    MessagingDeletionEmailSent,
     MissingHeadOfFamilyReportRead,
     MissingServiceNeedReportRead,
     MobileDevicesList,
@@ -399,10 +366,6 @@ enum class Audit(
     NekkuOrdersReportRead,
     NekkuManualOrder,
     NonSsnChildrenReport,
-    NoteCreate,
-    NoteDelete,
-    NoteRead,
-    NoteUpdate,
     NotesByGroupRead,
     OccupancyGroupReportRead,
     OccupancyRead,
@@ -469,14 +432,8 @@ enum class Audit(
     PlacementCancel,
     PlacementCountReportRead,
     PlacementCreate,
-    PlacementDesktopDaycaresRead,
     PlacementSketchingReportRead,
-    PlacementPlanCreate,
-    PlacementPlanRespond,
-    PlacementPlanDraftRead,
     // PlacementPlanSearch,
-    PlacementProposalCreate,
-    PlacementProposalAccept,
     PlacementSearch,
     PlacementUpdate,
     PlacementServiceNeedCreate,
@@ -484,8 +441,6 @@ enum class Audit(
     PlacementServiceNeedUpdate,
     PlacementTerminate,
     PlacementChildPlacementPeriodsRead,
-    PlacementTool,
-    PlacementToolValidate,
     PreschoolAbsenceReport,
     PreschoolAssistanceCreate,
     PreschoolAssistanceUpdate,
@@ -493,7 +448,6 @@ enum class Audit(
     PreschoolTermCreate,
     PreschoolTermUpdate,
     PreschoolTermDelete,
-    // PreschoolTermRead,
     // PresenceReportRead,
     PushSettingsRead,
     PushSettingsSet,
@@ -507,7 +461,6 @@ enum class Audit(
     SpecialDietsRead,
     // SpecialDietsUpdate,
     MealTexturesRead,
-    ServiceWorkerNoteUpdate,
     SextetReportRead,
     UnitStaffAttendanceRead,
     StaffAttendanceArrivalCreate,
@@ -547,8 +500,6 @@ enum class Audit(
     UnitAclDeleteScheduled,
     UnitAclRead,
     UnitScheduledAclRead,
-    UnitApplicationsRead,
-    UnitServiceApplicationsRead,
     UnitAttendanceReservationsRead,
     UnitCalendarEventsRead,
     UnitFeaturesRead,
@@ -586,7 +537,84 @@ enum class Audit(
     VoucherValueDecisionSearch,
     VoucherValueDecisionSend,
     VoucherValueDecisionSetType,
-    VoucherValueDecisionUnignore;
+    VoucherValueDecisionUnignore,
+
+    // Everything above still uses the legacy `Audit.<Event>.log(targetId = ...)` signature.
+    // Events below have been migrated to `audit.log(Audit.<Event>, clock)` via AuditContext.
+    // Move an event here (keeping this section alphabetical) once its endpoint is migrated; when
+    // the section above is empty, delete this separator and merge back into one alphabetical list.
+    AbsenceApplicationAccept,
+    AbsenceApplicationCreate,
+    AbsenceApplicationDelete,
+    AbsenceApplicationPossibleRead,
+    AbsenceApplicationRead,
+    AbsenceApplicationReject,
+    AbsenceCitizenCreate,
+    AbsenceDelete,
+    AbsenceDeleteRange,
+    AbsenceRead,
+    AbsenceUpsert,
+    AddressPageDownloadPdf,
+    ApplicationAdminDetailsUpdate,
+    ApplicationCancel,
+    ApplicationConfirmDecisionsMailed,
+    ApplicationCreate,
+    ApplicationDelete,
+    ApplicationPlacementDraftDelete,
+    ApplicationPlacementDraftUpdate,
+    ApplicationRead,
+    ApplicationReadActivePlacementsByType,
+    ApplicationReadDuplicates,
+    ApplicationReadNotifications,
+    ApplicationReturnToSent,
+    ApplicationReturnToWaitingDecision,
+    ApplicationReturnToWaitingPlacement,
+    ApplicationSearch,
+    ApplicationSend,
+    ApplicationSendDecisionsWithoutProposal,
+    ApplicationUpdate,
+    ApplicationVerify,
+    AttendanceReservationCitizenCreate,
+    AttendanceReservationEmployeeCreate,
+    ChildDatePresenceUpsert,
+    ChildServiceApplicationAccept,
+    ChildServiceApplicationReject,
+    ChildServiceApplicationsRead,
+    DecisionAccept,
+    DecisionArchive,
+    DecisionDownloadPdf,
+    DecisionDraftRead,
+    DecisionDraftUpdate,
+    DecisionRead,
+    DecisionReasoningGenericCreate,
+    DecisionReasoningGenericDelete,
+    DecisionReasoningGenericRead,
+    DecisionReasoningGenericRemove,
+    DecisionReasoningGenericUpdate,
+    DecisionReasoningIndividualCreate,
+    DecisionReasoningIndividualRead,
+    DecisionReasoningIndividualRemove,
+    DecisionReject,
+    DecisionUnitsRead,
+    FeeDecisionArchive,
+    NoteCreate,
+    NoteDelete,
+    NoteRead,
+    NoteUpdate,
+    PlacementDesktopDaycaresRead,
+    PlacementPlanCreate,
+    PlacementPlanDraftRead,
+    PlacementPlanRespond,
+    PlacementProposalAccept,
+    PlacementProposalCreate,
+    PlacementTool,
+    PlacementToolApplicationCreate,
+    PlacementToolValidate,
+    PreschoolTermRead,
+    ServiceWorkerNoteUpdate,
+    UnitApplicationsRead,
+    UnitServiceApplicationsRead,
+    VoucherValueDecisionArchive;
 
     private val eventCode = name
 
@@ -662,76 +690,36 @@ enum class Audit(
             eventCode
         }
     }
-}
 
-// Audit events that are enforced to be logged with child id(s)
-enum class ChildAudit(
-    private val securityEvent: Boolean = false,
-    private val securityLevel: String = "low",
-) {
-    ApplicationRead;
-
-    private val eventCode = name
-
-    class UseNamedArguments private constructor()
-
-    /**
-     * Logs an audit event that requires child ID(s) to be specified.
-     *
-     * The childId is automatically combined with objectId in the audit log to ensure child-related
-     * operations are always traceable.
-     *
-     * Examples:
-     * ```
-     * // Simple child-related read with single child
-     * ChildAudit.ApplicationRead.log(
-     *     targetId = AuditId(userId),
-     *     childId = AuditId(childId)
-     * )
-     *
-     * // Multiple children with count metadata
-     * ChildAudit.ApplicationRead.log(
-     *     targetId = AuditId(userId),
-     *     childId = AuditId(childIds),
-     *     meta = mapOf("count" to childIds.size)
-     * )
-     *
-     * // Child operation with additional context in objectId
-     * ChildAudit.ApplicationRead.log(
-     *     targetId = AuditId(applicationId),
-     *     childId = AuditId(childId),
-     *     objectId = AuditId(guardianId)
-     * )
-     * ```
-     */
     fun log(
         // This is a hack to force passing all real parameters by name
-        @Suppress("UNUSED_PARAMETER") vararg forceNamed: Array<out UseNamedArguments>,
-        /** The child ID that must be logged for this audit event. */
-        childId: AuditId,
-        /** The primary resource or entity being acted upon by this audit event. */
-        targetId: AuditId? = null,
-        /** Related or secondary entities affected by the action, or the result of the action. */
-        objectId: AuditId? = null,
-        /**
-         * Additional contextual information such as counts, date ranges, or other metadata relevant
-         * to the audit event.
-         */
+        @Suppress("UNUSED_PARAMETER") vararg forceNamed: UseNamedArguments,
+        today: LocalDate,
+        minDate: LocalDate?,
+        context: Map<String, Any?>,
         meta: Map<String, Any?> = emptyMap(),
-    ) {
-        val combinedObjectIds = objectId?.let { childId + it } ?: childId
+    ) =
         logger.audit(
             mapOf(
                 "eventCode" to eventCode,
-                "targetId" to targetId?.value,
-                "objectId" to combinedObjectIds.value,
+                "context" to context,
+                "minDate" to minDate?.toString(),
+                "daysIntoHistory" to daysIntoHistory(minDate, today),
                 "securityLevel" to securityLevel,
                 "securityEvent" to securityEvent,
             ) + if (meta.isNotEmpty()) mapOf("meta" to meta) else emptyMap()
         ) {
             eventCode
         }
-    }
+}
+
+/**
+ * How many days [minDate] reaches into the past relative to [today]. Returns `null` when [minDate]
+ * is null, and `0` when [minDate] is today or in the future, so the value never goes negative.
+ */
+fun daysIntoHistory(minDate: LocalDate?, today: LocalDate): Long? {
+    if (minDate == null) return null
+    return maxOf(0L, ChronoUnit.DAYS.between(minDate, today))
 }
 
 private val logger = KotlinLogging.logger {}

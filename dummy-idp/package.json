@@ -4,25 +4,35 @@
   "private": true,
   "scripts": {
     "clean": "rm -rf ./dist",
+    "lint": "oxfmt -c ../.oxfmtrc.json --check && oxlint",
+    "lint:fix": "oxfmt -c ../.oxfmtrc.json && oxlint --fix",
     "type-check": "tsc --noEmit",
     "build": "npm run clean && npm install && tsc --build src",
-    "dev": "tsc --build src && concurrently --prefix '[{name}]' --names 'tsc,nodemon' 'tsc --build --preserveWatchOutput -w src' 'NODE_ENV=local nodemon --enable-source-maps dist/index.js'"
+    "dev": "tsc --build src && concurrently --prefix '[{name}]' --names 'tsc,nodemon' 'tsc --build --preserveWatchOutput -w src' 'NODE_ENV=local nodemon --enable-source-maps dist/index.js'",
+    "test": "node --import tsx --test src/**/*.test.ts"
   },
   "dependencies": {
     "express": "5.2.1",
     "express-session": "1.19.0",
     "samlp": "8.0.0",
     "tslib": "2.8.1",
-    "zod": "4.3.6"
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@types/express": "5.0.6",
-    "@types/express-session": "1.18.2",
+    "@types/express-session": "1.19.0",
     "@types/samlp": "1.0.11",
-    "concurrently": "9.2.1",
+    "concurrently": "10.0.5",
     "nodemon": "3.1.14",
-    "prettier": "3.8.2",
-    "typescript": "6.0.2"
+    "oxfmt": "0.64.0",
+    "oxlint": "1.78.0",
+    "oxlint-tsgolint": "7.0.2001",
+    "prettier": "3.9.6",
+    "tsx": "4.23.12",
+    "typescript": "7.0.2"
+  },
+  "overrides": {
+    "@xmldom/xmldom": "0.8.15"
   },
   "prettier": {
     "arrowParens": "always",

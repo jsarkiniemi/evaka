@@ -4,6 +4,7 @@
 
 package evaka.core.reservations
 
+import evaka.core.AuditContext
 import evaka.core.PureJdbiTest
 import evaka.core.absence.AbsenceCategory
 import evaka.core.absence.AbsenceType
@@ -73,6 +74,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
     private val queryRange = FiniteDateRange(monday.minusDays(10), monday.plusDays(10))
 
     private val citizenReservationThresholdHours = 150L
+    private val calendarOpenBeforePlacementDays = 30
     private val beforeThreshold = HelsinkiDateTime.of(monday.minusDays(7), LocalTime.of(12, 0))
     private val afterThreshold = HelsinkiDateTime.of(monday.minusDays(7), LocalTime.of(21, 0))
 
@@ -129,6 +131,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 adult.user(CitizenAuthLevel.STRONG),
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(
                         childId = child.id,
@@ -142,6 +145,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                     ),
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -181,6 +185,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 adult.user(CitizenAuthLevel.STRONG),
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(
                         childId = child.id,
@@ -200,6 +205,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                     ),
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -233,6 +239,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 adult.user(CitizenAuthLevel.STRONG),
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(
                         childId = child.id,
@@ -246,6 +253,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                     ),
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -275,6 +283,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 adult.user(CitizenAuthLevel.STRONG),
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(
                         childId = child.id,
@@ -288,6 +297,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                     ),
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -322,6 +332,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 HelsinkiDateTime.of(workday.minusWeeks(2), LocalTime.of(12, 0)),
                 adult.user(CitizenAuthLevel.STRONG),
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(
                         childId = child.id,
@@ -336,6 +347,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                     ),
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -392,6 +404,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 adult.user(CitizenAuthLevel.STRONG),
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(
                         childId = child.id,
@@ -400,6 +413,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                     )
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -410,8 +424,9 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
         assertEquals(monday, reservations.first())
 
         // and 1st absence has been removed
-        val absences =
-            db.read { it.getAbsencesOfChildByRange(child.id, DateRange(monday, tuesday)) }
+        val absences = db.read {
+            it.getAbsencesOfChildByRange(child.id, DateRange(monday, tuesday))
+        }
         assertEquals(1, absences.size)
         assertEquals(tuesday, absences.first().date)
     }
@@ -446,8 +461,10 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 adult.user(CitizenAuthLevel.STRONG),
+                AuditContext(),
                 listOf(DailyReservationRequest.Absent(childId = child.id, date = monday)),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -456,8 +473,9 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
         assertEquals(0, reservations.size)
 
         // and absence has been added
-        val absences =
-            db.read { it.getAbsencesOfChildByRange(child.id, DateRange(monday, tuesday)) }
+        val absences = db.read {
+            it.getAbsencesOfChildByRange(child.id, DateRange(monday, tuesday))
+        }
         assertEquals(1, absences.size)
         assertEquals(monday, absences.first().date)
     }
@@ -494,8 +512,10 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 afterThreshold,
                 employee.user,
+                AuditContext(),
                 listOf(DailyReservationRequest.Absent(childId = child.id, date = monday)),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -506,8 +526,9 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
         assertEquals(monday, reservations.first())
 
         // and absence has been added
-        val absences =
-            db.read { it.getAbsencesOfChildByRange(child.id, DateRange(monday, tuesday)) }
+        val absences = db.read {
+            it.getAbsencesOfChildByRange(child.id, DateRange(monday, tuesday))
+        }
         assertEquals(1, absences.size)
         assertEquals(monday, absences.first().date)
     }
@@ -550,6 +571,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 afterThreshold,
                 employee.user,
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(
                         childId = child.id,
@@ -559,6 +581,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                     )
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -611,11 +634,13 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 adult.user(CitizenAuthLevel.STRONG),
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Nothing(childId = child.id, date = monday),
                     DailyReservationRequest.Nothing(childId = child.id, date = tuesday),
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -624,8 +649,9 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
         assertEquals(listOf(), reservations)
 
         // and no absences exist
-        val absences =
-            db.read { it.getAbsencesOfChildByRange(child.id, DateRange(monday, tuesday)) }
+        val absences = db.read {
+            it.getAbsencesOfChildByRange(child.id, DateRange(monday, tuesday))
+        }
         assertEquals(listOf(), absences)
     }
 
@@ -684,6 +710,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 afterThreshold,
                 employee.user,
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Absent(childId = child.id, date = monday),
                     DailyReservationRequest.Absent(childId = child.id, date = tuesday),
@@ -694,6 +721,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                     ),
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
                 true,
             )
         }
@@ -768,6 +796,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 adult.user(CitizenAuthLevel.STRONG),
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(
                         childId = child.id,
@@ -782,6 +811,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                     DailyReservationRequest.Nothing(childId = child.id, date = wednesday),
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -792,8 +822,9 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
         assertEquals(monday, reservations.first())
 
         // and 1st absence has been removed
-        val absences =
-            db.read { it.getAbsencesOfChildByRange(child.id, DateRange(monday, wednesday)) }
+        val absences = db.read {
+            it.getAbsencesOfChildByRange(child.id, DateRange(monday, wednesday))
+        }
         assertEquals(listOf(tuesday, wednesday), absences.map { it.date })
         assertEquals(
             listOf(AbsenceType.FREE_ABSENCE, AbsenceType.FREE_ABSENCE),
@@ -843,6 +874,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 adult.user(CitizenAuthLevel.STRONG),
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(
                         childId = child.id,
@@ -853,6 +885,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                     DailyReservationRequest.Nothing(childId = child.id, date = wednesday),
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -889,6 +922,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 adult.user(CitizenAuthLevel.STRONG),
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(
                         childId = child.id,
@@ -902,6 +936,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                     ),
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -911,6 +946,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 adult.user(CitizenAuthLevel.STRONG),
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(
                         childId = child.id,
@@ -919,6 +955,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                     )
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -969,16 +1006,20 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 adult.user(CitizenAuthLevel.STRONG),
+                AuditContext(),
                 listOf(DailyReservationRequest.Present(childId = child.id, date = monday)),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
         // then
-        val reservations =
-            db.read { it.getReservationsCitizen(monday, adult.id, FiniteDateRange(monday, monday)) }
-        val absences =
-            db.read { it.getAbsencesCitizen(monday, adult.id, FiniteDateRange(monday, monday)) }
+        val reservations = db.read {
+            it.getReservationsCitizen(monday, adult.id, FiniteDateRange(monday, monday))
+        }
+        val absences = db.read {
+            it.getAbsencesCitizen(monday, adult.id, FiniteDateRange(monday, monday))
+        }
         assertEquals(0, reservations.size)
         assertEquals(0, absences.size)
     }
@@ -1018,6 +1059,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                     it,
                     beforeThreshold,
                     user,
+                    AuditContext(),
                     listOf(
                         DailyReservationRequest.Present(
                             childId = child.id,
@@ -1029,6 +1071,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                         ),
                     ),
                     citizenReservationThresholdHours,
+                    calendarOpenBeforePlacementDays,
                 )
             }
 
@@ -1067,16 +1110,19 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 adult.user(CitizenAuthLevel.STRONG),
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Present(childId = child.id, date = holidayPeriodStart)
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
         // then
-        val dailyReservations =
-            db.read { it.getReservationsCitizen(monday, adult.id, holidayPeriod) }
+        val dailyReservations = db.read {
+            it.getReservationsCitizen(monday, adult.id, holidayPeriod)
+        }
         assertEquals(1, dailyReservations.size)
         dailyReservations.first().let {
             assertEquals(holidayPeriodStart, it.date)
@@ -1111,6 +1157,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 adult.user(CitizenAuthLevel.STRONG),
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(
                         childId = child.id,
@@ -1125,12 +1172,14 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                     ),
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
         // then
-        val dailyReservations =
-            db.read { it.getReservationsCitizen(monday, adult.id, holidayPeriod) }
+        val dailyReservations = db.read {
+            it.getReservationsCitizen(monday, adult.id, holidayPeriod)
+        }
         assertEquals(2, dailyReservations.size)
         dailyReservations.first().let {
             assertEquals(holidayPeriodStart, it.date)
@@ -1176,6 +1225,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                     it,
                     beforeThreshold,
                     adult.user(CitizenAuthLevel.STRONG),
+                    AuditContext(),
                     listOf(
                         DailyReservationRequest.Present(
                             childId = child.id,
@@ -1183,6 +1233,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                         )
                     ),
                     citizenReservationThresholdHours,
+                    calendarOpenBeforePlacementDays,
                 )
             }
         }
@@ -1194,6 +1245,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                     it,
                     beforeThreshold,
                     adult.user(CitizenAuthLevel.STRONG),
+                    AuditContext(),
                     listOf(
                         DailyReservationRequest.Present(
                             childId = child.id,
@@ -1201,6 +1253,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                         )
                     ),
                     citizenReservationThresholdHours,
+                    calendarOpenBeforePlacementDays,
                 )
             }
         }
@@ -1254,6 +1307,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 adult.user(CitizenAuthLevel.STRONG),
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(
                         childId = child.id,
@@ -1271,6 +1325,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                     ),
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -1322,10 +1377,12 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 adult.user(CitizenAuthLevel.STRONG),
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Present(childId = child.id, date = holidayPeriodStart)
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -1374,10 +1431,12 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 adult.user(CitizenAuthLevel.STRONG),
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Nothing(childId = child.id, date = holidayPeriodStart)
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -1434,6 +1493,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 employee.user,
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(
                         childId = child.id,
@@ -1442,6 +1502,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                     )
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -1498,6 +1559,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 employee.user,
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(
                         childId = child.id,
@@ -1506,6 +1568,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                     )
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -1558,6 +1621,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 adult.user(CitizenAuthLevel.STRONG),
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(
                         childId = child.id,
@@ -1571,6 +1635,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                     ),
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -1579,8 +1644,9 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
         assertEquals(0, reservations.size)
 
         // and absence has not been removed
-        val absences =
-            db.read { it.getAbsencesOfChildByRange(child.id, DateRange(monday, tuesday)) }
+        val absences = db.read {
+            it.getAbsencesOfChildByRange(child.id, DateRange(monday, tuesday))
+        }
         assertEquals(2, absences.size)
     }
 
@@ -1623,6 +1689,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 employee.user,
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(
                         childId = child.id,
@@ -1636,6 +1703,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                     ),
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -1644,8 +1712,9 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
         assertEquals(2, reservations.size)
 
         // and absences have been removed
-        val absences =
-            db.read { it.getAbsencesOfChildByRange(child.id, DateRange(monday, tuesday)) }
+        val absences = db.read {
+            it.getAbsencesOfChildByRange(child.id, DateRange(monday, tuesday))
+        }
         assertEquals(0, absences.size)
     }
 
@@ -1726,10 +1795,12 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 adult.user(CitizenAuthLevel.WEAK),
+                AuditContext(),
                 times.map { (date, timeRange) ->
                     DailyReservationRequest.Reservations(child.id, date, timeRange)
                 },
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
                 plannedAbsenceEnabledForHourBasedServiceNeeds = true,
             )
         }
@@ -1790,10 +1861,12 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 adult.user(CitizenAuthLevel.WEAK),
+                AuditContext(),
                 times.map { (date, timeRange) ->
                     DailyReservationRequest.Reservations(child.id, date, timeRange)
                 },
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
                 plannedAbsenceEnabledForHourBasedServiceNeeds = true,
             )
         }
@@ -1877,8 +1950,10 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 adult.user(CitizenAuthLevel.WEAK),
+                AuditContext(),
                 listOf(DailyReservationRequest.Reservations(child.id, monday, preschoolTime)),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -1937,10 +2012,12 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 adult.user(CitizenAuthLevel.WEAK),
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(child.id, monday, veryShortReservation)
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -2008,6 +2085,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 adult.user(CitizenAuthLevel.STRONG),
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(
                         childId = child.id,
@@ -2021,6 +2099,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                     ),
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -2029,8 +2108,9 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
         assertEquals(0, reservations.size)
 
         // and absence has not been removed
-        val absences =
-            db.read { it.getAbsencesOfChildByRange(child.id, DateRange(monday, tuesday)) }
+        val absences = db.read {
+            it.getAbsencesOfChildByRange(child.id, DateRange(monday, tuesday))
+        }
         assertEquals(2, absences.size)
     }
 
@@ -2076,6 +2156,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                 it,
                 beforeThreshold,
                 employee.user,
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(
                         childId = child.id,
@@ -2089,6 +2170,7 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
                     ),
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -2097,8 +2179,9 @@ class CreateReservationsAndAbsencesTest : PureJdbiTest(resetDbBeforeEach = true)
         assertEquals(2, reservations.size)
 
         // and absences have been removed
-        val absences =
-            db.read { it.getAbsencesOfChildByRange(child.id, DateRange(monday, tuesday)) }
+        val absences = db.read {
+            it.getAbsencesOfChildByRange(child.id, DateRange(monday, tuesday))
+        }
         assertEquals(0, absences.size)
     }
 }

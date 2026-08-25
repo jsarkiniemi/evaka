@@ -29,6 +29,7 @@ import type {
   GroupId,
   PersonId
 } from 'lib-common/generated/api-types/shared'
+import LocalDate from 'lib-common/local-date'
 import { formatPersonName } from 'lib-common/names'
 import {
   first,
@@ -79,7 +80,6 @@ import { faUtensils } from 'lib-icons'
 import type { Translations } from '../../../../state/i18n'
 import { useTranslation } from '../../../../state/i18n'
 import { UIContext } from '../../../../state/ui'
-import { UserContext } from '../../../../state/user'
 import type {
   DaycareGroupPlacementDetailed,
   DaycareGroupWithPlacements,
@@ -88,7 +88,6 @@ import type {
 import type { UnitFilters } from '../../../../utils/UnitFilters'
 import { rangesOverlap } from '../../../../utils/date'
 import { isPartDayPlacement } from '../../../../utils/placements'
-import { requireRole } from '../../../../utils/roles'
 import { renderResult } from '../../../async-rendering'
 import { updateBackupCareMutation } from '../../../child-information/queries'
 import { AgeIndicatorChip } from '../../../common/AgeIndicatorChip'
@@ -105,6 +104,10 @@ import { notesByGroupQuery } from '../notes/queries'
 
 import GroupUpdateModal from './group/GroupUpdateModal'
 import NekkuOrderModal from './group/NekkuOrderModal'
+
+const isDaycareGroupPlacement = (
+  placement: DaycareGroupPlacementDetailed | UnitBackupCare
+): placement is DaycareGroupPlacementDetailed => 'type' in placement
 
 interface Props {
   unit: Daycare
@@ -188,7 +191,6 @@ export default React.memo(function Group({
 }: Props) {
   const mobileEnabled = unit.enabledPilotFeatures.includes('MOBILE')
   const { i18n } = useTranslation()
-  const { roles } = useContext(UserContext)
   const { uiMode, toggleUiMode } = useContext(UIContext)
 
   const hasNotesPermission = permittedActions.includes('READ_NOTES')
@@ -246,7 +248,7 @@ export default React.memo(function Group({
   }
   const showServiceNeed =
     !unit.type.includes('CLUB') &&
-    requireRole(roles, 'ADMIN', 'UNIT_SUPERVISOR')
+    placements.some((p) => p.serviceNeedDetailVisible)
 
   const showChildCapacityFactor =
     !unit.type.includes('CLUB') &&
@@ -265,7 +267,11 @@ export default React.memo(function Group({
       data-status={open ? 'open' : 'closed'}
     >
       {uiMode === `update-group-${group.id}` && (
-        <GroupUpdateModal group={group} nekkuUnits={nekkuUnits} />
+        <GroupUpdateModal
+          group={group}
+          lastPlacementDate={group.lastPlacementDate}
+          nekkuUnits={nekkuUnits}
+        />
       )}
       {uiMode === `nekku-order-${group.id}` && (
         <NekkuOrderModal groupId={group.id} groupName={group.name} />
@@ -580,27 +586,25 @@ const GroupPlacementRow = React.memo(function GroupPlacementRow({
 }: GroupPlacementRowProps) {
   const { i18n } = useTranslation()
 
-  const missingServiceNeedDays =
-    'type' in placement
-      ? placement.daycarePlacementMissingServiceNeedDays
-      : placement.missingServiceNeedDays
+  const missingServiceNeedDays = isDaycareGroupPlacement(placement)
+    ? placement.daycarePlacementMissingServiceNeedDays
+    : placement.missingServiceNeedDays
   const canTransfer = !!(
     placement.id &&
-    ('type' in placement
+    (isDaycareGroupPlacement(placement)
       ? permittedGroupPlacementActions[placement.id]?.includes('UPDATE')
       : permittedBackupCareActions[placement.id]?.includes('UPDATE'))
   )
   const canDelete = !!(
     placement.id &&
-    ('type' in placement
+    (isDaycareGroupPlacement(placement)
       ? permittedGroupPlacementActions[placement.id]?.includes('DELETE')
       : permittedBackupCareActions[placement.id]?.includes('DELETE'))
   )
 
-  const dateOfBirth =
-    'type' in placement
-      ? placement.child.dateOfBirth
-      : placement.child.birthDate
+  const dateOfBirth = isDaycareGroupPlacement(placement)
+    ? placement.child.dateOfBirth
+    : placement.child.birthDate
 
   const { assistanceNeedFactor, serviceNeedFactor } =
     unitChildrenCapacityFactors.find(
@@ -613,7 +617,8 @@ const GroupPlacementRow = React.memo(function GroupPlacementRow({
       : undefined
 
   const [deleteMutation, onClick] = useSelectMutation(
-    () => ('type' in placement ? first(placement) : second(placement)),
+    () =>
+      isDaycareGroupPlacement(placement) ? first(placement) : second(placement),
     [
       deleteGroupPlacementMutation,
       (placement) =>
@@ -665,14 +670,18 @@ const GroupPlacementRow = React.memo(function GroupPlacementRow({
       <Td data-qa="placement-type">
         <FixedSpaceColumn $spacing="xs" $alignItems="flex-start">
           <CareTypeChip
-            type={'type' in placement ? placement.type : 'backup-care'}
+            type={
+              isDaycareGroupPlacement(placement)
+                ? placement.type
+                : 'backup-care'
+            }
           />
           {'fromUnits' in placement &&
             placement.fromUnits.map((unit) => <Light key={unit}>{unit}</Light>)}
         </FixedSpaceColumn>
       </Td>
       <Td data-qa="placement-subtype">
-        {'type' in placement ? (
+        {isDaycareGroupPlacement(placement) ? (
           <PlacementCircle
             type={isPartDayPlacement(placement.type) ? 'half' : 'full'}
             label={
@@ -686,7 +695,10 @@ const GroupPlacementRow = React.memo(function GroupPlacementRow({
       </Td>
       {showServiceNeed ? (
         <Td data-qa="service-need">
-          {missingServiceNeedDays > 0 ? (
+          {!(
+            isDaycareGroupPlacement(placement) &&
+            placement.serviceNeedDetailVisible
+          ) ? null : missingServiceNeedDays > 0 ? (
             <Tooltip
               tooltip={
                 <span>{`${i18n.unit.groups.serviceNeedMissing1} ${missingServiceNeedDays} ${i18n.unit.groups.serviceNeedMissing2}`}</span>
@@ -734,7 +746,7 @@ const GroupPlacementRow = React.memo(function GroupPlacementRow({
         </Td>
       )}
       <Td data-qa="placement-duration">
-        {'type' in placement
+        {isDaycareGroupPlacement(placement)
           ? `${placement.startDate.format()}- ${placement.endDate.format()}`
           : `${placement.period.start.format()}- ${placement.period.end.format()}`}
       </Td>
@@ -787,42 +799,57 @@ const DailyNote = React.memo(function DaycareDailyNote({
     const childNote = notes.childDailyNotes.find(
       (note) => note.childId === placement.child.id
     )
+    const childStickyNotes = notes.childStickyNotes.filter(
+      (note) =>
+        note.childId === placement.child.id &&
+        note.expires.isEqualOrAfter(LocalDate.todayInHelsinkiTz())
+    )
+    const hasNotes = childNote !== undefined || childStickyNotes.length > 0
     return (
       <Tooltip
         data-qa={`daycare-daily-note-hover-${placement.child.id}`}
         position="top"
         tooltip={
-          childNote ? (
+          hasNotes ? (
             <div>
-              <h4>{i18n.unit.groups.daycareDailyNote.header}</h4>
-              <p>{childNote.note}</p>
-              <h5>{i18n.unit.groups.daycareDailyNote.feedingHeader}</h5>
-              <p>
-                {childNote.feedingNote
-                  ? i18n.unit.groups.daycareDailyNote.level[
-                      childNote.feedingNote
-                    ]
-                  : ''}
-              </p>
-              <h5>{i18n.unit.groups.daycareDailyNote.sleepingHeader}</h5>
-              <p>{formatSleepingTooltipText(childNote, i18n)}</p>
-              <h5>{i18n.unit.groups.daycareDailyNote.reminderHeader}</h5>
-              <p>
-                {childNote.reminders
-                  .map(
-                    (reminder) =>
-                      i18n.unit.groups.daycareDailyNote.reminderType[reminder]
-                  )
-                  .join(',')}
-              </p>
-              <h5>
-                {i18n.unit.groups.daycareDailyNote.otherThingsToRememberHeader}
-              </h5>
-              <p>{childNote.reminderNote}</p>
-              {notes.childStickyNotes.length > 0 && (
+              {childNote && (
+                <>
+                  <h4>{i18n.unit.groups.daycareDailyNote.header}</h4>
+                  <p>{childNote.note}</p>
+                  <h5>{i18n.unit.groups.daycareDailyNote.feedingHeader}</h5>
+                  <p>
+                    {childNote.feedingNote
+                      ? i18n.unit.groups.daycareDailyNote.level[
+                          childNote.feedingNote
+                        ]
+                      : ''}
+                  </p>
+                  <h5>{i18n.unit.groups.daycareDailyNote.sleepingHeader}</h5>
+                  <p>{formatSleepingTooltipText(childNote, i18n)}</p>
+                  <h5>{i18n.unit.groups.daycareDailyNote.reminderHeader}</h5>
+                  <p>
+                    {childNote.reminders
+                      .map(
+                        (reminder) =>
+                          i18n.unit.groups.daycareDailyNote.reminderType[
+                            reminder
+                          ]
+                      )
+                      .join(',')}
+                  </p>
+                  <h5>
+                    {
+                      i18n.unit.groups.daycareDailyNote
+                        .otherThingsToRememberHeader
+                    }
+                  </h5>
+                  <p>{childNote.reminderNote}</p>
+                </>
+              )}
+              {childStickyNotes.length > 0 && (
                 <>
                   <h5>{i18n.unit.groups.daycareDailyNote.stickyNotesHeader}</h5>
-                  {notes.childStickyNotes.map((stickyNote) => (
+                  {childStickyNotes.map((stickyNote) => (
                     <p key={stickyNote.id}>{stickyNote.note}</p>
                   ))}
                 </>
@@ -842,7 +869,7 @@ const DailyNote = React.memo(function DaycareDailyNote({
         }
       >
         <RoundIcon
-          active={childNote != null || notes.childStickyNotes.length > 0}
+          active={hasNotes}
           data-qa={`daycare-daily-note-icon-${placement.child.id}`}
           content={faStickyNote}
           color={colors.main.m2}
@@ -933,6 +960,9 @@ const ServiceNeedTooltipLabel = ({
   placement: DaycareGroupPlacementDetailed
   filters: UnitFilters
 }) => {
+  if (!placement.serviceNeedDetailVisible) {
+    return null
+  }
   const placementRange = new FiniteDateRange(
     placement.startDate,
     placement.endDate
@@ -940,11 +970,12 @@ const ServiceNeedTooltipLabel = ({
   const filterRange = new FiniteDateRange(filters.startDate, filters.endDate)
   const serviceNeeds = placement.serviceNeeds.reduce<
     { range: FiniteDateRange; nameFi: string }[]
-  >((prev, sn) => {
+  >((arr, sn) => {
     const snRange = new FiniteDateRange(sn.startDate, sn.endDate)
-    return snRange.overlaps(placementRange) && snRange.overlaps(filterRange)
-      ? [...prev, { range: snRange, nameFi: sn.option.nameFi }]
-      : prev
+    if (snRange.overlaps(placementRange) && snRange.overlaps(filterRange)) {
+      arr.push({ range: snRange, nameFi: sn.option.nameFi })
+    }
+    return arr
   }, [])
   const serviceNeedGaps = placementRange
     .getGaps(serviceNeeds.map((sn) => sn.range))

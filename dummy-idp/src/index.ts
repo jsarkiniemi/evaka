@@ -2,17 +2,23 @@
 //
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+// oxlint-disable no-console
+
 import express from 'express'
 import session from 'express-session'
+
+import { config } from './config'
 import {
   clearUsers,
+  enterTestMode,
+  exitTestMode,
+  getVtjPerson,
   samlSingleLogoutRoute,
   samlSingleSignOnConfirmRoute,
   samlSingleSignOnFinishRoute,
   samlSingleSignOnRoute,
   upsertUser
 } from './routes'
-import { config } from './config'
 
 const app = express()
 app.use(
@@ -33,11 +39,15 @@ app.get('/health', (_, res) => {
 
 app.post('/idp/users/clear', clearUsers)
 app.post('/idp/users', express.json(), upsertUser)
+app.get('/idp/users/:ssn', getVtjPerson)
+app.post('/idp/test-mode/enter', enterTestMode)
+app.post('/idp/test-mode/exit', exitTestMode)
 
 app.get(
   '/idp/sso',
   (req, res, next) => {
-    req.query.action === 'destroy' ? req.session.regenerate(next) : next()
+    if (req.query.action === 'destroy') req.session.regenerate(next)
+    else next()
   },
   samlSingleSignOnRoute
 )

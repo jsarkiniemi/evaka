@@ -3,11 +3,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 import HelsinkiDateTime from 'lib-common/helsinki-date-time'
-import { randomId } from 'lib-common/id-type'
 import LocalDate from 'lib-common/local-date'
 
 import {
-  createDaycarePlacementFixture,
   Fixture,
   testAdult,
   testCareArea,
@@ -15,7 +13,6 @@ import {
   testDaycare
 } from '../../dev-api/fixtures'
 import {
-  createDaycarePlacements,
   resetServiceState,
   updateIncomeStatementHandled
 } from '../../generated/api-clients'
@@ -52,24 +49,18 @@ for (const env of ['desktop', 'mobile'] as const) {
         children: [testChild]
       }).save()
 
-      await createDaycarePlacements({
-        body: [
-          createDaycarePlacementFixture(
-            randomId(),
-            testChild.id,
-            testDaycare.id,
-            LocalDate.todayInSystemTz(),
-            LocalDate.todayInSystemTz()
-          ),
-          createDaycarePlacementFixture(
-            randomId(),
-            testChild.id,
-            testDaycare.id,
-            LocalDate.todayInSystemTz().addDays(1),
-            LocalDate.todayInSystemTz().addDays(1)
-          )
-        ]
-      })
+      await Fixture.placement({
+        childId: testChild.id,
+        unitId: testDaycare.id,
+        startDate: LocalDate.todayInSystemTz(),
+        endDate: LocalDate.todayInSystemTz()
+      }).save()
+      await Fixture.placement({
+        childId: testChild.id,
+        unitId: testDaycare.id,
+        startDate: LocalDate.todayInSystemTz().addDays(1),
+        endDate: LocalDate.todayInSystemTz().addDays(1)
+      }).save()
     })
 
     test('Shows a warning of missing income statement', async ({ evaka }) => {
@@ -157,7 +148,6 @@ for (const env of ['desktop', 'mobile'] as const) {
     test('Citizen cannot delete child income statement while employee is handling it', async ({
       evaka
     }) => {
-      const { listPage } = await setupPageObjects(evaka, env)
       const employee = await Fixture.employee().save()
       const incomeStatement = await Fixture.incomeStatement({
         personId: testChild.id,
@@ -170,6 +160,8 @@ for (const env of ['desktop', 'mobile'] as const) {
         },
         status: 'SENT'
       }).save()
+
+      const { listPage } = await setupPageObjects(evaka, env)
 
       await listPage.assertNthIncomeStatementDeleteButtonDisabled(0, false)
 

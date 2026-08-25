@@ -8,19 +8,14 @@ import evaka.core.shared.db.Database
 import evaka.core.shared.domain.EvakaClock
 import java.time.Duration
 
-class BiExportJob(private val client: BiExportClient) {
-    fun sendBiTable(
-        db: Database.Connection,
-        clock: EvakaClock,
-        tableName: String,
-        query: BiQueries.CsvQuery,
-    ) {
+class BiExportJob(private val client: BiExportClient, private val config: BiExportConfig) {
+    fun sendBiTable(db: Database.Connection, clock: EvakaClock, table: BiTable) {
         db.read { tx ->
             tx.setStatementTimeout(Duration.ofMinutes(10))
 
-            query(tx) { records ->
+            table.query(tx, config) { records ->
                 val stream = CsvInputStream(CSV_CHARSET, records)
-                client.sendBiCsvFile(tableName, clock, stream)
+                client.sendBiCsvFile(table.fileName, clock, stream)
             }
         }
     }

@@ -36,7 +36,7 @@ const prod: FeatureFlags = {
   voucherUnitPayments: false,
   voucherValueSeparation: false,
   extendedPreschoolTerm: false,
-  hideClubApplication: false,
+  hideClubApplication: true,
   discussionReservations: true,
   jamixIntegration: true,
   serviceApplications: true,
@@ -45,14 +45,14 @@ const prod: FeatureFlags = {
   requireAttachments: true,
   showCitizenApplicationPreschoolTerms: true,
   decisionChildDocumentTypes: true,
-  placementDesktop: true
+  placementDesktop: true,
+  citizenChildDocumentTypes: true
 }
 
 const features: Features = {
   default: {
     ...prod,
-    environmentLabel: 'Test',
-    citizenChildDocumentTypes: true
+    environmentLabel: 'Test'
   },
   prod
 }

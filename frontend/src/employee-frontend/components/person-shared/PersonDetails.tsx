@@ -25,7 +25,6 @@ import {
   InlineExternalLinkButton,
   InlineInternalLinkButton
 } from 'lib-components/atoms/buttons/InlineLinkButton'
-import { LegacyButton } from 'lib-components/atoms/buttons/LegacyButton'
 import { MutateButton } from 'lib-components/atoms/buttons/MutateButton'
 import Checkbox from 'lib-components/atoms/form/Checkbox'
 import InputField from 'lib-components/atoms/form/InputField'
@@ -478,7 +477,7 @@ export default React.memo(function PersonDetails({
   sensitiveDetailsOpen,
   onToggleSensitiveDetails
 }: Props) {
-  const { i18n } = useTranslation()
+  const { i18n, lang } = useTranslation()
   const { uiMode, toggleUiMode, clearUiMode } = useContext<UiState>(UIContext)
   const editing = uiMode === 'person-details-editing'
   const [form, setForm] = useState<Form>({
@@ -533,7 +532,7 @@ export default React.memo(function PersonDetails({
     }
   }, [person, sensitiveDetails, editing])
 
-  useEffect(() => clearUiMode, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => clearUiMode, []) // oxlint-disable-line react-hooks/exhaustive-deps
 
   const powerEditing =
     editing && sensitiveDetails?.socialSecurityNumber === null
@@ -651,7 +650,7 @@ export default React.memo(function PersonDetails({
                   date={form.dateOfBirth}
                   onChange={(dateOfBirth) => updateForm({ dateOfBirth })}
                   maxDate={LocalDate.todayInSystemTz()}
-                  locale="fi"
+                  locale={lang}
                   data-qa="input-birthday"
                 />
               ) : (
@@ -693,10 +692,7 @@ export default React.memo(function PersonDetails({
       {editing && (
         <RightAlignedRow>
           <FixedSpaceRow>
-            <LegacyButton
-              onClick={() => clearUiMode()}
-              text={i18n.common.cancel}
-            />
+            <Button onClick={() => clearUiMode()} text={i18n.common.cancel} />
             <MutateButton
               primary
               disabled={!emailIsValid || !sensitiveDetails}

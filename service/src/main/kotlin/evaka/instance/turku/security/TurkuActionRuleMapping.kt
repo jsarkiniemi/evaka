@@ -217,6 +217,7 @@ class TurkuActionRuleMapping : ActionRuleMapping {
             Action.Child.READ_BACKUP_CARE,
             Action.Child.READ_DAILY_SERVICE_TIMES,
             Action.Child.READ_PLACEMENT,
+            Action.Child.READ_SERVICE_NEEDS,
             Action.Child.READ_GUARDIANS,
             Action.Child.READ_FEE_ALTERATIONS,
             Action.Child.READ_PEDAGOGICAL_DOCUMENTS -> {
@@ -463,10 +464,38 @@ class TurkuActionRuleMapping : ActionRuleMapping {
                     sequenceOf(
                         HasUnitRole(UserRole.EARLY_CHILDHOOD_EDUCATION_SECRETARY)
                             .inPlacementUnitOfChildOfChildDocument() as ScopedActionRule<in T>
+                    ) +
+                    sequenceOf(
+                        HasUnitRole(UserRole.EARLY_CHILDHOOD_EDUCATION_SECRETARY)
+                            .inActiveBackupCareUnitOfChildOfChildDocument()
+                            as ScopedActionRule<in T>
                     )
             }
 
-            Action.ChildDocument.DOWNLOAD,
+            Action.ChildDocument.DOWNLOAD -> {
+                @Suppress("UNCHECKED_CAST")
+                action.defaultRules.asSequence() +
+                    // These status flags AND together, so the rule permits action only
+                    // on DRAFT, unpublished documents that are decision documents (or
+                    // empty citizen-basic drafts). This intentionally scopes the
+                    // secretary to handling decision documents, not pedagogical/VASU
+                    // documents.
+                    sequenceOf(
+                        HasUnitRole(UserRole.EARLY_CHILDHOOD_EDUCATION_SECRETARY)
+                            .inPlacementUnitOfChildOfChildDocument(
+                                editable = true,
+                                deletable = true,
+                                publishable = true,
+                                canGoToPrevStatus = true,
+                            ) as ScopedActionRule<in T>
+                    ) +
+                    sequenceOf(
+                        HasUnitRole(UserRole.EARLY_CHILDHOOD_EDUCATION_SECRETARY)
+                            .inActiveBackupCareUnitOfChildOfChildDocument()
+                            as ScopedActionRule<in T>
+                    )
+            }
+
             Action.ChildDocument.UPDATE,
             Action.ChildDocument.PUBLISH,
             Action.ChildDocument.NEXT_STATUS,
@@ -475,6 +504,11 @@ class TurkuActionRuleMapping : ActionRuleMapping {
             Action.ChildDocument.PROPOSE_DECISION -> {
                 @Suppress("UNCHECKED_CAST")
                 action.defaultRules.asSequence() +
+                    // These status flags AND together, so the rule permits action only
+                    // on DRAFT, unpublished documents that are decision documents (or
+                    // empty citizen-basic drafts). This intentionally scopes the
+                    // secretary to handling decision documents, not pedagogical/VASU
+                    // documents.
                     sequenceOf(
                         HasUnitRole(UserRole.EARLY_CHILDHOOD_EDUCATION_SECRETARY)
                             .inPlacementUnitOfChildOfChildDocument(

@@ -78,6 +78,8 @@ class OccupancyTest : PureJdbiTest(resetDbBeforeEach = true) {
             areaId = careArea1.id,
             providerType = ProviderType.MUNICIPAL,
             type = setOf(CareType.CENTRE, CareType.PRESCHOOL, CareType.PREPARATORY_EDUCATION),
+            dailyPreschoolTime = TimeRange(LocalTime.of(9, 0), LocalTime.of(13, 0)),
+            dailyPreparatoryTime = TimeRange(LocalTime.of(9, 0), LocalTime.of(14, 0)),
         )
     private val daycareGroup1: GroupId = GroupId(UUID.randomUUID())
     private val daycareGroup2: GroupId = GroupId(UUID.randomUUID())
@@ -239,18 +241,17 @@ class OccupancyTest : PureJdbiTest(resetDbBeforeEach = true) {
         val (rangeStart, rangeEnd) =
             expectedCaretakers.map { it.first }.let { it.minOrNull()!! to it.maxOrNull()!! }
 
-        val occupancies =
-            db.read { tx ->
-                tx.calculateDailyGroupOccupancyValues(
-                        today,
-                        FiniteDateRange(rangeStart, rangeEnd),
-                        OccupancyType.REALIZED,
-                        AccessControlFilter.PermitAll,
-                        unitIds = setOf(daycareInArea1.id),
-                    )
-                    .find { it.key.groupId == daycareGroup1 }!!
-                    .occupancies
-            }
+        val occupancies = db.read { tx ->
+            tx.calculateDailyGroupOccupancyValues(
+                    today,
+                    FiniteDateRange(rangeStart, rangeEnd),
+                    OccupancyType.REALIZED,
+                    AccessControlFilter.PermitAll,
+                    unitIds = setOf(daycareInArea1.id),
+                )
+                .find { it.key.groupId == daycareGroup1 }!!
+                .occupancies
+        }
 
         expectedCaretakers.forEach { (date, expectedValue) ->
             assertEquals(expectedValue.sum, occupancies[date]?.sum, message = "bad sum")
@@ -1041,7 +1042,8 @@ class OccupancyTest : PureJdbiTest(resetDbBeforeEach = true) {
                             endDate = today.plusDays(preschool.last.toLong()),
                             preschoolDaycareStartDate =
                                 today.plusDays(preschoolDaycare.first.toLong()),
-                            preschoolDaycareEndDate = today.plusDays(preschoolDaycare.last.toLong()),
+                            preschoolDaycareEndDate =
+                                today.plusDays(preschoolDaycare.last.toLong()),
                         )
                     )
                 }

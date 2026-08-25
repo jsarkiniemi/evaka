@@ -20,6 +20,7 @@ import type { ChildStickyNoteBody } from 'lib-common/generated/api-types/note'
 import type { ChildStickyNoteId } from 'lib-common/generated/api-types/shared'
 import type { DailyReservationRequest } from 'lib-common/generated/api-types/reservations'
 import type { DailyServiceTimeId } from 'lib-common/generated/api-types/shared'
+import type { DailyServiceTimeNotificationId } from 'lib-common/generated/api-types/shared'
 import type { DaycareAclInsert } from './api-types'
 import type { DaycareId } from 'lib-common/generated/api-types/shared'
 import type { DaycarePlacementPlan } from 'lib-common/generated/api-types/application'
@@ -49,6 +50,8 @@ import type { DevDaycareAssistance } from './api-types'
 import type { DevDaycareGroup } from './api-types'
 import type { DevDaycareGroupAcl } from './api-types'
 import type { DevDaycareGroupPlacement } from './api-types'
+import type { DevDecisionReasoningGeneric } from './api-types'
+import type { DevDecisionReasoningIndividual } from './api-types'
 import type { DevDocumentTemplate } from './api-types'
 import type { DevEmployee } from './api-types'
 import type { DevEmployeePin } from './api-types'
@@ -95,7 +98,6 @@ import type { IncomeNotification } from 'lib-common/generated/api-types/invoicin
 import type { JsonCompatible } from 'lib-common/json'
 import type { JsonOf } from 'lib-common/json'
 import LocalDate from 'lib-common/local-date'
-import type { MockVtjDataset } from './api-types'
 import type { NekkuCustomer } from './api-types'
 import type { NekkuSpecialDiet } from './api-types'
 import type { NekkuSpecialDietChoices } from 'lib-common/generated/api-types/nekku'
@@ -268,9 +270,9 @@ export async function addDailyServiceTimeNotification(
   request: {
     body: DevDailyServiceTimeNotification
   }
-): Promise<number> {
+): Promise<DailyServiceTimeNotificationId> {
   try {
-    const { data: json } = await devClient.request<JsonOf<number>>({
+    const { data: json } = await devClient.request<JsonOf<DailyServiceTimeNotificationId>>({
       url: uri`/daily-service-time-notification`.toString(),
       method: 'POST',
       data: request.body satisfies JsonCompatible<DevDailyServiceTimeNotification>
@@ -779,6 +781,48 @@ export async function createDecisionPdf(
     const { data: json } = await devClient.request<JsonOf<void>>({
       url: uri`/decisions/${request.id}/actions/create-pdf`.toString(),
       method: 'POST'
+    })
+    return json
+  } catch (e) {
+    throw new DevApiError(e)
+  }
+}
+
+
+/**
+* Generated from evaka.core.shared.dev.DevApi.createDecisionReasoningGeneric
+*/
+export async function createDecisionReasoningGeneric(
+  request: {
+    body: DevDecisionReasoningGeneric[]
+  }
+): Promise<void> {
+  try {
+    const { data: json } = await devClient.request<JsonOf<void>>({
+      url: uri`/decision-reasonings/generic`.toString(),
+      method: 'POST',
+      data: request.body satisfies JsonCompatible<DevDecisionReasoningGeneric[]>
+    })
+    return json
+  } catch (e) {
+    throw new DevApiError(e)
+  }
+}
+
+
+/**
+* Generated from evaka.core.shared.dev.DevApi.createDecisionReasoningIndividual
+*/
+export async function createDecisionReasoningIndividual(
+  request: {
+    body: DevDecisionReasoningIndividual[]
+  }
+): Promise<void> {
+  try {
+    const { data: json } = await devClient.request<JsonOf<void>>({
+      url: uri`/decision-reasonings/individual`.toString(),
+      method: 'POST',
+      data: request.body satisfies JsonCompatible<DevDecisionReasoningIndividual[]>
     })
     return json
   } catch (e) {
@@ -1579,12 +1623,14 @@ export async function deletePlacement(
 export async function forceFullVtjRefresh(
   request: {
     person: PersonId
-  }
+  },
+  options?: { mockedTime?: HelsinkiDateTime }
 ): Promise<void> {
   try {
     const { data: json } = await devClient.request<JsonOf<void>>({
       url: uri`/persons/${request.person}/force-full-vtj-refresh`.toString(),
-      method: 'POST'
+      method: 'POST',
+      headers: { EvakaMockedTime: options?.mockedTime?.formatIso() }
     })
     return json
   } catch (e) {
@@ -2282,27 +2328,6 @@ export async function upsertStaffOccupancyCoefficient(
       url: uri`/occupancy-coefficient`.toString(),
       method: 'POST',
       data: request.body satisfies JsonCompatible<DevUpsertStaffOccupancyCoefficient>
-    })
-    return json
-  } catch (e) {
-    throw new DevApiError(e)
-  }
-}
-
-
-/**
-* Generated from evaka.core.shared.dev.DevApi.upsertVtjDataset
-*/
-export async function upsertVtjDataset(
-  request: {
-    body: MockVtjDataset
-  }
-): Promise<void> {
-  try {
-    const { data: json } = await devClient.request<JsonOf<void>>({
-      url: uri`/vtj-persons`.toString(),
-      method: 'POST',
-      data: request.body satisfies JsonCompatible<MockVtjDataset>
     })
     return json
   } catch (e) {

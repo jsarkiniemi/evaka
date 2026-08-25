@@ -34,13 +34,15 @@ const Wrapper = styled.div`
 
   @media (hover: hover) {
     &:hover:not(.disabled) {
-      input:checked {
-        border-color: ${(p) => p.theme.colors.main.m2Hover};
-        background-color: ${(p) => p.theme.colors.main.m2Hover};
-      }
+      input[type='checkbox'] {
+        &:checked {
+          border-color: ${(p) => p.theme.colors.main.m2Hover};
+          background-color: ${(p) => p.theme.colors.main.m2Hover};
+        }
 
-      input:not(:checked) {
-        border-color: ${(p) => p.theme.colors.grayscale.g100};
+        &:not(:checked) {
+          border-color: ${(p) => p.theme.colors.grayscale.g100};
+        }
       }
     }
   }
@@ -133,6 +135,8 @@ export interface CheckboxProps extends CommonProps {
   disabled?: boolean
   translate?: 'yes' | 'no'
   inputRef?: RefObject<HTMLInputElement | null>
+  id?: string
+  hideAsterisk?: boolean
 }
 
 const Checkbox = React.memo(function Checkbox({
@@ -146,9 +150,12 @@ const Checkbox = React.memo(function Checkbox({
   className,
   translate,
   'data-qa': dataQa,
-  inputRef
+  inputRef,
+  id,
+  hideAsterisk
 }: CheckboxProps) {
-  const ariaId = useUniqueId('checkbox')
+  const generatedId = useUniqueId('checkbox')
+  const ariaId = id ?? generatedId
 
   return (
     <Wrapper className={classNames(className, { disabled })} data-qa={dataQa}>
@@ -176,7 +183,7 @@ const Checkbox = React.memo(function Checkbox({
         <LabelContainer>
           <label htmlFor={ariaId} translate={translate}>
             {label}
-            {ariaRequired ? ' *' : ''}
+            {ariaRequired && !hideAsterisk ? ' *' : ''}
           </label>
           <ExpandingInfoButtonSlot />
         </LabelContainer>

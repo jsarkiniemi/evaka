@@ -123,7 +123,8 @@ class UnitAccessControlTest : AccessControlTest() {
         val otherEmployee =
             createTestEmployee(
                 globalRoles = emptySet(),
-                unitRoles = mapOf(daycare.id to UserRole.STAFF, featureDaycare.id to UserRole.STAFF),
+                unitRoles =
+                    mapOf(daycare.id to UserRole.STAFF, featureDaycare.id to UserRole.STAFF),
             )
         db.read { tx ->
             assertFalse(
@@ -157,21 +158,21 @@ class UnitAccessControlTest : AccessControlTest() {
     @Test
     fun `unit-level action and getAuthorizationFilter`() {
         val action = Action.Unit.READ
-        fun getFilter(user: AuthenticatedUser) =
-            db.read { accessControl.getAuthorizationFilter(it, user, clock, action) }
-        fun execute(filter: AccessControlFilter.Some<DaycareId>) =
-            db.read {
-                it.createQuery {
-                        sql(
-                            """
+        fun getFilter(user: AuthenticatedUser) = db.read {
+            accessControl.getAuthorizationFilter(it, user, clock, action)
+        }
+        fun execute(filter: AccessControlFilter.Some<DaycareId>) = db.read {
+            it.createQuery {
+                    sql(
+                        """
                     SELECT id FROM daycare
                     WHERE ${predicate(filter.forTable("daycare"))}
                     """
-                                .trimIndent()
-                        )
-                    }
-                    .toSet<DaycareId>()
-            }
+                            .trimIndent()
+                    )
+                }
+                .toSet<DaycareId>()
+        }
 
         rules.add(action, HasGlobalRole(UserRole.SERVICE_WORKER))
         rules.add(action, HasUnitRole(UserRole.UNIT_SUPERVISOR).inUnit())
@@ -187,7 +188,8 @@ class UnitAccessControlTest : AccessControlTest() {
         val otherEmployee =
             createTestEmployee(
                 globalRoles = emptySet(),
-                unitRoles = mapOf(daycare.id to UserRole.STAFF, featureDaycare.id to UserRole.STAFF),
+                unitRoles =
+                    mapOf(daycare.id to UserRole.STAFF, featureDaycare.id to UserRole.STAFF),
             )
         val serviceWorker = createTestEmployee(globalRoles = setOf(UserRole.SERVICE_WORKER))
 

@@ -32,7 +32,6 @@ import type { UUID } from 'lib-common/types'
 import { scrollRefIntoView } from 'lib-common/utils/scrolling'
 import { StaticChip } from 'lib-components/atoms/Chip'
 import { Button } from 'lib-components/atoms/buttons/Button'
-import { LegacyButton } from 'lib-components/atoms/buttons/LegacyButton'
 import ReturnButton from 'lib-components/atoms/buttons/ReturnButton'
 import Container, { ContentArea } from 'lib-components/layout/Container'
 import {
@@ -81,7 +80,7 @@ const getInvitedChildInfo = (
       eventData.individualChildren.some((c) => c.groupId === g.id)
     return !anyIndividuals
   })
-  const childSelections = eventData.individualChildren.map((c) => c.id)
+  const childSelections = new Set(eventData.individualChildren.map((c) => c.id))
   const invitedChildPlacements = unitDetails.placements.filter((p) => {
     const isPartOfFullGroupSelection = p.groupPlacements.some((gp) => {
       const placedGroupIsInFullGroups = fullGroupSelections.some(
@@ -92,7 +91,7 @@ const getInvitedChildInfo = (
       )
       return placedGroupIsInFullGroups && durationsOverlap
     })
-    const isPartOfIndividualSelections = childSelections.includes(p.child.id)
+    const isPartOfIndividualSelections = childSelections.has(p.child.id)
     return isPartOfFullGroupSelection || isPartOfIndividualSelections
   })
 
@@ -439,7 +438,7 @@ export default React.memo(function DiscussionReservationSurveyView({
   )
 })
 
-const ExpandHorizonButton = styled(LegacyButton)`
+const ExpandHorizonButton = styled(Button)`
   margin-bottom: 10px;
 `
 const WidthLimiter = styled.div`

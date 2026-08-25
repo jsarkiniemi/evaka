@@ -22,8 +22,8 @@ fun Database.Transaction.upsertApplicationPlacementDraft(
     val startDateWithDefault =
         startDate
             ?: createQuery {
-                    sql(
-                        """
+                sql(
+                    """
         SELECT LEAST(
             a.document ->> 'preferredStartDate', 
             a.document ->> 'connectedDaycarePreferredStartDate'
@@ -31,14 +31,14 @@ fun Database.Transaction.upsertApplicationPlacementDraft(
         FROM application a
         WHERE a.id = ${bind(applicationId)}
     """
-                    )
-                }
+                )
+            }
                 .exactlyOneOrNull<LocalDate?>()
             ?: now.toLocalDate()
 
     createUpdate {
-            sql(
-                """
+        sql(
+            """
             INSERT INTO placement_draft (application_id, unit_id, start_date, created_at, created_by, modified_at, modified_by)
             VALUES (${bind(applicationId)}, ${bind(unitId)}, ${bind(startDateWithDefault)}, ${bind(now)}, ${bind(userId)}, ${bind(now)}, ${bind(userId)})
             ON CONFLICT (application_id) DO UPDATE SET
@@ -47,27 +47,33 @@ fun Database.Transaction.upsertApplicationPlacementDraft(
                 modified_at = ${bind(now)},
                 modified_by = ${bind(userId)}
         """
-            )
-        }
+        )
+    }
         .updateExactlyOne()
 
     return startDateWithDefault
 }
 
-fun Database.Transaction.deleteApplicationPlacementDraftIfExists(applicationId: ApplicationId) =
-    execute {
-        sql(
-            """
+data class DeletedPlacementDraft(val unitId: DaycareId, val startDate: LocalDate)
+
+fun Database.Transaction.deleteApplicationPlacementDraftIfExists(
+    applicationId: ApplicationId
+): DeletedPlacementDraft? = createUpdate {
+    sql(
+        """
             DELETE FROM placement_draft
             WHERE application_id = ${bind(applicationId)}
+            RETURNING unit_id, start_date
         """
-        )
-    }
+    )
+}
+    .executeAndReturnGeneratedKeys()
+    .exactlyOneOrNull()
 
 fun Database.Read.getPlacementDesktopDaycaresWithoutOccupancies(unitIds: Set<DaycareId>) =
     createQuery {
-            sql(
-                """
+        sql(
+            """
     SELECT 
         d.id,
         d.name,
@@ -96,11 +102,11 @@ fun Database.Read.getPlacementDesktopDaycaresWithoutOccupancies(unitIds: Set<Day
     FROM daycare d
     WHERE d.id = ANY(${bind(unitIds)})
 """
-            )
-        }
-        .toList<PlacementDesktopDaycare>()
-        .also { if (it.size < unitIds.size) throw NotFound() }
-        .also { if (it.size > unitIds.size) throw IllegalStateException() }
+        )
+    }
+    .toList<PlacementDesktopDaycare>()
+    .also { if (it.size < unitIds.size) throw NotFound() }
+    .also { if (it.size > unitIds.size) throw IllegalStateException() }
 
 fun Database.Read.getPlacementDesktopDaycareWithoutOccupancies(unitId: DaycareId) =
     getPlacementDesktopDaycaresWithoutOccupancies(setOf(unitId)).first()

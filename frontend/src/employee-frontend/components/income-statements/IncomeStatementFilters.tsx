@@ -20,8 +20,8 @@ import {
   AreaFilter,
   DateFilter,
   Filters,
-  ProviderTypeFilter,
-  UnitFilter
+  MultiSelectUnitFilter,
+  ProviderTypeFilter
 } from '../common/Filters'
 
 export default React.memo(function IncomeStatementsFilters() {
@@ -35,7 +35,7 @@ export default React.memo(function IncomeStatementsFilters() {
     shared: { availableAreas, allDaycareUnits: unitsResult }
   } = useContext(InvoicingUiContext)
 
-  const { i18n } = useTranslation()
+  const { i18n, lang } = useTranslation()
 
   const toggleArea = useCallback(
     (code: string) => () => {
@@ -54,9 +54,8 @@ export default React.memo(function IncomeStatementsFilters() {
     [setSearchFilters]
   )
 
-  const setUnit = useCallback(
-    (unit: DaycareId | undefined) =>
-      setSearchFilters((old) => ({ ...old, unit })),
+  const setUnitIds = useCallback(
+    (unitIds: DaycareId[]) => setSearchFilters((old) => ({ ...old, unitIds })),
     [setSearchFilters]
   )
 
@@ -117,10 +116,11 @@ export default React.memo(function IncomeStatementsFilters() {
           />
           <Gap $size="L" />
           {renderResult(unitsResult, (units) => (
-            <UnitFilter
+            <MultiSelectUnitFilter
               units={units}
-              select={setUnit}
-              selected={units.find(({ id }) => id === searchFilters.unit)}
+              selectedUnits={searchFilters.unitIds}
+              onChange={setUnitIds}
+              data-qa="unit-selector"
             />
           ))}
         </>
@@ -147,7 +147,7 @@ export default React.memo(function IncomeStatementsFilters() {
           <DatePickerLowLevel
             value={searchFilters.placementValidDate}
             onChange={setPlacementValidDate}
-            locale="fi"
+            locale={lang}
           />
           <Gap $size="L" />
           <StatusFilter toggled={searchFilters.status} toggle={toggleStatus} />

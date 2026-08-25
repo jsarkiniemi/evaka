@@ -10,20 +10,21 @@ import type {
 import type { DocumentTemplateId } from 'lib-common/generated/api-types/shared'
 import HelsinkiDateTime from 'lib-common/helsinki-date-time'
 import { evakaUserId, randomId } from 'lib-common/id-type'
+import LocalDate from 'lib-common/local-date'
 import type { UUID } from 'lib-common/types'
 
 import {
-  createDaycarePlacementFixture,
   testDaycareGroup,
   Fixture,
   testAdult,
+  testAdult2,
   testChild,
+  testChild2,
   testCareArea,
   testDaycare
 } from '../../dev-api/fixtures'
 import {
   createDaycareGroups,
-  createDaycarePlacements,
   insertGuardians,
   resetServiceState,
   upsertWeakCredentials
@@ -75,9 +76,12 @@ test.beforeEach(async () => {
     ]
   })
 
-  await createDaycarePlacements({
-    body: [createDaycarePlacementFixture(randomId(), child.id, unitId)]
-  })
+  await Fixture.placement({
+    childId: child.id,
+    unitId,
+    startDate: LocalDate.of(2022, 5, 1),
+    endDate: LocalDate.of(2023, 8, 31)
+  }).save()
 
   templateIdVasu = (
     await Fixture.documentTemplate({
@@ -243,6 +247,36 @@ test.describe('Citizen child documents listing page', () => {
       evaka.url.endsWith(`/child-documents/${documentIdHojks}`)
     ).toBeTruthy()
     await expect(evaka.find('h1')).toHaveText('HOJKS 2023-2024')
+  })
+
+  test('Hojks category is hidden when there are no hojks documents', async ({
+    newEvakaPage
+  }) => {
+    // a separate guardian whose only child has no child documents at all
+    await Fixture.family({
+      guardian: testAdult2,
+      children: [testChild2]
+    }).save()
+    await insertGuardians({
+      body: [{ guardianId: testAdult2.id, childId: testChild2.id }]
+    })
+    await Fixture.placement({
+      childId: testChild2.id,
+      unitId: testDaycare.id,
+      startDate: LocalDate.of(2022, 5, 1),
+      endDate: LocalDate.of(2023, 8, 31)
+    }).save()
+
+    const page = await newEvakaPage({ mockedTime: mockedNow })
+    await enduserLogin(page, testAdult2, '/')
+
+    const header = new CitizenHeader(page, 'desktop')
+    await header.openChildPage(testChild2.id)
+    const childPage = new CitizenChildPage(page)
+    await childPage.openCollapsible('child-documents')
+
+    await expect(childPage.childDocumentsCategoryTitle('plans')).toBeVisible()
+    await expect(childPage.childDocumentsCategoryTitle('hojks')).toBeHidden()
   })
 
   test('Published pedagogical report is in the list', async ({ evaka }) => {

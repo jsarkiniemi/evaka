@@ -11,7 +11,7 @@ import type { ChildId } from 'lib-common/generated/api-types/shared'
 import { useQuery, useQueryResult } from 'lib-common/query'
 import { useIdRouteParam } from 'lib-common/useRouteParams'
 import Main from 'lib-components/atoms/Main'
-import { LegacyButton } from 'lib-components/atoms/buttons/LegacyButton'
+import { Button } from 'lib-components/atoms/buttons/Button'
 import {
   MutateButton,
   cancelMutation
@@ -48,10 +48,7 @@ export default React.memo(function ApplicationCreation() {
   useTitle(t, t.applications.creation.title)
   const children = useQueryResult(applicationChildrenQuery())
   const childResult = useMemo(
-    () =>
-      children.map((children) => {
-        return children.find(({ id }) => id === childId)
-      }),
+    () => children.map((children) => children.find(({ id }) => id === childId)),
     [childId, children]
   )
   const [selectedType, setSelectedType] = useState<ApplicationType>()
@@ -75,8 +72,8 @@ export default React.memo(function ApplicationCreation() {
       <Container>
         <ReturnButton label={t.common.return} />
         <Main>
-          {renderResult(childResult, (child) => {
-            return child === undefined ? (
+          {renderResult(childResult, (child) =>
+            child === undefined ? (
               <Redirect replace to="/applications" />
             ) : (
               <Fragment>
@@ -187,7 +184,7 @@ export default React.memo(function ApplicationCreation() {
                       onSuccess={(id) => navigate(`/applications/${id}/edit`)}
                       data-qa="submit"
                     />
-                    <LegacyButton
+                    <Button
                       text={t.common.cancel}
                       onClick={() => navigate('/applications')}
                     />
@@ -195,7 +192,7 @@ export default React.memo(function ApplicationCreation() {
                 </ContentArea>
               </Fragment>
             )
-          })}
+          )}
         </Main>
       </Container>
       <Footer />
@@ -205,9 +202,7 @@ export default React.memo(function ApplicationCreation() {
 
 const PreschoolDaycareInfo = styled.p`
   margin: 0;
-  margin-left: calc(
-    36px + ${defaultMargins.s}
-  ); // width of the radio input's icon + the margin on label
+  margin-left: calc(36px + ${defaultMargins.s}); // width of the radio input's icon + the margin on label
   font-weight: ${fontWeights.semibold};
   font-size: 0.875em;
 `

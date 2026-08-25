@@ -468,8 +468,8 @@ fun Database.Read.getUnitChildrenCapacities(
     date: LocalDate,
 ): List<UnitChildrenCapacityFactors> {
     return createQuery {
-            sql(
-                """
+        sql(
+            """
 SELECT
     ch.id AS child_id,
     COALESCE(an.capacity_factor, 1) AS assistance_need_factor,
@@ -487,8 +487,8 @@ LEFT JOIN service_need_option default_sno on pl.placement_type = default_sno.val
 LEFT JOIN assistance_factor an ON an.child_id = ch.id AND an.valid_during @> ${bind(date)}
 WHERE ch.id = ANY(${bind(childIds)})
 """
-            )
-        }
+        )
+    }
         .toList<UnitChildrenCapacityFactors>()
 }
 
@@ -526,11 +526,15 @@ fun Database.Read.getDetailedDaycarePlacements(
                 startDate = daycarePlacement.startDate,
                 endDate = daycarePlacement.endDate,
                 type = daycarePlacement.type,
-                missingServiceNeedDays = daycarePlacement.missingServiceNeedDays,
+                serviceNeedDetail =
+                    PlacementServiceNeedDetail(
+                        serviceNeeds =
+                            serviceNeeds.filter { it.placementId == daycarePlacement.id },
+                        defaultServiceNeedOption = defaultServiceNeedOptions[daycarePlacement.type],
+                        missingServiceNeedDays = daycarePlacement.missingServiceNeedDays,
+                    ),
                 groupPlacements =
                     groupPlacements.filter { it.daycarePlacementId == daycarePlacement.id },
-                serviceNeeds = serviceNeeds.filter { it.placementId == daycarePlacement.id },
-                defaultServiceNeedOption = defaultServiceNeedOptions[daycarePlacement.type],
                 terminatedBy = daycarePlacement.terminatedBy,
                 terminationRequestedDate = daycarePlacement.terminationRequestedDate,
                 placeGuarantee = daycarePlacement.placeGuarantee,
@@ -692,6 +696,12 @@ data class DaycarePlacementDetails(
     @Nested("modified_by") val modifiedBy: EvakaUser?,
 )
 
+data class PlacementServiceNeedDetail(
+    val serviceNeeds: List<ServiceNeed>,
+    val defaultServiceNeedOption: ServiceNeedOption?,
+    val missingServiceNeedDays: Int,
+)
+
 data class DaycarePlacementWithDetails(
     val id: PlacementId,
     val child: ChildBasics,
@@ -699,10 +709,8 @@ data class DaycarePlacementWithDetails(
     val startDate: LocalDate,
     val endDate: LocalDate,
     val type: PlacementType,
-    val missingServiceNeedDays: Int,
+    val serviceNeedDetail: PlacementServiceNeedDetail?,
     val groupPlacements: List<DaycareGroupPlacement>,
-    val serviceNeeds: List<ServiceNeed>,
-    val defaultServiceNeedOption: ServiceNeedOption?,
     val isRestrictedFromUser: Boolean = false,
     val terminationRequestedDate: LocalDate?,
     val terminatedBy: EvakaUser?,

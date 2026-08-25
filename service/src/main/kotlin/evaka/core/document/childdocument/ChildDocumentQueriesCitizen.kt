@@ -89,8 +89,8 @@ fun Database.Read.getUnansweredChildDocuments(
 
 fun Database.Read.getCitizenChildDocument(id: ChildDocumentId): ChildDocumentCitizenDetails? {
     return createQuery {
-            sql(
-                """
+        sql(
+            """
                 SELECT 
                     cd.id,
                     cd.status,
@@ -117,6 +117,8 @@ fun Database.Read.getCitizenChildDocument(id: ChildDocumentId): ChildDocumentCit
                     dt.published as template_published,
                     dt.content as template_content,
                     dt.archive_externally as template_archive_externally,
+                    dt.deletion_retention_days as template_deletion_retention_days,
+                    dt.deletion_retention_basis as template_deletion_retention_basis,
                     cdd.id AS decision_id,
                     cdd.status AS decision_status,
                     cdd.created_at AS decision_created_at,
@@ -130,8 +132,8 @@ fun Database.Read.getCitizenChildDocument(id: ChildDocumentId): ChildDocumentCit
                 LEFT JOIN child_document_decision cdd ON cdd.id = cd.decision_id
                 WHERE cd.id = ${bind(id)} AND latest_version.published_at IS NOT NULL
                 """
-            )
-        }
+        )
+    }
         .exactlyOneOrNull<ChildDocumentCitizenDetails>()
 }
 
@@ -141,13 +143,13 @@ fun Database.Transaction.markChildDocumentAsRead(
     now: HelsinkiDateTime,
 ) {
     createUpdate {
-            sql(
-                """
+        sql(
+            """
                 INSERT INTO child_document_read (document_id, person_id, read_at) 
                 VALUES (${bind(id)}, ${bind(user.id)}, ${bind(now)})
                 ON CONFLICT DO NOTHING;
                 """
-            )
-        }
+        )
+    }
         .execute()
 }

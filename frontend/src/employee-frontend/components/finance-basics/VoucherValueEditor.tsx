@@ -16,12 +16,14 @@ import type { ServiceNeedOptionVoucherValueId } from 'lib-common/generated/api-t
 import { isValidCents, parseCentsOrThrow } from 'lib-common/money'
 import { useMutationResult } from 'lib-common/query'
 import { AsyncButton } from 'lib-components/atoms/buttons/AsyncButton'
-import { LegacyButton } from 'lib-components/atoms/buttons/LegacyButton'
+import { Button } from 'lib-components/atoms/buttons/Button'
 import InputField from 'lib-components/atoms/form/InputField'
 import { Td, Tr } from 'lib-components/layout/Table'
 import DatePicker from 'lib-components/molecules/date-picker/DatePicker'
 import colors from 'lib-customizations/common'
 import type { Translations } from 'lib-customizations/employee'
+
+import { useTranslation } from '../../state/i18n'
 
 import type { FormState } from './ServiceNeedItem'
 import {
@@ -44,6 +46,7 @@ export default React.memo(function VoucherValueEditor({
   close,
   existingVoucherValues
 }: VoucherValueEditorProps) {
+  const { lang } = useTranslation()
   const [editorState, setEditorState] = useState<FormState>(initialState)
 
   const existingExcludingThis = useMemo(
@@ -99,7 +102,7 @@ export default React.memo(function VoucherValueEditor({
       <Tr key="edit">
         <Td>
           <DatePicker
-            locale="fi"
+            locale={lang}
             date={editorState.validFrom}
             onChange={(validFrom) =>
               setEditorState((previousState) => ({
@@ -112,7 +115,7 @@ export default React.memo(function VoucherValueEditor({
           />
           <span>-</span>
           <DatePicker
-            locale="fi"
+            locale={lang}
             date={editorState.validTo}
             onChange={(validTo) =>
               setEditorState((previousState) => ({
@@ -261,7 +264,7 @@ export default React.memo(function VoucherValueEditor({
           />
         </Td>
         <Td>
-          <LegacyButton text={i18n.common.cancel} onClick={close} />
+          <Button text={i18n.common.cancel} onClick={close} />
           <AsyncButton
             primary
             text={i18n.common.save}

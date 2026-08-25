@@ -26,14 +26,16 @@ import { AROMI_CUSTOMER_ID_MAX_LENGTH } from '../GroupModal'
 
 interface Props {
   group: DaycareGroup
+  lastPlacementDate: LocalDate | null
   nekkuUnits: NekkuUnitNumber[]
 }
 
 export default React.memo(function GroupUpdateModal({
   group,
+  lastPlacementDate,
   nekkuUnits
 }: Props) {
-  const { i18n } = useTranslation()
+  const { i18n, lang } = useTranslation()
   const { clearUiMode } = useContext(UIContext)
 
   const [data, setData] = useState<{
@@ -51,6 +53,11 @@ export default React.memo(function GroupUpdateModal({
     aromiCustomerId: group.aromiCustomerId,
     nekkuCustomerNumber: group.nekkuCustomerNumber
   })
+
+  const endDateTooEarly =
+    data.endDate !== null &&
+    ((data.startDate !== null && data.endDate.isBefore(data.startDate)) ||
+      (lastPlacementDate !== null && data.endDate.isBefore(lastPlacementDate)))
 
   return (
     <MutateFormModal
@@ -81,7 +88,7 @@ export default React.memo(function GroupUpdateModal({
       resolveDisabled={
         data.name.trim().length === 0 ||
         data.startDate === null ||
-        data.endDate?.isBefore(data.startDate) ||
+        endDateTooEarly ||
         (featureFlags.aromiIntegration &&
           data.aromiCustomerId !== null &&
           data.aromiCustomerId.trim().length > AROMI_CUSTOMER_ID_MAX_LENGTH)
@@ -105,7 +112,7 @@ export default React.memo(function GroupUpdateModal({
             onChange={(startDate) =>
               setData((state) => ({ ...state, startDate }))
             }
-            locale="fi"
+            locale={lang}
             data-qa="start-date-input"
           />
           <Gap $size="s" />
@@ -113,7 +120,15 @@ export default React.memo(function GroupUpdateModal({
           <DatePicker
             date={data.endDate}
             onChange={(endDate) => setData((state) => ({ ...state, endDate }))}
-            locale="fi"
+            info={
+              endDateTooEarly
+                ? {
+                    text: i18n.validationErrors.dateTooEarly,
+                    status: 'warning'
+                  }
+                : undefined
+            }
+            locale={lang}
             data-qa="end-date-input"
           />
           {featureFlags.jamixIntegration && (

@@ -8,15 +8,23 @@ export const fi = {
   common: {
     yesIDo: 'Kyllä',
     noIDoNot: 'En',
-    loadingFailed: 'Tietojen haku epäonnistui',
+    loadingFailed: 'Tietojen hakeminen ei onnistunut',
+    loadingFailedInfo:
+      'Kokeile päivittää sivu hetken kuluttua. Ongelma on yleensä hetkellinen.',
     noAccess: 'Oikeudet puuttuvat',
-    endpointDisabled:
-      'eVakassa on käynnissä osittainen huoltokatko. Osa toiminnoista ei ole tällä hetkellä käytettävissä. Yritä hetken kuluttua uudelleen.',
+    noAccessInfo:
+      'Jos tarvitset pääsyn, ota yhteys esihenkilöösi tai järjestelmänvalvojaan.',
+    endpointDisabled: 'Osittainen huoltokatko',
+    endpointDisabledInfo:
+      'Osa toiminnoista ei ole juuri nyt käytettävissä. Yritä uudelleen hetken kuluttua.',
+    networkError: 'Ei verkkoyhteyttä',
+    networkErrorInfo: 'Tarkista internet-yhteytesi ja kokeile uudelleen.',
     add: 'Lisää',
     cancel: 'Peruuta',
     confirm: 'Vahvista',
     sort: 'Järjestä',
     all: 'Kaikki',
+    allGroups: 'Kaikki ryhmät',
     shiftCare: 'Vuorohoito',
     statuses: {
       active: 'Aktiivinen',
@@ -226,6 +234,7 @@ export const fi = {
     searchPlaceholder: 'Etsi lapsen nimellä',
     noAbsences: 'Ei poissaoloja',
     removeAbsence: 'Peru poissaolo',
+    addAttendanceTimes: 'Lisää läsnäoloajat',
     timeError: 'Virheellinen aika',
     arrived: 'Saapui',
     departed: 'Lähti',
@@ -241,6 +250,7 @@ export const fi = {
       noServiceTodayShort: 'Ei sop.aikaa tänään',
       notSet: 'Läsnäoloilmoitus puuttuu',
       notSetShort: 'Ilmoitus puuttuu',
+      reservationNoTimes: 'Läsnä, kellonaika ei vielä tiedossa',
       variableTimes: 'Vaihteleva varhaiskasvatusaika',
       variableTimesShort: 'Sop.aika vaihtelee',
       present: 'Läsnä',
@@ -285,7 +295,7 @@ export const fi = {
         LAUNDRY: 'Repussa pyykkiä'
       },
       placeholders: {
-        note: 'Leikkejä, onnistumisia, ilonaiheita ja opittuja asioita tänään (ei terveystietoja tai salassapidettäviä tietoja).',
+        note: 'Leikkejä, aktiivista liikkumista, onnistumisia, ilonaiheita ja opittuja asioita tänään (ei terveystietoja tai salassapidettäviä tietoja).',
         childStickyNote:
           'Muistiinpano henkilökunnalle (ei terveystietoja tai salassapidettäviä tietoja).',
         groupNote: 'Koko ryhmää koskeva muistiinpano',
@@ -308,14 +318,18 @@ export const fi = {
         employeeNotFound: 'Työntekijää ei löytynyt',
         wrongPin: 'Väärä PIN-koodi'
       },
+      searchPlaceholder: 'Etsi nimellä',
       previousDays: 'Aiemmat kirjaukset',
       nextDays: 'Tulevat työvuorot ja poissaolot',
       continuationAttendance: '* edellisenä päivänä alkanut kirjaus',
       editContinuationAttendance: 'Siirry muokkaamaan',
       absent: 'Poissa',
-      externalPerson: 'Muu henkilö',
+      externalPersonCantFindYourName: 'Etkö löydä nimeäsi?',
       markExternalPerson: 'Kirjaa muu henkilö',
       markExternalPersonTitle: 'Kirjaa muu työntekijä sisään',
+      markExternalPersonNotificationTitle: 'Jos olet yksikön työntekijä',
+      markExternalPersonNotificationMessage:
+        'Pyydä yksikön johtajaa luvittamaan sinut yksikköön, niin nimesi ilmestyy listalle. Sen jälkeen voit kirjautua normaalisti listalta. Sinun tulee myös asettaa PIN-koodi tietokoneella.',
       markArrived: 'Kirjaudu läsnäolevaksi',
       markDeparted: 'Kirjaudu poissaolevaksi',
       loginWithPin: 'Kirjaudu PIN-koodilla',

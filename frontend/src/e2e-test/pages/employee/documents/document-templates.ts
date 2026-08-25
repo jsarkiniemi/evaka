@@ -11,6 +11,7 @@ import {
   Element,
   FileInput,
   MultiSelect,
+  Radio,
   Select,
   TextInput
 } from '../../../utils/page'
@@ -79,12 +80,16 @@ export class TemplateModal extends Element {
   readonly nameInput
   readonly typeSelect
   readonly placementTypesSelect
+  readonly languageSelect
   readonly validityStartInput
   readonly processDefinitionNumberInput
   readonly archiveDurationMonthsInput
   readonly confidentialityDurationYearsInput
   readonly confidentialityBasisInput
   readonly archiveExternallyCheckbox
+  readonly deletionRetentionDaysInput
+  readonly deletionRetentionBasisPlacementEnd
+  readonly deletionRetentionBasisStatusTransition
   readonly confirmCreateButton
 
   constructor(locator: Locator) {
@@ -94,6 +99,7 @@ export class TemplateModal extends Element {
     this.placementTypesSelect = new MultiSelect(
       this.findByDataQa('placement-types-select')
     )
+    this.languageSelect = new Select(this.findByDataQa('language-select'))
     this.validityStartInput = new TextInput(this.findByDataQa('start-date'))
     this.processDefinitionNumberInput = new TextInput(
       this.findByDataQa('process-definition-number')
@@ -109,6 +115,15 @@ export class TemplateModal extends Element {
     )
     this.archiveExternallyCheckbox = new Checkbox(
       this.findByDataQa('archive-externally-checkbox')
+    )
+    this.deletionRetentionDaysInput = new TextInput(
+      this.findByDataQa('deletion-retention-days')
+    )
+    this.deletionRetentionBasisPlacementEnd = new Radio(
+      this.findByDataQa('deletion-retention-basis-PLACEMENT_END')
+    )
+    this.deletionRetentionBasisStatusTransition = new Radio(
+      this.findByDataQa('deletion-retention-basis-STATUS_TRANSITION')
     )
     this.confirmCreateButton = this.findByDataQa('modal-okBtn')
   }

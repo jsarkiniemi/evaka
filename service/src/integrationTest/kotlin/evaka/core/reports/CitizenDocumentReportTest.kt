@@ -181,18 +181,17 @@ class CitizenDocumentReportTest : FullApplicationTest(resetDbBeforeEach = true) 
                 documentTemplateId = templateData.first().id,
             )
 
-        val expectedResults =
-            testPersonData.map {
-                CitizenDocumentResponseReportRow(
-                    childId = it.first.id,
-                    answeredAt = it.second?.answeredAt,
-                    firstName = it.first.firstName,
-                    lastName = it.first.lastName,
-                    documentStatus = it.second?.status,
-                    documentContent = it.second?.content,
-                    isBackup = it.first.email == "demetrius@notadomain",
-                )
-            }
+        val expectedResults = testPersonData.map {
+            CitizenDocumentResponseReportRow(
+                childId = it.first.id,
+                answeredAt = it.second?.answeredAt,
+                firstName = it.first.firstName,
+                lastName = it.first.lastName,
+                documentStatus = it.second?.status,
+                documentContent = it.second?.content,
+                isBackup = it.first.email == "demetrius@notadomain",
+            )
+        }
 
         assertThat(results).containsExactlyInAnyOrderElementsOf(expectedResults)
     }
@@ -255,6 +254,7 @@ class CitizenDocumentReportTest : FullApplicationTest(resetDbBeforeEach = true) 
                     areaId = areaAId,
                     openingDate = start,
                     type = setOf(CareType.CENTRE, CareType.PRESCHOOL),
+                    dailyPreschoolTime = TimeRange(LocalTime.of(9, 0), LocalTime.of(13, 0)),
                     operationTimes =
                         List(5) { TimeRange(LocalTime.of(8, 0), LocalTime.of(18, 0)) } +
                             List(2) { null },

@@ -18,7 +18,7 @@ import {
 } from 'lib-common/query'
 import { StaticChip } from 'lib-components/atoms/Chip'
 import RoundIcon from 'lib-components/atoms/RoundIcon'
-import { LegacyButton } from 'lib-components/atoms/buttons/LegacyButton'
+import { Button } from 'lib-components/atoms/buttons/Button'
 import { FixedSpaceColumn } from 'lib-components/layout/flex-helpers'
 import { InfoBox } from 'lib-components/molecules/MessageBoxes'
 import { PersonName } from 'lib-components/molecules/PersonNames'
@@ -116,10 +116,6 @@ export default React.memo(function AttendanceChildPage({
       />
     )
   }
-
-  const NoGuardianInfoBoxContainer = styled.div`
-    margin: ${defaultMargins.xs};
-  `
 
   return (
     <>
@@ -316,7 +312,7 @@ export default React.memo(function AttendanceChildPage({
             onClose={() => setUiMode('default')}
           >
             <FixedSpaceColumn>
-              <LegacyButton
+              <Button
                 text={i18n.childInfo.image.modalMenu.takeImageButton}
                 primary
                 onClick={() => {
@@ -324,7 +320,7 @@ export default React.memo(function AttendanceChildPage({
                 }}
               />
               {child.isSuccess && !!child.value.imageUrl && (
-                <LegacyButton
+                <Button
                   text={i18n.childInfo.image.modalMenu.deleteImageButton}
                   onClick={() => setUiMode('img-delete')}
                 />
@@ -398,6 +394,10 @@ export default React.memo(function AttendanceChildPage({
   )
 })
 
+const NoGuardianInfoBoxContainer = styled.div`
+  margin: ${defaultMargins.xs};
+`
+
 const ChildStatus = styled.div`
   color: ${colors.grayscale.g35};
   top: 10px;
@@ -441,8 +441,7 @@ const Zindex = styled.div`
 `
 
 const ChildBackground = styled.div<{ $status: AttendanceStatus }>`
-  background-color: ${(p) =>
-    attendanceColors[p.$status]}48; // hex 48 is 0.3 alpha
+  background-color: ${(p) => attendanceColors[p.$status]}48; // hex 48 is 0.3 alpha
   display: flex;
   flex-direction: column;
   align-items: center;

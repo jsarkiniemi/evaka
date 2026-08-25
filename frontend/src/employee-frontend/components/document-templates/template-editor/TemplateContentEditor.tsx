@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useContext, useMemo, useState } from 'react'
 import styled from 'styled-components'
 import { useLocation } from 'wouter'
 
@@ -25,12 +25,15 @@ import { useMutationResult } from 'lib-common/query'
 import { AddButtonRow } from 'lib-components/atoms/buttons/AddButton'
 import { AsyncButton } from 'lib-components/atoms/buttons/AsyncButton'
 import { Button } from 'lib-components/atoms/buttons/Button'
-import { LegacyButton } from 'lib-components/atoms/buttons/LegacyButton'
 import { MutateButton } from 'lib-components/atoms/buttons/MutateButton'
 import { SelectF } from 'lib-components/atoms/dropdowns/Select'
 import Checkbox, { CheckboxF } from 'lib-components/atoms/form/Checkbox'
 import { InputFieldF } from 'lib-components/atoms/form/InputField'
 import MultiSelect from 'lib-components/atoms/form/MultiSelect'
+import {
+  localeByTemplateLanguage,
+  TemplateLanguageProvider
+} from 'lib-components/document-templates/TemplateLanguageContext'
 import { getDocumentCategory } from 'lib-components/document-templates/documents'
 import { ContentArea } from 'lib-components/layout/Container'
 import {
@@ -52,6 +55,7 @@ import {
 import { faPen } from 'lib-icons'
 
 import { useTranslation } from '../../../state/i18n'
+import { UserContext } from '../../../state/user'
 import {
   documentTemplateForm,
   getTemplateFormInitialState,
@@ -64,6 +68,9 @@ import {
   updateDocumentTemplateContentMutation
 } from '../queries'
 
+import DeletionRulesEditor, {
+  useDeletionBasisOptions
+} from './DeletionRulesEditor'
 import TemplateSectionModal from './TemplateSectionModal'
 import TemplateSectionView from './TemplateSectionView'
 
@@ -98,6 +105,7 @@ export default React.memo(function TemplateContentEditor({
   )
   const sections = useFormField(form, 'sections')
   const sectionElems = useFormElems(sections)
+  const locale = localeByTemplateLanguage[template.language]
 
   return (
     <div>
@@ -111,53 +119,55 @@ export default React.memo(function TemplateContentEditor({
           Essi Esimerkkiläinen (
           {LocalDate.todayInHelsinkiTz().subYears(5).format()})
         </H2>
-        <FixedSpaceColumn $spacing="L">
-          {sectionElems.map((section, index) => (
-            <TemplateSectionView
-              key={section.state.id}
-              bind={section}
-              onMoveUp={() =>
-                sections.update((old) => swapElements(old, index, index - 1))
-              }
-              onMoveDown={() =>
-                sections.update((old) => swapElements(old, index, index + 1))
-              }
-              onDelete={() =>
-                sections.update((old) => [
-                  ...old.slice(0, index),
-                  ...old.slice(index + 1)
-                ])
-              }
-              first={index === 0}
-              last={index === sectionElems.length - 1}
-              readOnly={readOnly}
+        <TemplateLanguageProvider value={locale}>
+          <FixedSpaceColumn $spacing="L">
+            {sectionElems.map((section, index) => (
+              <TemplateSectionView
+                key={section.state.id}
+                bind={section}
+                onMoveUp={() =>
+                  sections.update((old) => swapElements(old, index, index - 1))
+                }
+                onMoveDown={() =>
+                  sections.update((old) => swapElements(old, index, index + 1))
+                }
+                onDelete={() =>
+                  sections.update((old) => [
+                    ...old.slice(0, index),
+                    ...old.slice(index + 1)
+                  ])
+                }
+                first={index === 0}
+                last={index === sectionElems.length - 1}
+                readOnly={readOnly}
+              />
+            ))}
+          </FixedSpaceColumn>
+
+          {!readOnly && (
+            <AddButtonRow
+              text={i18n.documentTemplates.templateEditor.addSection}
+              onClick={() => setCreatingSection(true)}
+              data-qa="create-section-button"
             />
-          ))}
-        </FixedSpaceColumn>
+          )}
 
-        {!readOnly && (
-          <AddButtonRow
-            text={i18n.documentTemplates.templateEditor.addSection}
-            onClick={() => setCreatingSection(true)}
-            data-qa="create-section-button"
-          />
-        )}
-
-        {creatingSection && (
-          <TemplateSectionModal
-            onSave={(newSection) => {
-              sections.update((old) => [...old, newSection])
-              setCreatingSection(false)
-            }}
-            onCancel={() => setCreatingSection(false)}
-          />
-        )}
+          {creatingSection && (
+            <TemplateSectionModal
+              onSave={(newSection) => {
+                sections.update((old) => [...old, newSection])
+                setCreatingSection(false)
+              }}
+              onCancel={() => setCreatingSection(false)}
+            />
+          )}
+        </TemplateLanguageProvider>
       </ContentArea>
 
       <Gap />
       <ContentArea $opaque>
         <FixedSpaceRow $justifyContent="space-between" $alignItems="center">
-          <LegacyButton
+          <Button
             text={i18n.common.goBack}
             onClick={() => navigate('/document-templates')}
           />
@@ -287,6 +297,14 @@ const BasicsSection = React.memo(function BasicsSection({
               {
                 label: 'Asiakirja arkistoitavissa',
                 value: template.archiveExternally ? 'Kyllä' : 'Ei'
+              },
+              {
+                label: i18n.documentTemplates.templateModal.deletionRetention,
+                value: `${template.deletionRetentionDays} ${i18n.common.days} ${
+                  i18n.documentTemplates.templateModal.deletionRetentionBasis[
+                    template.deletionRetentionBasis
+                  ]
+                }`
               }
             ]}
           />
@@ -323,6 +341,9 @@ const BasicsEditor = React.memo(function BasicsEditor({
   onClose: () => void
 }) {
   const { i18n, lang } = useTranslation()
+  const { featureConfig } = useContext(UserContext)
+  const allowEnglishForAllTypes =
+    featureConfig?.allowEnglishChildDocumentsForAllTypes
 
   const typeOptions = useMemo(
     () =>
@@ -334,16 +355,20 @@ const BasicsEditor = React.memo(function BasicsEditor({
     [i18n.documentTemplates]
   )
 
+  const deletionBasisOptions = useDeletionBasisOptions()
+
   const getLanguageOptions = useCallback(
-    (type: ChildDocumentType) =>
-      uiLanguages
-        .filter((option) => type === 'CITIZEN_BASIC' || option !== 'EN')
+    (type: ChildDocumentType) => {
+      const englishAllowed = type === 'CITIZEN_BASIC' || allowEnglishForAllTypes
+      return uiLanguages
+        .filter((option) => option !== 'EN' || englishAllowed)
         .map((option) => ({
           domValue: option,
           value: option,
           label: i18n.documentTemplates.languages[option]
-        })),
-    [i18n.documentTemplates]
+        }))
+    },
+    [i18n.documentTemplates, allowEnglishForAllTypes]
   )
 
   const form = useForm(
@@ -368,7 +393,12 @@ const BasicsEditor = React.memo(function BasicsEditor({
       processDefinitionNumber: template.processDefinitionNumber ?? '',
       archiveDurationMonths: template.archiveDurationMonths?.toString() ?? '0',
       archiveExternally: template.archiveExternally ?? false,
-      endDecisionWhenUnitChanges: template.endDecisionWhenUnitChanges ?? true
+      endDecisionWhenUnitChanges: template.endDecisionWhenUnitChanges ?? true,
+      deletionRetentionDays: template.deletionRetentionDays.toString(),
+      deletionRetentionBasis: {
+        domValue: template.deletionRetentionBasis,
+        options: deletionBasisOptions
+      }
     }),
     {
       ...i18n.validationErrors
@@ -410,7 +440,9 @@ const BasicsEditor = React.memo(function BasicsEditor({
     processDefinitionNumber,
     archiveDurationMonths,
     archiveExternally,
-    endDecisionWhenUnitChanges
+    endDecisionWhenUnitChanges,
+    deletionRetentionDays,
+    deletionRetentionBasis
   } = useFormFields(form)
 
   return (
@@ -517,9 +549,14 @@ const BasicsEditor = React.memo(function BasicsEditor({
           label={i18n.documentTemplates.templateModal.archiveExternally}
           data-qa="archive-externally-checkbox"
         />
+        <Gap />
+        <DeletionRulesEditor
+          retentionDays={deletionRetentionDays}
+          retentionBasis={deletionRetentionBasis}
+        />
       </div>
       <FixedSpaceRow $justifyContent="flex-end">
-        <LegacyButton onClick={onClose} text={i18n.common.cancel} />
+        <Button onClick={onClose} text={i18n.common.cancel} />
         <MutateButton
           primary
           mutation={updateDocumentTemplateBasicsMutation}

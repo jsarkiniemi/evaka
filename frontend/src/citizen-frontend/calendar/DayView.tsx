@@ -42,17 +42,12 @@ import type {
   CalendarEventTimeId,
   ChildId
 } from 'lib-common/generated/api-types/shared'
-import HelsinkiDateTime from 'lib-common/helsinki-date-time'
 import LocalDate from 'lib-common/local-date'
 import { reservationHasTimes } from 'lib-common/reservations'
 import type TimeInterval from 'lib-common/time-interval'
 import HorizontalLine from 'lib-components/atoms/HorizontalLine'
 import { Button } from 'lib-components/atoms/buttons/Button'
 import { IconOnlyButton } from 'lib-components/atoms/buttons/IconOnlyButton'
-import {
-  LegacyButton,
-  StyledButton
-} from 'lib-components/atoms/buttons/LegacyButton'
 import {
   MutateButton,
   cancelMutation
@@ -94,6 +89,10 @@ import { faQuestion, faTimes } from 'lib-icons'
 import { faChevronLeft, faChevronRight } from 'lib-icons'
 
 import ModalAccessibilityWrapper from '../ModalAccessibilityWrapper'
+import {
+  exportCitizenCalendarEventIcs,
+  exportCitizenDiscussionReservationIcs
+} from '../generated/api-clients/calendarevent'
 import type { Translations } from '../localization'
 import { useLang, useTranslation } from '../localization'
 import { getDuplicateChildInfo } from '../utils/duplicated-child-utils'
@@ -213,7 +212,7 @@ function View({
   )
 
   const leftButton = reservationsEditable ? (
-    <LegacyButton
+    <Button
       onClick={onEditReservations}
       text={i18n.common.edit}
       data-qa="edit"
@@ -221,7 +220,7 @@ function View({
   ) : undefined
 
   const rightButton = absencesEditable ? (
-    <LegacyButton
+    <Button
       primary
       text={i18n.calendar.newAbsence}
       onClick={onCreateAbsence}
@@ -277,11 +276,7 @@ function Edit({
   const [showAllErrors, useShowAllErrors] = useBoolean(false)
 
   const leftButton = (
-    <LegacyButton
-      onClick={onCancel}
-      text={i18n.common.cancel}
-      data-qa="cancel"
-    />
+    <Button onClick={onCancel} text={i18n.common.cancel} data-qa="cancel" />
   )
 
   const rightButton = (
@@ -373,6 +368,9 @@ interface DayModalProps {
   children?: ((childIndex: number) => React.ReactNode) | undefined
 }
 
+const emptyArray: number[] = []
+const emptyFunction = () => undefined
+
 const DayModal = React.memo(function DayModal({
   date,
   dateActions,
@@ -380,8 +378,8 @@ const DayModal = React.memo(function DayModal({
   onClose,
   leftButton,
   rightButton,
-  editableChildren = [],
-  children: renderReservation = () => undefined
+  editableChildren = emptyArray,
+  children: renderReservation = emptyFunction
 }: DayModalProps) {
   const i18n = useTranslation()
   const [lang] = useLang()
@@ -602,19 +600,11 @@ const DayModal = React.memo(function DayModal({
                                       </div>
                                       {date.isEqualOrAfter(today) && (
                                         <CalendarEventExportButton
-                                          eventDetails={{
-                                            title: event.title,
-                                            helsinkiStartTime:
-                                              event.period.start.formatIso(),
-                                            //non-inclusive end date
-                                            helsinkiEndTime: event.period.end
-                                              .addDays(1)
-                                              .formatIso(),
-                                            fileName: `${i18n.calendar.calendarEventFilename}_${event.period.start.formatIso()}-${event.period.end.formatIso()}.ics`,
-                                            locationInfo:
-                                              event.currentAttending,
-                                            allDay: true
-                                          }}
+                                          href={exportCitizenCalendarEventIcs({
+                                            eventId: event.id,
+                                            childId: row.childId,
+                                            date
+                                          }).url.toString()}
                                           data-qa={`event-export-button-${event.id}`}
                                         />
                                       )}
@@ -658,22 +648,9 @@ const DayModal = React.memo(function DayModal({
                                             </div>
                                             {rt.date.isEqualOrAfter(today) && (
                                               <CalendarEventExportButton
-                                                eventDetails={{
-                                                  title: event.title,
-                                                  helsinkiStartTime:
-                                                    HelsinkiDateTime.fromLocal(
-                                                      rt.date,
-                                                      rt.startTime
-                                                    ).formatIso(),
-                                                  helsinkiEndTime:
-                                                    HelsinkiDateTime.fromLocal(
-                                                      rt.date,
-                                                      rt.endTime
-                                                    ).formatIso(),
-                                                  fileName: `${i18n.calendar.discussionTimeReservation.discussionTimeFileName}_${rt.date.formatIso()}.ics`,
-                                                  locationInfo:
-                                                    event.currentAttending
-                                                }}
+                                                href={exportCitizenDiscussionReservationIcs(
+                                                  { eventTimeId: rt.id }
+                                                ).url.toString()}
                                                 data-qa={`event-export-button-${rt.id}`}
                                               />
                                             )}
@@ -758,7 +735,7 @@ interface ModalData {
 }
 
 interface ModalRow {
-  childId: string
+  childId: ChildId
   firstName: string
   lastName: string
   image: ChildImageData
@@ -1122,7 +1099,7 @@ const ButtonFooter = styled.div`
     }
 
     // Fit more text to the buttons
-    & > ${StyledButton} {
+    & > button {
       padding: 0;
       width: 100%;
     }

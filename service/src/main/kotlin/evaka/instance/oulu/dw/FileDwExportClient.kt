@@ -6,8 +6,8 @@ package evaka.instance.oulu.dw
 
 import evaka.core.bi.CsvInputStream
 import evaka.core.shared.domain.EvakaClock
+import evaka.core.shared.sftp.SftpClient
 import evaka.instance.oulu.OuluEnv
-import evaka.instance.oulu.invoice.service.SftpSender
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.io.BufferedOutputStream
 import java.nio.file.Files
@@ -17,7 +17,7 @@ import software.amazon.awssdk.services.s3.S3Client
 
 class FileDwExportClient(
     private val s3Client: S3Client,
-    private val sftpSender: SftpSender,
+    private val sftpClient: SftpClient,
     private val ouluEnv: OuluEnv,
 ) : DwExportClient {
     private val logger = KotlinLogging.logger {}
@@ -41,24 +41,31 @@ class FileDwExportClient(
 
             logger.info { "Sending DW content for '$queryName' via SFTP" }
 
-            sftpSender.send(tempFile.toFile().readText(Charsets.UTF_8), fileName, Charsets.UTF_8)
+            tempFile.toFile().inputStream().use { input -> sftpClient.put(input, fileName) }
 
             logger.info { "Sending DW content for '$queryName' to S3" }
 
-            val response =
-                s3Client
-                    .putObject({ r -> r.bucket(bucket).key(key).contentType("text/csv") }, tempFile)
-                    .sdkHttpResponse()
+            try {
+                val response =
+                    s3Client
+                        .putObject(
+                            { r -> r.bucket(bucket).key(key).contentType("text/csv") },
+                            tempFile,
+                        )
+                        .sdkHttpResponse()
 
-            if (response.isSuccessful) {
-                logger.info { "DW file '$key' successfully sent" }
-            } else {
-                logger.warn {
-                    "DW file '$key' sending failed: ${response.statusCode()} ${response.statusText()}"
+                if (response.isSuccessful) {
+                    logger.info { "DW file '$key' successfully sent" }
+                } else {
+                    logger.error {
+                        "DW file '$key' sending failed: ${response.statusCode()} ${response.statusText()}"
+                    }
+                }
+            } catch (e: Exception) {
+                logger.error(e) {
+                    "Failed to send DW file '$key' to S3, ignored because the SFTP upload is the primary delivery"
                 }
             }
-        } catch (e: Exception) {
-            logger.warn(e) { "Failed to send DW content for '$queryName'" }
         } finally {
             val wasDeleted = tempFile.deleteIfExists()
             if (!wasDeleted) {

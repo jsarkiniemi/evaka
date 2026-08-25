@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
-FROM node:24.14.1-trixie-slim AS base
+FROM node:24.19.0-trixie-slim AS base
 ARG CACHE_BUST
 
 WORKDIR /project
@@ -11,8 +11,8 @@ ENV LC_ALL=C.UTF-8
 ENV LANG=C.UTF-8
 ENV LANGUAGE=C.UTF-8
 
-ARG S3_DOWNLOADER_VERSION=v1.5.1
-ARG S3_DOWNLOADER_SHA256="cb751589ca60749c42b65009671d6076435e7454b8980ee98884e296a1ec6cb8"
+ARG S3_DOWNLOADER_VERSION=v1.5.2
+ARG S3_DOWNLOADER_SHA256="70a40524bf901d999eb7f85aaebfed25132767a1475cb76147f5c7f01ef5c66d"
 
 RUN apt-get update \
  && apt-get -y dist-upgrade \
@@ -41,7 +41,6 @@ COPY . .
 
 FROM builder AS test
 
-RUN yarn lint
 RUN yarn type-check
 RUN yarn test
 

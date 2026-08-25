@@ -5,6 +5,7 @@
 package evaka.core.attendance
 
 import evaka.core.Audit
+import evaka.core.AuditContext
 import evaka.core.AuditId
 import evaka.core.absence.AbsenceCategory
 import evaka.core.absence.AbsenceType
@@ -225,7 +226,11 @@ class ChildAttendanceController(
                         Action.Unit.UPDATE_CHILD_ATTENDANCES,
                         unitId,
                     )
-                    body.children.map { childId ->
+                    // Insert in a deterministic order so that two concurrent requests can't
+                    // cause a Postgres deadlock while checking the no-overlap exclusion
+                    // constraint
+                    body.children.sorted().map { childId ->
+                        // Validate that the child is placed in the unit
                         tx.fetchChildPlacementBasics(childId, unitId, today)
                         try {
                             tx.insertAttendance(
@@ -573,28 +578,27 @@ class ChildAttendanceController(
     ) {
         val today = clock.today()
 
-        val deletedAbsences =
-            db.connect { dbc ->
-                dbc.transaction { tx ->
-                    accessControl.requirePermissionFor(
-                        tx,
-                        user,
-                        clock,
-                        Action.Child.DELETE_ABSENCE,
-                        childId,
-                    )
-                    val placementType =
-                        tx.fetchChildPlacementBasics(childId, unitId, clock.today()).placementType
-                    val absenceCategories =
-                        tx.getAbsencesOfChildByDate(childId, today).map { it.category }.toSet()
-                    val hasFullDayAbsence = placementType.absenceCategories() == absenceCategories
-                    if (hasFullDayAbsence) {
-                        tx.deleteAbsencesByDate(childId, today)
-                    } else {
-                        throw Conflict("Cannot cancel full day absence, child is not fully absent")
-                    }
+        val deletedAbsences = db.connect { dbc ->
+            dbc.transaction { tx ->
+                accessControl.requirePermissionFor(
+                    tx,
+                    user,
+                    clock,
+                    Action.Child.DELETE_ABSENCE,
+                    childId,
+                )
+                val placementType =
+                    tx.fetchChildPlacementBasics(childId, unitId, clock.today()).placementType
+                val absenceCategories =
+                    tx.getAbsencesOfChildByDate(childId, today).map { it.category }.toSet()
+                val hasFullDayAbsence = placementType.absenceCategories() == absenceCategories
+                if (hasFullDayAbsence) {
+                    tx.deleteAbsencesByDate(childId, today)
+                } else {
+                    throw Conflict("Cannot cancel full day absence, child is not fully absent")
                 }
             }
+        }
 
         Audit.ChildAttendancesFullDayAbsenceDelete.log(
             targetId = AuditId(childId),
@@ -668,8 +672,14 @@ class ChildAttendanceController(
         @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) from: LocalDate,
         @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) to: LocalDate,
     ) {
-        val deleted =
-            db.connect { dbc ->
+        val audit =
+            AuditContext()
+                .add(unitId)
+                .add(childId)
+                .observeDate(from)
+                .addMeta("from", from)
+                .addMeta("to", to)
+        db.connect { dbc ->
                 dbc.transaction { tx ->
                     accessControl.requirePermissionFor(
                         tx,
@@ -678,14 +688,12 @@ class ChildAttendanceController(
                         Action.Child.DELETE_ABSENCE_RANGE,
                         childId,
                     )
-                    tx.deleteAbsencesByFiniteDateRange(childId, FiniteDateRange(from, to))
+                    tx.deleteAbsencesByFiniteDateRange(childId, FiniteDateRange(from, to)).also {
+                        audit.add(it)
+                    }
                 }
             }
-        Audit.AbsenceDeleteRange.log(
-            targetId = AuditId(childId),
-            objectId = AuditId(deleted),
-            meta = mapOf("from" to from, "to" to to),
-        )
+            .also { audit.log(Audit.AbsenceDeleteRange, clock) }
     }
 }
 
@@ -697,8 +705,8 @@ private fun Database.Read.fetchChildPlacementBasics(
     today: LocalDate,
 ): ChildPlacementBasics =
     createQuery {
-            sql(
-                """
+        sql(
+            """
 SELECT rp.placement_type, c.date_of_birth
 FROM person c 
 JOIN realized_placement_all(${bind(today)}) rp
@@ -706,8 +714,8 @@ ON c.id = rp.child_id
 WHERE c.id = ${bind(childId)} AND rp.unit_id = ${bind(unitId)}
 LIMIT 1
 """
-            )
-        }
+        )
+    }
         .exactlyOneOrNull<ChildPlacementBasics>()
         ?: throw BadRequest("Child $childId has no placement in unit $unitId on date $today")
 
@@ -718,18 +726,17 @@ private fun Database.Read.fetchChildPlacementTypeDates(
     unitId: DaycareId,
     startDate: LocalDate,
     endDate: LocalDate,
-): List<PlacementTypeDate> =
-    createQuery {
-            sql(
-                """
+): List<PlacementTypeDate> = createQuery {
+    sql(
+        """
 SELECT DISTINCT d::date AS date, placement_type
 FROM generate_series(${bind(startDate)}, ${bind(endDate)}, '1 day') d
 JOIN realized_placement_all(d::date) rp ON true
 WHERE rp.child_id = ${bind(childId)} AND rp.unit_id = ${bind(unitId)}
 """
-            )
-        }
-        .toList()
+    )
+}
+    .toList()
 
 private fun getChildAttendanceStatus(
     now: HelsinkiDateTime,
@@ -742,8 +749,9 @@ private fun getChildAttendanceStatus(
     }
 
     val hasArrivedToday = attendances.any { it.arrived.toLocalDate() == now.toLocalDate() }
-    val hasDepartedRecently =
-        attendances.any { it.departed != null && it.departed > now.minusMinutes(30) }
+    val hasDepartedRecently = attendances.any {
+        it.departed != null && it.departed > now.minusMinutes(30)
+    }
     if (hasArrivedToday || hasDepartedRecently) {
         return AttendanceStatus.DEPARTED
     }

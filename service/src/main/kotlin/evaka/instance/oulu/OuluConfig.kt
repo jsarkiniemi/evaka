@@ -4,10 +4,13 @@
 
 package evaka.instance.oulu
 
-import com.jcraft.jsch.JSch
 import evaka.core.ScheduledJobsEnv
 import evaka.core.VtjXroadEnv
 import evaka.core.application.ApplicationStatus
+import evaka.core.bi.BiExportClient
+import evaka.core.bi.BiExportConfig
+import evaka.core.bi.BiExportJob
+import evaka.core.bi.BiTable
 import evaka.core.document.archival.ArchivalIntegrationClient
 import evaka.core.emailclient.IEmailMessageProvider
 import evaka.core.holidayperiod.QuestionnaireType
@@ -32,10 +35,12 @@ import evaka.core.shared.config.pdfTemplateEngine
 import evaka.core.shared.domain.RealEvakaClock
 import evaka.core.shared.message.IMessageProvider
 import evaka.core.shared.security.actionrule.ActionRuleMapping
+import evaka.core.shared.sftp.SftpClient
 import evaka.core.shared.template.ITemplateProvider
 import evaka.core.titania.TitaniaEmployeeIdConverter
 import evaka.core.vtjclient.config.httpsMessageSender
 import evaka.instance.espoo.DefaultPasswordSpecification
+import evaka.instance.oulu.bi.OuluBiSftpExportClient
 import evaka.instance.oulu.database.DevDataInitializer
 import evaka.instance.oulu.dw.DwExportClient
 import evaka.instance.oulu.dw.DwExportJob
@@ -45,8 +50,6 @@ import evaka.instance.oulu.invoice.config.OuluIncomeTypesProvider
 import evaka.instance.oulu.invoice.config.OuluInvoiceProductProvider
 import evaka.instance.oulu.invoice.service.OuluInvoiceClient
 import evaka.instance.oulu.invoice.service.ProEInvoiceGenerator
-import evaka.instance.oulu.invoice.service.SftpConnector
-import evaka.instance.oulu.invoice.service.SftpSender
 import evaka.instance.oulu.payment.service.BicMapper
 import evaka.instance.oulu.payment.service.OuluPaymentIntegrationClient
 import evaka.instance.oulu.payment.service.ProEPaymentGenerator
@@ -71,11 +74,16 @@ import software.amazon.awssdk.services.s3.S3Client
 @Configuration
 @Import(OuluAsyncJobRegistration::class)
 class OuluConfig {
+    companion object {
+        val excludedBiTables: Set<BiTable> = setOf(BiTable.AttendanceReservation)
+    }
+
     @Bean fun ouluEnv(env: Environment): OuluEnv = OuluEnv.fromEnvironment(env)
 
     @Bean
     fun featureConfig(): FeatureConfig =
         FeatureConfig(
+            placementDecisionSwedishLanguageEnabled = false,
             valueDecisionCapacityFactorEnabled = false,
             // (7*24) - 3 = 165
             citizenReservationThresholdHours = 165,
@@ -95,6 +103,7 @@ class OuluConfig {
             financeMessageAccountName =
                 "Varhaiskasvatuksen asiakasmaksut - Early childhood education fees",
             archiveMetadataOrganization = "Oulun kaupungin varhaiskasvatus",
+            metadataBusinessId = "0187690-1",
             archiveMetadataConfigs = { type: ArchiveProcessType, year: Int ->
                 when (type) {
                     ArchiveProcessType.APPLICATION_DAYCARE -> {
@@ -137,6 +146,10 @@ class OuluConfig {
             holidayQuestionnaireType = QuestionnaireType.OPEN_RANGES,
             minimumInvoiceAmount = 800,
             daycarePlacementPlanEndMonthDay = MonthDay.of(8, 20),
+            deletedMessagePlaceholderBody =
+                "Lähettäjä on poistanut viestin. Sinun ei tarvitse tehdä mitään.\n\n" +
+                    "The sender has deleted this message. No action is needed on your part.",
+            deletedMessagePlaceholderTitle = "Viesti on poistettu / Message was deleted",
         )
 
     @Bean fun actionRuleMapping(): ActionRuleMapping = OuluActionRuleMapping()
@@ -160,18 +173,11 @@ class OuluConfig {
     @Bean fun invoiceGenerationLogicChooser() = DefaultInvoiceGenerationLogic // TODO: implement
 
     @Bean
-    fun invoiceIntegrationClient(
-        ouluEnv: OuluEnv,
-        sftpConnector: SftpConnector,
-    ): InvoiceIntegrationClient {
-        val sftpSender = SftpSender(ouluEnv.intimeInvoices, sftpConnector)
-        return OuluInvoiceClient(
-            sftpSender,
+    fun invoiceIntegrationClient(ouluEnv: OuluEnv): InvoiceIntegrationClient =
+        OuluInvoiceClient(
+            SftpClient(ouluEnv.intimeInvoices.toSftpEnv(), ouluEnv.intimeInvoices.path),
             ProEInvoiceGenerator(FinanceDateProvider(RealEvakaClock())),
         )
-    }
-
-    @Bean fun sftpConnector(): SftpConnector = SftpConnector(JSch())
 
     @Bean fun incomeTypesProvider(): IncomeTypesProvider = OuluIncomeTypesProvider()
 
@@ -184,14 +190,14 @@ class OuluConfig {
     @Bean fun invoiceNumberProvider(): InvoiceNumberProvider = DefaultInvoiceNumberProvider(1)
 
     @Bean
-    fun paymentIntegrationClient(
-        ouluEnv: OuluEnv,
-        sftpConnector: SftpConnector,
-    ): PaymentIntegrationClient {
-        val sftpSender = SftpSender(ouluEnv.intimePayments, sftpConnector)
+    fun paymentIntegrationClient(ouluEnv: OuluEnv): PaymentIntegrationClient {
         val paymentGenerator =
             ProEPaymentGenerator(FinanceDateProvider(RealEvakaClock()), BicMapper())
-        return OuluPaymentIntegrationClient(paymentGenerator, sftpSender)
+        return OuluPaymentIntegrationClient(
+            paymentGenerator,
+            SftpClient(ouluEnv.intimePayments.toSftpEnv(), ouluEnv.intimePayments.path),
+            RealEvakaClock(),
+        )
     }
 
     @Bean
@@ -214,12 +220,12 @@ class OuluConfig {
     @Bean fun mealTypeMapper(): MealTypeMapper = DefaultMealTypeMapper
 
     @Bean
-    fun fileDwExportClient(
-        s3Client: S3Client,
-        sftpConnector: SftpConnector,
-        ouluEnv: OuluEnv,
-    ): DwExportClient =
-        FileDwExportClient(s3Client, SftpSender(ouluEnv.dwExport.sftp, sftpConnector), ouluEnv)
+    fun fileDwExportClient(s3Client: S3Client, ouluEnv: OuluEnv): DwExportClient =
+        FileDwExportClient(
+            s3Client,
+            SftpClient(ouluEnv.dwExport.sftp.toSftpEnv(), ouluEnv.dwExport.sftp.path),
+            ouluEnv,
+        )
 
     @Bean
     fun OuluAsyncJobRunner(
@@ -230,6 +236,17 @@ class OuluConfig {
         AsyncJobRunner(OuluAsyncJob::class, listOf(OuluAsyncJob.pool), jdbi, tracer)
 
     @Bean fun evakaOuluDWJob(dwExportClient: DwExportClient) = DwExportJob(dwExportClient)
+
+    @Bean
+    fun ouluBiExportClient(ouluEnv: OuluEnv): BiExportClient =
+        OuluBiSftpExportClient(SftpClient(ouluEnv.fabric.sftp, ouluEnv.fabric.remotePath))
+
+    @Bean
+    fun ouluBiJob(biExportClient: BiExportClient): BiExportJob =
+        BiExportJob(
+            biExportClient,
+            BiExportConfig(includePII = false, includeLegacyColumns = false, deltaWindowDays = 730),
+        )
 
     @Bean
     fun OuluScheduledJobEnv(env: Environment): ScheduledJobsEnv<OuluScheduledJob> =
@@ -243,7 +260,8 @@ class OuluConfig {
     fun ouluScheduledJobs(
         evakaOuluRunner: AsyncJobRunner<OuluAsyncJob>,
         env: ScheduledJobsEnv<OuluScheduledJob>,
-    ): OuluScheduledJobs = OuluScheduledJobs(evakaOuluRunner, env)
+    ): OuluScheduledJobs =
+        OuluScheduledJobs(evakaOuluRunner, env, biTables = BiTable.entries - excludedBiTables)
 
     @Bean
     fun passwordSpecification(): PasswordSpecification =

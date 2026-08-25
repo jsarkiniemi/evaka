@@ -3,23 +3,19 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
 [versions]
-bouncycastle = "1.84"
-dd-java-agent = "1.61.0"
-flyingsaucer = "10.2.0"
-flyway = "12.4.0"
+dd-java-agent = "1.65.1"
+flyingsaucer = "10.5.0"
+flyway = "13.3.0"
 java = "25"
-kotlin = "2.3.20"
-ktfmt = "0.25.0"
+kotlin = "2.4.10"
+ktfmt = "0.27.0"
 ktlint = "1.8.0"
 ktlint-gradle = "14.2.0"
 mockito = "5.23.0"
-owasp = "12.2.1"
-spring-boot = "4.0.5"
-versions = "0.53.0"
+spring-boot = "4.1.0"
+versions = "0.61.0"
 
 [libraries]
-bouncycastle-bcpkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }
-bouncycastle-bcprov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 dd-java-agent = { module = "com.datadoghq:dd-java-agent", version.ref = "dd-java-agent" }
 flyingsaucer-core = { module = "org.xhtmlrenderer:flying-saucer-core", version.ref = "flyingsaucer" }
 flyingsaucer-pdf = { module = "org.xhtmlrenderer:flying-saucer-pdf", version.ref = "flyingsaucer" }
@@ -41,6 +37,5 @@ kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-spring = { id = "org.jetbrains.kotlin.plugin.spring", version.ref = "kotlin" }
 ktfmt = { id = "com.ncorti.ktfmt.gradle", version.ref = "ktfmt" }
 ktlint-gradle = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint-gradle" }
-owasp = { id = "org.owasp.dependencycheck", version.ref = "owasp" }
 spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
 versions = { id = "com.github.ben-manes.versions", version.ref = "versions" }

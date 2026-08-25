@@ -4,7 +4,6 @@
 
 package evaka.instance.turku
 
-import com.jcraft.jsch.JSch
 import evaka.core.ScheduledJobsEnv
 import evaka.core.VtjXroadEnv
 import evaka.core.application.ApplicationStatus
@@ -31,6 +30,7 @@ import evaka.core.shared.auth.PasswordSpecification
 import evaka.core.shared.config.pdfTemplateEngine
 import evaka.core.shared.message.IMessageProvider
 import evaka.core.shared.security.actionrule.ActionRuleMapping
+import evaka.core.shared.sftp.SftpClient
 import evaka.core.shared.template.ITemplateProvider
 import evaka.core.titania.TitaniaEmployeeIdConverter
 import evaka.core.vtjclient.config.httpsMessageSender
@@ -43,8 +43,6 @@ import evaka.instance.turku.invoice.config.TurkuIncomeCoefficientMultiplierProvi
 import evaka.instance.turku.invoice.config.TurkuIncomeTypesProvider
 import evaka.instance.turku.invoice.config.TurkuInvoiceProductProvider
 import evaka.instance.turku.invoice.service.SapInvoiceGenerator
-import evaka.instance.turku.invoice.service.SftpConnector
-import evaka.instance.turku.invoice.service.SftpSender
 import evaka.instance.turku.invoice.service.TurkuInvoiceClient
 import evaka.instance.turku.payment.service.SapPaymentGenerator
 import evaka.instance.turku.payment.service.TurkuPaymentIntegrationClient
@@ -61,7 +59,6 @@ import org.springframework.core.env.Environment
 import org.springframework.core.io.ClassPathResource
 import org.springframework.ws.transport.WebServiceMessageSender
 import org.thymeleaf.ITemplateEngine
-import software.amazon.awssdk.services.s3.S3Client
 
 @Configuration
 @Import(TurkuAsyncJobRegistration::class)
@@ -91,7 +88,9 @@ class TurkuConfig {
                 env.lookup("evaka.five_years_old_daycare.enabled") ?: false,
             financeMessageAccountName =
                 "Varhaiskasvatuksen asiakasmaksut - Småbarnspedagogikens avgifter - Early childhood education fees",
+            messageSupportEmail = "varkas.tietojarjestelmat@turku.fi",
             archiveMetadataOrganization = "Turun kaupungin varhaiskasvatus",
+            metadataBusinessId = "0204819-8",
             archiveMetadataConfigs = { type: ArchiveProcessType, year: Int ->
                 when (type) {
                     ArchiveProcessType.APPLICATION_DAYCARE -> {
@@ -131,6 +130,8 @@ class TurkuConfig {
                 }
             },
             placementToolApplicationStatus = ApplicationStatus.WAITING_DECISION,
+            allowEnglishChildDocumentsForAllTypes = true,
+            placementDecisionSwedishLanguageEnabled = true,
         )
 
     @Bean
@@ -157,13 +158,11 @@ class TurkuConfig {
     fun invoiceIntegrationClient(
         properties: TurkuEnv,
         invoiceGenerator: SapInvoiceGenerator,
-        sftpConnector: SftpConnector,
-    ): InvoiceIntegrationClient {
-        val sftpSender = SftpSender(properties.sapInvoicing, sftpConnector)
-        return TurkuInvoiceClient(sftpSender, invoiceGenerator)
-    }
-
-    @Bean fun sftpConnector(): SftpConnector = SftpConnector(JSch())
+    ): InvoiceIntegrationClient =
+        TurkuInvoiceClient(
+            SftpClient(properties.sapInvoicing.toSftpEnv(), properties.sapInvoicing.path),
+            invoiceGenerator,
+        )
 
     @Bean fun incomeTypesProvider(): IncomeTypesProvider = TurkuIncomeTypesProvider()
 
@@ -179,11 +178,11 @@ class TurkuConfig {
     fun paymentIntegrationClient(
         evakaProperties: TurkuEnv,
         paymentGenerator: SapPaymentGenerator,
-        sftpConnector: SftpConnector,
-    ): PaymentIntegrationClient {
-        val sftpSender = SftpSender(evakaProperties.sapPayments, sftpConnector)
-        return TurkuPaymentIntegrationClient(paymentGenerator, sftpSender)
-    }
+    ): PaymentIntegrationClient =
+        TurkuPaymentIntegrationClient(
+            paymentGenerator,
+            SftpClient(evakaProperties.sapPayments.toSftpEnv(), evakaProperties.sapPayments.path),
+        )
 
     @Bean
     @Profile("production")
@@ -205,15 +204,9 @@ class TurkuConfig {
     @Bean fun mealTypeMapper(): MealTypeMapper = DefaultMealTypeMapper
 
     @Bean
-    fun fileDwExportClient(
-        s3Client: S3Client,
-        sftpConnector: SftpConnector,
-        properties: TurkuEnv,
-    ): DwExportClient =
+    fun fileDwExportClient(properties: TurkuEnv): DwExportClient =
         FileDWExportClient(
-            s3Client,
-            SftpSender(properties.dwExport.sftp, sftpConnector),
-            properties,
+            SftpClient(properties.dwExport.sftp.toSftpEnv(), properties.dwExport.sftp.path)
         )
 
     @Bean

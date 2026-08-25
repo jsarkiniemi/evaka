@@ -152,7 +152,7 @@ export class CitizenChildPage {
   }
 
   async submitTermination(nth = 0) {
-    await this.page.findAll('text=Irtisano paikka').nth(nth).click()
+    await this.page.findAllByDataQa('submit-termination-btn').nth(nth).click()
     const modalOkButton = new AsyncButton(this.page.findByDataQa('modal-okBtn'))
     await modalOkButton.click()
     await expect(modalOkButton).toBeHidden()
@@ -167,6 +167,9 @@ export class CitizenChildPage {
         .map((e) => e.textContent ?? '')
     )
   }
+
+  childDocumentsCategoryTitle = (category: 'plans' | 'hojks' | 'other') =>
+    this.page.findByDataQa(`child-documents-${category}-title`)
 
   childDocumentRow = (documentId: UUID) =>
     this.page.find(`tr[data-qa="child-document-${documentId}"]`)

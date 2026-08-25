@@ -125,7 +125,7 @@ export interface CaretakerRequest {
 }
 
 /**
-* Generated from evaka.core.daycare.service.Caretakers
+* Generated from evaka.core.daycare.Caretakers
 */
 export interface Caretakers {
   maximum: number
@@ -312,7 +312,7 @@ export interface DaycareFields {
 }
 
 /**
-* Generated from evaka.core.daycare.service.DaycareGroup
+* Generated from evaka.core.daycare.DaycareGroup
 */
 export interface DaycareGroup {
   aromiCustomerId: string | null
@@ -376,7 +376,7 @@ export interface GroupOccupancies {
 }
 
 /**
-* Generated from evaka.core.daycare.service.GroupStaffAttendance
+* Generated from evaka.core.daycare.GroupStaffAttendance
 */
 export interface GroupStaffAttendance {
   count: number
@@ -480,7 +480,7 @@ export interface ServiceWorkerNote {
 }
 
 /**
-* Generated from evaka.core.daycare.service.StaffAttendanceForDates
+* Generated from evaka.core.daycare.StaffAttendanceForDates
 */
 export interface StaffAttendanceForDates {
   attendances: Partial<Record<string, GroupStaffAttendance>>
@@ -491,7 +491,7 @@ export interface StaffAttendanceForDates {
 }
 
 /**
-* Generated from evaka.core.daycare.service.StaffAttendanceUpdate
+* Generated from evaka.core.daycare.StaffAttendanceUpdate
 */
 export interface StaffAttendanceUpdate {
   count: number | null
@@ -516,6 +516,7 @@ export interface UnitFeatures {
 export interface UnitGroupDetails {
   backupCares: UnitBackupCare[]
   caretakers: Partial<Record<GroupId, Caretakers>>
+  groupLastPlacementDates: Partial<Record<GroupId, LocalDate>>
   groupOccupancies: GroupOccupancies | null
   groups: DaycareGroup[]
   missingBackupGroupPlacements: MissingBackupGroupPlacement[]
@@ -822,6 +823,9 @@ export function deserializeJsonUnitGroupDetails(json: JsonOf<UnitGroupDetails>):
   return {
     ...json,
     backupCares: json.backupCares.map(e => deserializeJsonUnitBackupCare(e)),
+    groupLastPlacementDates: Object.fromEntries(Object.entries(json.groupLastPlacementDates).map(
+      ([k, v]) => [k, v !== undefined ? LocalDate.parseIso(v) : v]
+    )),
     groupOccupancies: (json.groupOccupancies != null) ? deserializeJsonGroupOccupancies(json.groupOccupancies) : null,
     groups: json.groups.map(e => deserializeJsonDaycareGroup(e)),
     missingBackupGroupPlacements: json.missingBackupGroupPlacements.map(e => deserializeJsonMissingBackupGroupPlacement(e)),

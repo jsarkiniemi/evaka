@@ -11,12 +11,12 @@ import evaka.core.application.persistence.daycare.Adult
 import evaka.core.application.persistence.daycare.Apply
 import evaka.core.application.persistence.daycare.Child
 import evaka.core.application.persistence.daycare.DaycareFormV0
+import evaka.core.daycare.Caretakers
 import evaka.core.daycare.Daycare
 import evaka.core.daycare.DaycareFields
+import evaka.core.daycare.DaycareGroup
 import evaka.core.daycare.getDaycare
 import evaka.core.daycare.getDaycareGroup
-import evaka.core.daycare.service.Caretakers
-import evaka.core.daycare.service.DaycareGroup
 import evaka.core.decision.DecisionType
 import evaka.core.insertServiceNeedOptions
 import evaka.core.messaging.createDaycareGroupMessageAccount
@@ -49,7 +49,14 @@ import evaka.core.shared.domain.FiniteDateRange
 import evaka.core.shared.domain.HelsinkiDateTime
 import evaka.core.shared.domain.MockEvakaClock
 import evaka.core.shared.domain.RealEvakaClock
+import evaka.core.shared.noopTracer
+import evaka.core.shared.security.AccessControl
+import evaka.core.shared.security.Action
 import evaka.core.shared.security.PilotFeature
+import evaka.core.shared.security.actionrule.ActionRuleMapping
+import evaka.core.shared.security.actionrule.DefaultActionRuleMapping
+import evaka.core.shared.security.actionrule.ScopedActionRule
+import evaka.core.shared.security.actionrule.UnscopedActionRule
 import java.time.LocalDate
 import java.time.LocalTime
 import kotlin.test.assertEquals
@@ -64,6 +71,24 @@ import org.springframework.beans.factory.annotation.Autowired
 
 class DaycareControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach = true) {
     @Autowired private lateinit var daycareController: DaycareController
+
+    // AccessControl that denies Action.Child.READ_SERVICE_NEEDS but otherwise behaves normally
+    private val denyServiceNeedsAccessControl =
+        AccessControl(
+            object : ActionRuleMapping {
+                private val default = DefaultActionRuleMapping()
+
+                override fun rulesOf(action: Action.UnscopedAction): Sequence<UnscopedActionRule> =
+                    default.rulesOf(action)
+
+                override fun <T> rulesOf(
+                    action: Action.ScopedAction<in T>
+                ): Sequence<ScopedActionRule<in T>> =
+                    if (action == Action.Child.READ_SERVICE_NEEDS) emptySequence()
+                    else default.rulesOf(action)
+            },
+            noopTracer(),
+        )
 
     private val today = LocalDate.of(2021, 1, 12)
     private val now = HelsinkiDateTime.of(today, LocalTime.of(12, 0))
@@ -271,6 +296,50 @@ class DaycareControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach =
         )
         assertEquals(2, details.groupOccupancies?.confirmed?.size)
         assertEquals(2, details.groupOccupancies?.realized?.size)
+    }
+
+    @Test
+    fun `group details - serviceNeedDetail is populated for a user with READ_SERVICE_NEEDS`() {
+        val placement =
+            DevPlacement(
+                childId = child1.id,
+                unitId = daycare.id,
+                startDate = today.minusDays(10),
+                endDate = today.plusYears(1),
+            )
+        db.transaction { it.insert(placement) }
+
+        // supervisor has READ_SERVICE_NEEDS in this unit
+        val details = getGroupDetails(daycare.id)
+
+        val responsePlacement = details.placements.single { it.id == placement.id }
+        assertNotNull(responsePlacement.serviceNeedDetail)
+    }
+
+    @Test
+    fun `group details - serviceNeedDetail is nulled for a user without READ_SERVICE_NEEDS`() {
+        val placement =
+            DevPlacement(
+                childId = child1.id,
+                unitId = daycare.id,
+                startDate = today.minusDays(10),
+                endDate = today.plusYears(1),
+            )
+        db.transaction { it.insert(placement) }
+
+        val controller = DaycareController(accessControl = denyServiceNeedsAccessControl)
+        val details =
+            controller.getUnitGroupDetails(
+                dbInstance(),
+                supervisor.user,
+                MockEvakaClock(now),
+                daycare.id,
+                from = today,
+                to = today,
+            )
+
+        val responsePlacement = details.placements.single { it.id == placement.id }
+        assertNull(responsePlacement.serviceNeedDetail)
     }
 
     @Test
@@ -738,6 +807,70 @@ class DaycareControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach =
             )
 
         assertEquals(aromiPreschoolCustomerId, editedGroup2.aromiCustomerId)
+    }
+
+    @Test
+    fun `cannot set group end date to earlier than the end of last group placement`() {
+        val groupPlacementEnd = today.plusYears(1)
+        val group = DevDaycareGroup(daycareId = daycare.id, startDate = today, endDate = null)
+        val placement =
+            DevPlacement(
+                childId = child1.id,
+                unitId = daycare.id,
+                startDate = today,
+                endDate = groupPlacementEnd,
+            )
+        db.transaction { tx ->
+            tx.insert(group)
+            tx.insert(placement)
+            tx.insert(
+                DevDaycareGroupPlacement(
+                    daycarePlacementId = placement.id,
+                    daycareGroupId = group.id,
+                    startDate = today,
+                    endDate = groupPlacementEnd,
+                )
+            )
+        }
+
+        assertThrows<BadRequest> {
+            updateAndGetDaycareGroup(
+                groupId = group.id,
+                daycareId = daycare.id,
+                name = group.name,
+                startDate = group.startDate,
+                endDate = groupPlacementEnd.minusDays(1),
+                user = supervisor.user,
+            )
+        }
+
+        val endedGroup =
+            updateAndGetDaycareGroup(
+                groupId = group.id,
+                daycareId = daycare.id,
+                name = group.name,
+                startDate = group.startDate,
+                endDate = groupPlacementEnd,
+                user = supervisor.user,
+            )
+        assertEquals(groupPlacementEnd, endedGroup.endDate)
+    }
+
+    @Test
+    fun `group with no group placements can be ended on any date`() {
+        val group = DevDaycareGroup(daycareId = daycare.id, startDate = today, endDate = null)
+        db.transaction { tx -> tx.insert(group) }
+
+        val endedGroup =
+            updateAndGetDaycareGroup(
+                groupId = group.id,
+                daycareId = daycare.id,
+                name = group.name,
+                startDate = group.startDate,
+                endDate = today,
+                user = supervisor.user,
+            )
+        assertEquals(today, endedGroup.endDate)
     }
 
     private fun getDaycare(daycareId: DaycareId): DaycareController.DaycareResponse {

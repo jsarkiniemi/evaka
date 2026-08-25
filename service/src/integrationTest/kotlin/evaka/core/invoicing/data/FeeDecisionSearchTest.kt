@@ -207,7 +207,8 @@ class FeeDecisionSearchTest : PureJdbiTest(resetDbBeforeEach = true) {
                     decisionFixture(
                         headOfFamily = adult2.id,
                         children = listOf(childFixture(child2, daycare2.id)),
-                        period = FiniteDateRange(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 8, 1)),
+                        period =
+                            FiniteDateRange(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 8, 1)),
                     ),
                 )
             )
@@ -278,12 +279,14 @@ class FeeDecisionSearchTest : PureJdbiTest(resetDbBeforeEach = true) {
                     decisionFixture(
                         headOfFamily = adult1.id,
                         children = listOf(childFixture(child1)),
-                        period = FiniteDateRange(LocalDate.of(2022, 1, 1), LocalDate.of(2022, 5, 1)),
+                        period =
+                            FiniteDateRange(LocalDate.of(2022, 1, 1), LocalDate.of(2022, 5, 1)),
                     ),
                     decisionFixture(
                         headOfFamily = adult2.id,
                         children = listOf(childFixture(child2)),
-                        period = FiniteDateRange(LocalDate.of(2022, 6, 1), LocalDate.of(2023, 1, 1)),
+                        period =
+                            FiniteDateRange(LocalDate.of(2022, 6, 1), LocalDate.of(2023, 1, 1)),
                     ),
                 )
             )
@@ -468,30 +471,29 @@ class FeeDecisionSearchTest : PureJdbiTest(resetDbBeforeEach = true) {
         searchByStartDate: Boolean = false,
         financeDecisionHandlerId: EmployeeId? = null,
         difference: Set<FeeDecisionDifference> = emptySet(),
-    ) =
-        db.read { tx ->
-            tx.searchFeeDecisions(
-                    clock = clock,
-                    postOffice = "ESPOO",
-                    searchTerms = searchTerm,
-                    page = 0,
-                    pageSize = 100,
-                    statuses = listOfNotNull(status),
-                    areas = areas,
-                    sortBy = sortBy,
-                    sortDirection = sortDirection,
-                    distinctiveParams = distinctiveParams,
-                    unit = unit,
-                    startDate = startDate,
-                    endDate = endDate,
-                    searchByStartDate = searchByStartDate,
-                    financeDecisionHandlerId = financeDecisionHandlerId,
-                    difference = difference,
-                )
-                .let { result ->
-                    assertEquals(1, result.pages)
-                    assertEquals(result.total, result.data.size)
-                    result.data
-                }
-        }
+    ) = db.read { tx ->
+        tx.searchFeeDecisions(
+                clock = clock,
+                postOffice = "ESPOO",
+                searchTerms = searchTerm,
+                page = 0,
+                pageSize = 100,
+                statuses = listOfNotNull(status),
+                areas = areas,
+                sortBy = sortBy,
+                sortDirection = sortDirection,
+                distinctiveParams = distinctiveParams,
+                unit = unit,
+                startDate = startDate,
+                endDate = endDate,
+                searchByStartDate = searchByStartDate,
+                financeDecisionHandlerId = financeDecisionHandlerId,
+                difference = difference,
+            )
+            .let { result ->
+                assertEquals(1, result.pages)
+                assertEquals(result.total, result.data.size)
+                result.data
+            }
+    }
 }

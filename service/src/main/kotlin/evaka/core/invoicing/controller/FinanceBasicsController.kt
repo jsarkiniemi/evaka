@@ -69,40 +69,38 @@ class FinanceBasicsController(private val accessControl: AccessControl) {
         @RequestBody body: FeeThresholds,
     ) {
         validateFeeThresholds(body)
-        val id =
-            db.connect { dbc ->
-                dbc.transaction { tx ->
-                    accessControl.requirePermissionFor(
-                        tx,
-                        user,
-                        clock,
-                        Action.Global.CREATE_FEE_THRESHOLDS,
-                    )
+        val id = db.connect { dbc ->
+            dbc.transaction { tx ->
+                accessControl.requirePermissionFor(
+                    tx,
+                    user,
+                    clock,
+                    Action.Global.CREATE_FEE_THRESHOLDS,
+                )
 
-                    val latest =
-                        tx.getFeeThresholds().maxByOrNull { it.thresholds.validDuring.start }
+                val latest = tx.getFeeThresholds().maxByOrNull { it.thresholds.validDuring.start }
 
-                    if (latest != null) {
-                        if (
-                            latest.thresholds.validDuring.end != null &&
-                                latest.thresholds.validDuring.overlaps(body.validDuring)
-                        ) {
-                            throwDateOverlapEx()
-                        }
-
-                        if (latest.thresholds.validDuring.end == null) {
-                            tx.updateFeeThresholdsValidity(
-                                latest.id,
-                                latest.thresholds.validDuring.copy(
-                                    end = body.validDuring.start.minusDays(1)
-                                ),
-                            )
-                        }
+                if (latest != null) {
+                    if (
+                        latest.thresholds.validDuring.end != null &&
+                            latest.thresholds.validDuring.overlaps(body.validDuring)
+                    ) {
+                        throwDateOverlapEx()
                     }
 
-                    mapConstraintExceptions { tx.insertNewFeeThresholds(body) }
+                    if (latest.thresholds.validDuring.end == null) {
+                        tx.updateFeeThresholdsValidity(
+                            latest.id,
+                            latest.thresholds.validDuring.copy(
+                                end = body.validDuring.start.minusDays(1)
+                            ),
+                        )
+                    }
                 }
+
+                mapConstraintExceptions { tx.insertNewFeeThresholds(body) }
             }
+        }
         Audit.FinanceBasicsFeeThresholdsCreate.log(targetId = AuditId(id))
     }
 
@@ -152,51 +150,44 @@ class FinanceBasicsController(private val accessControl: AccessControl) {
         clock: EvakaClock,
         @RequestBody body: ServiceNeedOptionVoucherValueRange,
     ) {
-        val id =
-            db.connect { dbc ->
-                dbc.transaction { tx ->
-                    accessControl.requirePermissionFor(
-                        tx,
-                        user,
-                        clock,
-                        Action.Global.CREATE_VOUCHER_VALUE,
-                    )
+        val id = db.connect { dbc ->
+            dbc.transaction { tx ->
+                accessControl.requirePermissionFor(
+                    tx,
+                    user,
+                    clock,
+                    Action.Global.CREATE_VOUCHER_VALUE,
+                )
 
-                    val serviceNeedOption =
-                        tx.getServiceNeedOptions().firstOrNull { it.id == body.serviceNeedOptionId }
-                    if (serviceNeedOption == null)
-                        throw BadRequest("Invalid service need option ID")
+                val serviceNeedOption =
+                    tx.getServiceNeedOptions().firstOrNull { it.id == body.serviceNeedOptionId }
+                if (serviceNeedOption == null) throw BadRequest("Invalid service need option ID")
 
-                    val currentVoucherValues = tx.getVoucherValuesByServiceNeedOption()
+                val currentVoucherValues = tx.getVoucherValuesByServiceNeedOption()
 
-                    currentVoucherValues
-                        .getOrDefault(body.serviceNeedOptionId, emptyList())
-                        .maxByOrNull { it.voucherValues.range.start }
-                        ?.let { latest ->
-                            if (!body.range.start.isAfter(latest.voucherValues.range.start))
-                                throw BadRequest(
-                                    "New voucher value range must start after existing ones"
-                                )
-
-                            if (
-                                latest.voucherValues.range.end != null &&
-                                    body.range.start != latest.voucherValues.range.end.plusDays(1)
+                currentVoucherValues
+                    .getOrDefault(body.serviceNeedOptionId, emptyList())
+                    .maxByOrNull { it.voucherValues.range.start }
+                    ?.let { latest ->
+                        if (!body.range.start.isAfter(latest.voucherValues.range.start))
+                            throw BadRequest(
+                                "New voucher value range must start after existing ones"
                             )
-                                throw BadRequest(
-                                    "New voucher value can't leave a gap in validities"
-                                )
 
-                            if (latest.voucherValues.range.overlaps(body.range)) {
-                                tx.updateVoucherValueEndDate(
-                                    latest.id,
-                                    body.range.start.minusDays(1),
-                                )
-                            }
+                        if (
+                            latest.voucherValues.range.end != null &&
+                                body.range.start != latest.voucherValues.range.end.plusDays(1)
+                        )
+                            throw BadRequest("New voucher value can't leave a gap in validities")
+
+                        if (latest.voucherValues.range.overlaps(body.range)) {
+                            tx.updateVoucherValueEndDate(latest.id, body.range.start.minusDays(1))
                         }
+                    }
 
-                    tx.insertNewVoucherValue(body)
-                }
+                tx.insertNewVoucherValue(body)
             }
+        }
         Audit.FinanceBasicsVoucherValueCreate.log(targetId = AuditId(id))
     }
 
@@ -322,10 +313,9 @@ private fun calculateMaxFeeFromThresholds(
     return roundToEuros(BigDecimal(maxThreshold - minThreshold) * multiplier).toInt()
 }
 
-fun Database.Read.getFeeThresholds(): List<FeeThresholdsWithId> =
-    createQuery {
-            sql(
-                """
+fun Database.Read.getFeeThresholds(): List<FeeThresholdsWithId> = createQuery {
+    sql(
+        """
 SELECT
     id,
     valid_during,
@@ -355,14 +345,14 @@ SELECT
     temporary_fee_sibling_part_day
 FROM fee_thresholds
 """
-            )
-        }
-        .toList<FeeThresholdsWithId>()
+    )
+}
+    .toList<FeeThresholdsWithId>()
 
 fun Database.Transaction.insertNewFeeThresholds(thresholds: FeeThresholds): FeeThresholdsId =
     createUpdate {
-            sql(
-                """
+        sql(
+            """
 INSERT INTO fee_thresholds (
     id,
     valid_during,
@@ -420,23 +410,21 @@ INSERT INTO fee_thresholds (
 )
 RETURNING id
 """
-            )
-        }
-        .executeAndReturnGeneratedKeys()
-        .exactlyOne<FeeThresholdsId>()
+        )
+    }
+    .executeAndReturnGeneratedKeys()
+    .exactlyOne<FeeThresholdsId>()
 
 fun Database.Transaction.updateFeeThresholdsValidity(id: FeeThresholdsId, newValidity: DateRange) =
     createUpdate {
-            sql(
-                "UPDATE fee_thresholds SET valid_during = ${bind(newValidity)} WHERE id = ${bind(id)}"
-            )
-        }
-        .execute()
+        sql("UPDATE fee_thresholds SET valid_during = ${bind(newValidity)} WHERE id = ${bind(id)}")
+    }
+    .execute()
 
 fun Database.Transaction.updateFeeThresholds(id: FeeThresholdsId, feeThresholds: FeeThresholds) =
     createUpdate {
-            sql(
-                """
+        sql(
+            """
 UPDATE fee_thresholds
 SET
     valid_during = ${bind(feeThresholds.validDuring)},
@@ -466,16 +454,15 @@ SET
     temporary_fee_sibling_part_day = ${bind(feeThresholds.temporaryFeeSiblingPartDay)}
 WHERE id = ${bind(id)}
 """
-            )
-        }
-        .execute()
+        )
+    }
+    .execute()
 
 fun Database.Read.getServiceNeedVoucherValuesByVoucherValueRangeId(
     voucherValueId: ServiceNeedOptionVoucherValueId
-): List<ServiceNeedOptionVoucherValueRangeWithId> =
-    createQuery {
-            sql(
-                """
+): List<ServiceNeedOptionVoucherValueRangeWithId> = createQuery {
+    sql(
+        """
 SELECT
     id,
     service_need_option_id,
@@ -494,16 +481,15 @@ WHERE service_need_option_id = (
 )
 ORDER by upper(validity) DESC
 """
-            )
-        }
-        .toList<ServiceNeedOptionVoucherValueRangeWithId>()
+    )
+}
+    .toList<ServiceNeedOptionVoucherValueRangeWithId>()
 
 fun Database.Transaction.insertNewVoucherValue(
     voucherValue: ServiceNeedOptionVoucherValueRange
-): ServiceNeedOptionVoucherValueId =
-    createUpdate {
-            sql(
-                """
+): ServiceNeedOptionVoucherValueId = createUpdate {
+    sql(
+        """
 INSERT INTO service_need_option_voucher_value (
     service_need_option_id,
     validity,
@@ -526,10 +512,10 @@ INSERT INTO service_need_option_voucher_value (
 )
 RETURNING id
 """
-            )
-        }
-        .executeAndReturnGeneratedKeys()
-        .exactlyOne<ServiceNeedOptionVoucherValueId>()
+    )
+}
+    .executeAndReturnGeneratedKeys()
+    .exactlyOne<ServiceNeedOptionVoucherValueId>()
 
 fun Database.Transaction.updateVouchervalue(
     id: ServiceNeedOptionVoucherValueId,
@@ -556,14 +542,14 @@ fun Database.Transaction.updateVouchervalue(
 
 fun Database.Transaction.deleteVoucherValue(id: ServiceNeedOptionVoucherValueId) {
     createUpdate {
-            sql(
-                """
+        sql(
+            """
                 DELETE
                 FROM service_need_option_voucher_value
                 WHERE id = ${bind(id)}
             """
-            )
-        }
+        )
+    }
         .execute()
 }
 
@@ -572,14 +558,14 @@ fun Database.Transaction.updateVoucherValueEndDate(
     endDate: LocalDate?,
 ) {
     createUpdate {
-            sql(
-                """
+        sql(
+            """
                 UPDATE service_need_option_voucher_value
                 SET validity = daterange(lower(validity), ${bind(endDate)}, '[]')
                 WHERE id = ${bind(id)}
             """
-            )
-        }
+        )
+    }
         .execute()
 }
 

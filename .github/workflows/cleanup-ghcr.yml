@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: 2017-2026 City of Espoo
+#
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+name: Cleanup GHCR
+
+on:
+  schedule:
+    # Mondays 01:17 UTC ~= 03:17 (winter) / 04:17 (summer) Helsinki time.
+    - cron: '17 1 * * 1'
+  workflow_dispatch:
+
+permissions:
+  packages: write
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # keep: newest versions to retain; 0 deletes untagged versions only.
+        include:
+          - { package: evaka/frontend, keep: 100 }
+          - { package: evaka/frontend-multi, keep: 0 }
+          - { package: evaka/frontend-builder, keep: 0 }
+          - { package: evaka/service, keep: 0 }
+          - { package: evaka/service-builder, keep: 0 }
+          - { package: evaka/api-gateway, keep: 0 }
+    steps:
+      - uses: espoon-voltti/voltti-actions/ghcr-cleanup@master
+        with:
+          package: ${{ matrix.package }}
+          keep: ${{ matrix.keep }}

@@ -36,6 +36,7 @@ class LempaalaConfig {
     @Bean
     fun featureConfig() =
         FeatureConfig(
+            placementDecisionSwedishLanguageEnabled = false,
             valueDecisionCapacityFactorEnabled = true,
             citizenReservationThresholdHours =
                 (7 + 3) * 24 - 9, // Fri 09:00 (1 week + 3 days before)
@@ -50,10 +51,12 @@ class LempaalaConfig {
             municipalMessageAccountName = "Lempäälän kunta",
             serviceWorkerMessageAccountName = "Varhaiskasvatuksen asiakaspalvelu",
             financeMessageAccountName = "Lempäälän varhaiskasvatuksen asiakasmaksut",
+            messageSupportEmail = "varhaiskasvatus.sovellustuki@tampere.fi",
             applyPlacementUnitFromDecision = true,
             preferredStartRelativeApplicationDueDate = true,
             fiveYearsOldDaycareEnabled = false,
             archiveMetadataOrganization = "Lempäälän kunta, varhaiskasvatus",
+            metadataBusinessId = "0150783-1",
             archiveMetadataConfigs = { type, year ->
                 when (type) {
                     ArchiveProcessType.APPLICATION_DAYCARE ->
@@ -80,6 +83,10 @@ class LempaalaConfig {
                 }
             },
             daycarePlacementPlanEndMonthDay = MonthDay.of(8, 15),
+            deletedMessagePlaceholderBody =
+                "Lähettäjä on poistanut viestin. Sinun ei tarvitse tehdä mitään.\n\n" +
+                    "The sender has deleted this message. No action is needed on your part.",
+            deletedMessagePlaceholderTitle = "Viesti on poistettu / Message was deleted",
         )
 
     @Bean

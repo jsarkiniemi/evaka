@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-import React, { useCallback, useMemo } from 'react'
+import React, { useCallback, useContext, useMemo } from 'react'
 
 import DateRange from 'lib-common/date-range'
 import { openEndedLocalDateRange } from 'lib-common/form/fields'
@@ -38,6 +38,7 @@ import {
 } from 'lib-customizations/employee'
 
 import { useTranslation } from '../../../state/i18n'
+import { UserContext } from '../../../state/user'
 import { renderResult } from '../../async-rendering'
 import { documentTemplateForm } from '../forms'
 import {
@@ -46,6 +47,10 @@ import {
   duplicateDocumentTemplateMutation,
   importDocumentTemplateMutation
 } from '../queries'
+
+import DeletionRulesEditor, {
+  useDeletionBasisOptions
+} from './DeletionRulesEditor'
 
 export type TemplateModalMode =
   | { type: 'new' }
@@ -93,6 +98,9 @@ const TemplateModalInner = React.memo(function TemplateModalInner({
   mode
 }: InternalProps) {
   const { i18n, lang } = useTranslation()
+  const { featureConfig } = useContext(UserContext)
+  const allowEnglishForAllTypes =
+    featureConfig?.allowEnglishChildDocumentsForAllTypes
 
   const { mutateAsync: createDocumentTemplate } = useMutationResult(
     createDocumentTemplateMutation
@@ -125,16 +133,20 @@ const TemplateModalInner = React.memo(function TemplateModalInner({
     [i18n.documentTemplates, mode.type]
   )
 
+  const deletionBasisOptions = useDeletionBasisOptions()
+
   const getLanguageOptions = useCallback(
-    (type: ChildDocumentType) =>
-      uiLanguages
-        .filter((option) => type === 'CITIZEN_BASIC' || option !== 'EN')
+    (type: ChildDocumentType) => {
+      const englishAllowed = type === 'CITIZEN_BASIC' || allowEnglishForAllTypes
+      return uiLanguages
+        .filter((option) => option !== 'EN' || englishAllowed)
         .map((option) => ({
           domValue: option,
           value: option,
           label: i18n.documentTemplates.languages[option]
-        })),
-    [i18n.documentTemplates]
+        }))
+    },
+    [i18n.documentTemplates, allowEnglishForAllTypes]
   )
 
   const form = useForm(
@@ -165,7 +177,12 @@ const TemplateModalInner = React.memo(function TemplateModalInner({
             mode.data.archiveDurationMonths?.toString() ?? '120',
           archiveExternally: mode.data.archiveExternally,
           endDecisionWhenUnitChanges:
-            mode.data.endDecisionWhenUnitChanges ?? true
+            mode.data.endDecisionWhenUnitChanges ?? true,
+          deletionRetentionDays: mode.data.deletionRetentionDays.toString(),
+          deletionRetentionBasis: {
+            domValue: mode.data.deletionRetentionBasis,
+            options: deletionBasisOptions
+          }
         }
       } else if (mode.type === 'duplicate') {
         const template = mode.template
@@ -191,7 +208,12 @@ const TemplateModalInner = React.memo(function TemplateModalInner({
             template.archiveDurationMonths?.toString() ?? '120',
           archiveExternally: template.archiveExternally,
           endDecisionWhenUnitChanges:
-            template.endDecisionWhenUnitChanges ?? true
+            template.endDecisionWhenUnitChanges ?? true,
+          deletionRetentionDays: template.deletionRetentionDays.toString(),
+          deletionRetentionBasis: {
+            domValue: template.deletionRetentionBasis,
+            options: deletionBasisOptions
+          }
         }
       } else {
         return {
@@ -213,7 +235,12 @@ const TemplateModalInner = React.memo(function TemplateModalInner({
           processDefinitionNumber: '',
           archiveDurationMonths: '120',
           archiveExternally: false,
-          endDecisionWhenUnitChanges: true
+          endDecisionWhenUnitChanges: true,
+          deletionRetentionDays: '',
+          deletionRetentionBasis: {
+            domValue: '',
+            options: deletionBasisOptions
+          }
         }
       }
     },
@@ -257,7 +284,9 @@ const TemplateModalInner = React.memo(function TemplateModalInner({
     processDefinitionNumber,
     archiveDurationMonths,
     archiveExternally,
-    endDecisionWhenUnitChanges
+    endDecisionWhenUnitChanges,
+    deletionRetentionDays,
+    deletionRetentionBasis
   } = useFormFields(form)
 
   return (
@@ -328,7 +357,7 @@ const TemplateModalInner = React.memo(function TemplateModalInner({
       />
       <Gap />
       <Label>{i18n.documentTemplates.templateModal.language}</Label>
-      <SelectF bind={language} />
+      <SelectF bind={language} data-qa="language-select" />
       <Gap />
       <Label>{i18n.documentTemplates.templateModal.legalBasis}</Label>
       <InputFieldF bind={legalBasis} hideErrorsBeforeTouched />
@@ -394,6 +423,11 @@ const TemplateModalInner = React.memo(function TemplateModalInner({
         bind={archiveExternally}
         label={i18n.documentTemplates.templateModal.archiveExternally}
         data-qa="archive-externally-checkbox"
+      />
+      <Gap />
+      <DeletionRulesEditor
+        retentionDays={deletionRetentionDays}
+        retentionBasis={deletionRetentionBasis}
       />
     </AsyncFormModal>
   )

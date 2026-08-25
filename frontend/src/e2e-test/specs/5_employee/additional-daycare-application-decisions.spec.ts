@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+import DateRange from 'lib-common/date-range'
 import FiniteDateRange from 'lib-common/finite-date-range'
 import type {
   ApplicationId,
@@ -11,6 +12,7 @@ import HelsinkiDateTime from 'lib-common/helsinki-date-time'
 import { fromUuid } from 'lib-common/id-type'
 import LocalDate from 'lib-common/local-date'
 import LocalTime from 'lib-common/local-time'
+import TimeRange from 'lib-common/time-range'
 
 import { execSimpleApplicationActions } from '../../dev-api'
 import { applicationFixture, Fixture } from '../../dev-api/fixtures'
@@ -19,9 +21,9 @@ import {
   resetServiceState
 } from '../../generated/api-clients'
 import CitizenApplicationsPage from '../../pages/citizen/citizen-applications'
-import type { DecisionEditorPage } from '../../pages/employee/applications/application-list-view'
 import ApplicationListView from '../../pages/employee/applications/application-list-view'
 import ApplicationReadView from '../../pages/employee/applications/application-read-view'
+import type { DecisionDraftPage } from '../../pages/employee/applications/decision-draft-page'
 import { test } from '../../playwright'
 import type { NewEvakaPage } from '../../playwright'
 import type { Page } from '../../utils/page'
@@ -53,12 +55,18 @@ const careArea = Fixture.careArea()
 
 const daycareA = Fixture.daycare({
   areaId: careArea.id,
-  type: ['CENTRE', 'PRESCHOOL']
+  type: ['CENTRE', 'PRESCHOOL'],
+  dailyPreschoolTime: new TimeRange(LocalTime.of(9, 0), LocalTime.of(13, 0)),
+  daycareApplyPeriod: new DateRange(LocalDate.of(2020, 3, 1), null),
+  preschoolApplyPeriod: new DateRange(LocalDate.of(2020, 3, 1), null)
 })
 
 const daycareB = Fixture.daycare({
   areaId: careArea.id,
-  type: ['CENTRE', 'PRESCHOOL']
+  type: ['CENTRE', 'PRESCHOOL'],
+  dailyPreschoolTime: new TimeRange(LocalTime.of(9, 0), LocalTime.of(13, 0)),
+  daycareApplyPeriod: new DateRange(LocalDate.of(2020, 3, 1), null),
+  preschoolApplyPeriod: new DateRange(LocalDate.of(2020, 3, 1), null)
 })
 
 const child = Fixture.person({
@@ -80,6 +88,7 @@ test.describe('Additional daycare application decision drafts', () => {
 
   test.beforeEach(async ({ evaka }) => {
     await resetServiceState()
+    await Fixture.decisionReasoningGenericDefaults().save()
     await preschoolTerm.save()
     await careArea.save()
     await daycareA.save()
@@ -101,12 +110,10 @@ test.describe('Additional daycare application decision drafts', () => {
       daycareA,
       newEvakaPage
     )
-    const decisionEditorPage = await navigateToDecisionDrafts(applicationId)
+    const decisionDraftPage = await navigateToDecisionDrafts(applicationId)
 
-    await decisionEditorPage
-      .plannedCheckbox('PRESCHOOL')
-      .waitUntilChecked(false)
-    await decisionEditorPage
+    await decisionDraftPage.plannedCheckbox('PRESCHOOL').waitUntilChecked(false)
+    await decisionDraftPage
       .plannedCheckbox('PRESCHOOL_DAYCARE')
       .waitUntilChecked(true)
   })
@@ -119,10 +126,10 @@ test.describe('Additional daycare application decision drafts', () => {
       daycareB,
       newEvakaPage
     )
-    const decisionEditorPage = await navigateToDecisionDrafts(applicationId)
+    const decisionDraftPage = await navigateToDecisionDrafts(applicationId)
 
-    await decisionEditorPage.plannedCheckbox('PRESCHOOL').waitUntilChecked(true)
-    await decisionEditorPage
+    await decisionDraftPage.plannedCheckbox('PRESCHOOL').waitUntilChecked(true)
+    await decisionDraftPage
       .plannedCheckbox('PRESCHOOL_DAYCARE')
       .waitUntilChecked(true)
   })
@@ -197,21 +204,20 @@ async function citizenCreatesPreschoolDaycareApplication(
 
 async function navigateToDecisionDrafts(
   applicationId: ApplicationId
-): Promise<DecisionEditorPage> {
+): Promise<DecisionDraftPage> {
   await execSimpleApplicationActions(
     applicationId,
     ['MOVE_TO_WAITING_PLACEMENT', 'CREATE_DEFAULT_PLACEMENT_PLAN'],
     HelsinkiDateTime.fromLocal(mockedDate, LocalTime.of(14, 0))
   )
 
-  await employeeLogin(page, serviceWorker)
   const applicationListView = new ApplicationListView(page)
   await page.goto(ApplicationListView.url)
   await applicationListView.filterByApplicationStatus('WAITING_DECISION')
   await applicationListView.searchButton.click()
-  const decisionEditorPage = await applicationListView
+  const decisionDraftPage = await applicationListView
     .applicationRow(applicationId)
-    .primaryActionEditDecisions()
-  await decisionEditorPage.waitUntilLoaded()
-  return decisionEditorPage
+    .primaryActionEditDecisionsRedesign()
+  await decisionDraftPage.waitUntilLoaded()
+  return decisionDraftPage
 }

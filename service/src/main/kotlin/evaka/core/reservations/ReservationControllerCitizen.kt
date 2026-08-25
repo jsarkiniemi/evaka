@@ -7,6 +7,7 @@ package evaka.core.reservations
 import com.fasterxml.jackson.annotation.JsonTypeInfo
 import com.fasterxml.jackson.annotation.JsonTypeName
 import evaka.core.Audit
+import evaka.core.AuditContext
 import evaka.core.AuditId
 import evaka.core.CitizenCalendarEnv
 import evaka.core.EvakaEnv
@@ -174,10 +175,9 @@ class ReservationControllerCitizen(
                                                     }
                                                     ?.let { placementDay ->
                                                         val key = Pair(child.id, date)
-                                                        val holidayPeriod =
-                                                            holidayPeriods.find {
-                                                                it.period.includes(date)
-                                                            }
+                                                        val holidayPeriod = holidayPeriods.find {
+                                                            it.period.includes(date)
+                                                        }
                                                         val childAbsences =
                                                             absences[key] ?: listOf()
                                                         val childReservations =
@@ -236,6 +236,8 @@ class ReservationControllerCitizen(
                                                                     today,
                                                                     reservationEnabledPlacementRangesByChild[
                                                                         child.id]!!,
+                                                                    citizenCalendarEnv
+                                                                        .calendarOpenBeforePlacementDays,
                                                                 ),
                                                         )
                                                     }
@@ -273,6 +275,7 @@ class ReservationControllerCitizen(
         @RequestBody body: List<DailyReservationRequest>,
     ) {
         val children = body.map { it.childId }.toSet()
+        val audit = AuditContext().add(children).observeDate(body.minOfOrNull { it.date })
 
         db.connect { dbc ->
                 dbc.transaction { tx ->
@@ -288,24 +291,15 @@ class ReservationControllerCitizen(
                         tx,
                         clock.now(),
                         user,
+                        audit,
                         body,
                         featureConfig.citizenReservationThresholdHours,
+                        citizenCalendarEnv.calendarOpenBeforePlacementDays,
                         env.plannedAbsenceEnabledForHourBasedServiceNeeds,
                     )
                 }
             }
-            ?.also {
-                Audit.AttendanceReservationCitizenCreate.log(
-                    targetId = AuditId(children),
-                    meta =
-                        mapOf(
-                            "deletedAbsences" to it.deletedAbsences,
-                            "deletedReservations" to it.deletedReservations,
-                            "upsertedAbsences" to it.upsertedAbsences,
-                            "upsertedReservations" to it.upsertedReservations,
-                        ),
-                )
-            }
+            .also { audit.log(Audit.AttendanceReservationCitizenCreate, clock) }
     }
 
     @PostMapping("/citizen/absences")
@@ -315,8 +309,8 @@ class ReservationControllerCitizen(
         clock: EvakaClock,
         @RequestBody body: AbsenceRequest,
     ) {
-        val (deletedAbsences, deletedReservations, insertedAbsences) =
-            db.connect { dbc ->
+        val audit = AuditContext().add(body.childIds).observeDate(body.dateRange.start)
+        db.connect { dbc ->
                 dbc.transaction { tx ->
                     accessControl.requirePermissionFor(
                         tx,
@@ -325,18 +319,10 @@ class ReservationControllerCitizen(
                         Action.Citizen.Child.CREATE_ABSENCE,
                         body.childIds,
                     )
-                    absenceService.createAbsences(tx, user, clock, body)
+                    absenceService.createAbsences(tx, user, clock, audit, body)
                 }
             }
-        Audit.AbsenceCitizenCreate.log(
-            targetId = AuditId(body.childIds),
-            objectId = AuditId(insertedAbsences),
-            meta =
-                mapOf(
-                    "deletedAbsences" to deletedAbsences,
-                    "deletedReservations" to deletedReservations,
-                ),
-        )
+            .also { audit.log(Audit.AbsenceCitizenCreate, clock) }
     }
 
     data class OperationalDatesRequest(val range: FiniteDateRange, val childIds: Set<ChildId>)
@@ -489,8 +475,9 @@ data class ReservationChild(
             placements: List<ReservationPlacement>,
             today: LocalDate,
         ): ReservationChild {
-            val hasHourBasedServiceNeeds =
-                placements.any { p -> p.serviceNeeds.any { sn -> sn.daycareHoursPerMonth != null } }
+            val hasHourBasedServiceNeeds = placements.any { p ->
+                p.serviceNeeds.any { sn -> sn.daycareHoursPerMonth != null }
+            }
             val currentOrNextPlacement =
                 placements.find { it.range.includes(today) }
                     ?: placements.minByOrNull { it.range.start }

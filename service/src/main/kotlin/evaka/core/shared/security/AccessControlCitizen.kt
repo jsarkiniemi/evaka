@@ -5,6 +5,7 @@
 package evaka.core.shared.security
 
 import evaka.core.CitizenCalendarEnv
+import evaka.core.document.CITIZEN_DOCUMENT_CREATION_DAYS_BEFORE_PLACEMENT
 import evaka.core.shared.PersonId
 import evaka.core.shared.db.Database
 import evaka.core.shared.domain.EvakaClock
@@ -28,7 +29,12 @@ class AccessControlCitizen(val citizenCalendarEnv: CitizenCalendarEnv) {
                     citizen,
                     citizenCalendarEnv.calendarOpenBeforePlacementDays,
                 ),
-            childDocumentation = tx.citizenHasAccessToChildDocumentation(clock, citizen),
+            childDocumentation =
+                tx.citizenHasAccessToChildDocumentation(
+                    clock,
+                    citizen,
+                    CITIZEN_DOCUMENT_CREATION_DAYS_BEFORE_PLACEMENT,
+                ),
         )
     }
 
@@ -38,8 +44,8 @@ class AccessControlCitizen(val citizenCalendarEnv: CitizenCalendarEnv) {
     ): Boolean {
         val today = clock.today()
         return createQuery {
-                sql(
-                    """
+            sql(
+                """
 WITH children AS (
     SELECT child_id, guardian_id AS parent_id FROM guardian WHERE guardian_id = ${bind(userId)}
     UNION ALL
@@ -62,8 +68,8 @@ SELECT EXISTS (
     WHERE p.id = ${bind(userId)} AND m.sent_at IS NOT NULL
 )
 """
-                )
-            }
+            )
+        }
             .exactlyOne<Boolean>()
     }
 
@@ -73,8 +79,8 @@ SELECT EXISTS (
     ): Boolean {
         val today = clock.today()
         return createQuery {
-                sql(
-                    """
+            sql(
+                """
 WITH children AS (
     SELECT child_id, guardian_id AS parent_id FROM guardian WHERE guardian_id = ${bind(userId)}
     UNION ALL
@@ -87,8 +93,8 @@ SELECT EXISTS (
     WHERE daterange((pl.start_date - interval '2 weeks')::date, pl.end_date, '[]') @> ${bind(today)}
 )
 """
-                )
-            }
+            )
+        }
             .exactlyOne<Boolean>()
     }
 
@@ -99,8 +105,8 @@ SELECT EXISTS (
     ): Boolean {
         val today = clock.today()
         return createQuery {
-                sql(
-                    """
+            sql(
+                """
 WITH children AS (
     SELECT child_id, guardian_id AS parent_id FROM guardian WHERE guardian_id = ${bind(userId)}
     UNION ALL
@@ -114,19 +120,20 @@ SELECT EXISTS (
     WHERE 'RESERVATIONS' = ANY(enabled_pilot_features)
 )
 """
-                )
-            }
+            )
+        }
             .exactlyOne<Boolean>()
     }
 
     private fun Database.Read.citizenHasAccessToChildDocumentation(
         clock: EvakaClock,
         userId: PersonId,
+        citizenDocumentCreationDaysBeforePlacement: Int,
     ): Boolean {
         val today = clock.today()
         return createQuery {
-                sql(
-                    """
+            sql(
+                """
 WITH children AS (
     SELECT child_id, guardian_id AS parent_id FROM guardian WHERE guardian_id = ${bind(userId)}
     UNION ALL
@@ -135,13 +142,22 @@ WITH children AS (
 SELECT EXISTS (
     SELECT 1
     FROM children c
-    JOIN placement pl ON c.child_id = pl.child_id AND daterange(pl.start_date, pl.end_date, '[]') @> ${bind(today)}
+    JOIN placement pl ON c.child_id = pl.child_id
     JOIN daycare ON pl.unit_id = daycare.id
-    WHERE 'VASU_AND_PEDADOC' = ANY(enabled_pilot_features)
+    WHERE (
+        daterange(pl.start_date, pl.end_date, '[]') @> ${bind(today)}
+        AND (
+            'VASU_AND_PEDADOC' = ANY(enabled_pilot_features)
+            OR 'OTHER_DECISION' = ANY(enabled_pilot_features)
+        )
+    ) OR (
+        'CITIZEN_BASIC_DOCUMENT' = ANY(enabled_pilot_features)
+        AND daterange((pl.start_date - ${bind(citizenDocumentCreationDaysBeforePlacement)}), pl.end_date, '[]') @> ${bind(today)}
+    )
 )
 """
-                )
-            }
+            )
+        }
             .exactlyOne<Boolean>()
     }
 }

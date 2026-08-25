@@ -4,7 +4,13 @@
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import type { ReactNode } from 'react'
-import React, { useCallback, useContext, useEffect, useState } from 'react'
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState
+} from 'react'
 import styled, { useTheme } from 'styled-components'
 
 import Container, { ContentArea } from 'lib-components/layout/Container'
@@ -157,17 +163,28 @@ export default React.memo(function ExpandingInfo({
       group.onOpen()
     }
     setExpanded(!expanded)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [expanded, group.onOpen])
   const close = useCallback(() => setExpanded(false), [])
 
   useEffect(
     () => group.addExpandingInfo(close),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
     [group.addExpandingInfo, close]
   )
 
   const [hasSlot, setHasSlot] = useState(false)
+
+  const value = useMemo(
+    () => ({
+      toggleExpanded,
+      margin,
+      dataQa,
+      hasSlot: setHasSlot,
+      expanded
+    }),
+    [toggleExpanded, margin, dataQa, expanded]
+  )
 
   if (!info) {
     return <div>{children}</div>
@@ -200,15 +217,7 @@ export default React.memo(function ExpandingInfo({
   )
 
   return (
-    <ExpandingInfoToggleContext.Provider
-      value={{
-        toggleExpanded,
-        margin,
-        dataQa,
-        hasSlot: setHasSlot,
-        expanded
-      }}
-    >
+    <ExpandingInfoToggleContext.Provider value={value}>
       <span aria-live="polite">
         {content}
         {expanded && (
@@ -339,19 +348,25 @@ export const ExpandingInfoGroup = React.memo(function ExpandingInfoGroup({
 }: ExpandingInfoGroupProps) {
   const [closingCallbacks, setClosingCallbacks] = useState<(() => void)[]>([])
 
+  const addExpandingInfo = useCallback((close: () => void) => {
+    setClosingCallbacks((cbs) => [...cbs, close])
+    return () => setClosingCallbacks((cbs) => cbs.filter((cb) => cb !== close))
+  }, [])
+
+  const onOpen = useCallback(() => {
+    closingCallbacks.forEach((cb) => cb())
+  }, [closingCallbacks])
+
+  const value = useMemo(
+    () => ({
+      addExpandingInfo,
+      onOpen
+    }),
+    [addExpandingInfo, onOpen]
+  )
+
   return (
-    <ExpandingInfoGroupContext.Provider
-      value={{
-        addExpandingInfo: useCallback((close) => {
-          setClosingCallbacks((cbs) => [...cbs, close])
-          return () =>
-            setClosingCallbacks((cbs) => cbs.filter((cb) => cb !== close))
-        }, []),
-        onOpen: useCallback(() => {
-          closingCallbacks.forEach((cb) => cb())
-        }, [closingCallbacks])
-      }}
-    >
+    <ExpandingInfoGroupContext.Provider value={value}>
       {children}
     </ExpandingInfoGroupContext.Provider>
   )

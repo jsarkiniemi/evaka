@@ -5,6 +5,7 @@
 package evaka.core.pis.controllers
 
 import evaka.core.Audit
+import evaka.core.AuditContext
 import evaka.core.AuditId
 import evaka.core.EvakaEnv
 import evaka.core.identity.ExternalIdentifier
@@ -189,7 +190,7 @@ class PersonController(
                             Action.Person.READ_DEPENDANTS,
                             personId,
                         )
-                        personService.getPersonWithChildren(it, user, personId)
+                        personService.getPersonWithChildren(it, user, clock.now(), personId)
                     }
                     ?.children ?: throw NotFound()
             }
@@ -227,7 +228,9 @@ class PersonController(
                         )
                     GuardiansResponse(
                         guardians =
-                            personService.getGuardians(tx, user, personId).map(PersonJSON::from),
+                            personService
+                                .getGuardians(tx, user, clock.now(), personId)
+                                .map(PersonJSON::from),
                         blockedGuardians =
                             if (fetchBlockedGuardians)
                                 tx.getBlockedGuardians(personId)
@@ -295,76 +298,75 @@ class PersonController(
         }
 
         return db.connect { dbc ->
-                val userEditablePersonData =
-                    dbc.read { tx ->
-                        accessControl.requirePermissionFor(
-                            tx,
-                            user,
-                            clock,
-                            Action.Person.UPDATE,
-                            personId,
-                        )
-                        data
-                            .let {
-                                if (
-                                    accessControl.hasPermissionFor(
-                                        tx,
-                                        user,
-                                        clock,
-                                        Action.Person.UPDATE_PERSONAL_DETAILS,
-                                        personId,
-                                    )
-                                ) {
-                                    it
-                                } else {
-                                    it.copy(
-                                        firstName = null,
-                                        lastName = null,
-                                        dateOfBirth = null,
-                                        streetAddress = null,
-                                        postalCode = null,
-                                        postOffice = null,
-                                        municipalityOfResidence = null,
-                                    )
-                                }
+                val userEditablePersonData = dbc.read { tx ->
+                    accessControl.requirePermissionFor(
+                        tx,
+                        user,
+                        clock,
+                        Action.Person.UPDATE,
+                        personId,
+                    )
+                    data
+                        .let {
+                            if (
+                                accessControl.hasPermissionFor(
+                                    tx,
+                                    user,
+                                    clock,
+                                    Action.Person.UPDATE_PERSONAL_DETAILS,
+                                    personId,
+                                )
+                            ) {
+                                it
+                            } else {
+                                it.copy(
+                                    firstName = null,
+                                    lastName = null,
+                                    dateOfBirth = null,
+                                    streetAddress = null,
+                                    postalCode = null,
+                                    postOffice = null,
+                                    municipalityOfResidence = null,
+                                )
                             }
-                            .let {
-                                if (
-                                    accessControl.hasPermissionFor(
-                                        tx,
-                                        user,
-                                        clock,
-                                        Action.Person.UPDATE_INVOICE_ADDRESS,
-                                        personId,
-                                    )
-                                ) {
-                                    it
-                                } else {
-                                    it.copy(
-                                        invoiceRecipientName = null,
-                                        invoicingStreetAddress = null,
-                                        invoicingPostalCode = null,
-                                        invoicingPostOffice = null,
-                                        forceManualFeeDecisions = null,
-                                    )
-                                }
+                        }
+                        .let {
+                            if (
+                                accessControl.hasPermissionFor(
+                                    tx,
+                                    user,
+                                    clock,
+                                    Action.Person.UPDATE_INVOICE_ADDRESS,
+                                    personId,
+                                )
+                            ) {
+                                it
+                            } else {
+                                it.copy(
+                                    invoiceRecipientName = null,
+                                    invoicingStreetAddress = null,
+                                    invoicingPostalCode = null,
+                                    invoicingPostOffice = null,
+                                    forceManualFeeDecisions = null,
+                                )
                             }
-                            .let {
-                                if (
-                                    accessControl.hasPermissionFor(
-                                        tx,
-                                        user,
-                                        clock,
-                                        Action.Person.UPDATE_OPH_OID,
-                                        personId,
-                                    )
-                                ) {
-                                    it
-                                } else {
-                                    it.copy(ophPersonOid = null)
-                                }
+                        }
+                        .let {
+                            if (
+                                accessControl.hasPermissionFor(
+                                    tx,
+                                    user,
+                                    clock,
+                                    Action.Person.UPDATE_OPH_OID,
+                                    personId,
+                                )
+                            ) {
+                                it
+                            } else {
+                                it.copy(ophPersonOid = null)
                             }
-                    }
+                        }
+                }
 
                 dbc.transaction {
                         personService.patchUserDetails(it, personId, userEditablePersonData)
@@ -594,7 +596,7 @@ class PersonController(
                     tx.blockGuardian(childId, body.guardianId)
                 } else {
                     tx.unblockGuardian(childId, body.guardianId)
-                    personService.getGuardians(tx, user, childId, forceRefresh = true)
+                    personService.getGuardians(tx, user, clock.now(), childId, forceRefresh = true)
                 }
             }
         }
@@ -611,8 +613,9 @@ class PersonController(
         user: AuthenticatedUser.Employee,
         clock: EvakaClock,
         @PathVariable guardianId: PersonId,
-    ): ResponseEntity<*> =
-        db.connect { dbc ->
+    ): ResponseEntity<*> {
+        val audit = AuditContext().add(guardianId)
+        return db.connect { dbc ->
                 dbc.transaction { tx ->
                     accessControl.requirePermissionFor(
                         tx,
@@ -641,7 +644,8 @@ class PersonController(
                         .body(resource)
                 }
             }
-            .also { Audit.AddressPageDownloadPdf.log(targetId = AuditId(guardianId)) }
+            .also { audit.log(Audit.AddressPageDownloadPdf, clock) }
+    }
 
     data class PersonResponse(val person: PersonBasicInfo, val permittedActions: Set<Action.Person>)
 

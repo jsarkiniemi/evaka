@@ -19,34 +19,34 @@ import java.util.UUID
 
 fun Database.Transaction.storeSfiGetEventsContinuationToken(continuationToken: String) {
     createUpdate {
-            sql(
-                """
+        sql(
+            """
 INSERT INTO sfi_get_events_continuation_token (continuation_token)
 VALUES (${bind(continuationToken)})
 ON CONFLICT DO NOTHING
 """
-            )
-        }
+        )
+    }
         .execute()
 }
 
-fun Database.Read.getLatestSfiGetEventsContinuationToken(): String? =
-    createQuery {
-            sql(
-                """
+fun Database.Read.getLatestSfiGetEventsContinuationToken(): String? = createQuery {
+    sql(
+        """
 SELECT continuation_token, created_at
 FROM sfi_get_events_continuation_token
 ORDER BY created_at DESC limit 1;
 """
-            )
-        }
-        .mapTo<String>()
-        .exactlyOneOrNull()
+    )
+}
+    .mapTo<String>()
+    .exactlyOneOrNull()
 
-fun Database.Read.getSentSfiMessageBySfiId(sfiId: Int): SentSfiMessage? =
-    createQuery { sql("SELECT * FROM sfi_message WHERE sfi_id = ${bind(sfiId)}") }
-        .mapTo<SentSfiMessage>()
-        .exactlyOneOrNull()
+fun Database.Read.getSentSfiMessageBySfiId(sfiId: Int): SentSfiMessage? = createQuery {
+    sql("SELECT * FROM sfi_message WHERE sfi_id = ${bind(sfiId)}")
+}
+    .mapTo<SentSfiMessage>()
+    .exactlyOneOrNull()
 
 private fun Database.Read.hasSfiMessageBeenSent(
     predicate: Predicate,
@@ -58,16 +58,16 @@ private fun Database.Read.hasSfiMessageBeenSent(
             guardianId?.let { Predicate { where("$it.guardian_id = ${bind(guardianId)}") } },
         )
     return createQuery {
-            sql(
-                """
+        sql(
+            """
 SELECT EXISTS (
     SELECT 1
     FROM sfi_message
     WHERE ${predicate(fullPredicate.forTable("sfi_message"))}
 )
 """
-            )
-        }
+        )
+    }
         .exactlyOne()
 }
 
@@ -99,10 +99,9 @@ fun Database.Read.hasVoucherValueDecisionSfiMessageBeenSent(
         guardianId,
     )
 
-fun Database.Transaction.storeSentSfiMessage(message: SentSfiMessage): SfiMessageId =
-    createUpdate {
-            sql(
-                """
+fun Database.Transaction.storeSentSfiMessage(message: SentSfiMessage): SfiMessageId = createUpdate {
+    sql(
+        """
 INSERT INTO sfi_message (
     sfi_id,
     guardian_id,
@@ -120,10 +119,10 @@ INSERT INTO sfi_message (
 )
 RETURNING id
 """
-            )
-        }
-        .executeAndReturnGeneratedKeys()
-        .exactlyOne<SfiMessageId>()
+    )
+}
+    .executeAndReturnGeneratedKeys()
+    .exactlyOne<SfiMessageId>()
 
 data class SentSfiMessage(
     val id: UUID? = null,
@@ -139,37 +138,38 @@ data class SentSfiMessage(
 
 fun Database.Transaction.upsertSfiMessageEventIfSfiMessageExists(
     event: SfiMessageEvent
-): SfiMessageEventId =
-    createUpdate {
-            sql(
-                """
+): SfiMessageEventId? = createUpdate {
+    sql(
+        """
 WITH existing_message AS (
     SELECT 1 FROM sfi_message WHERE id = ${bind(event.messageId)}
 )
-INSERT INTO sfi_message_event (message_id, event_type)
-SELECT ${bind(event.messageId)}, ${bind(event.eventType)}
+INSERT INTO sfi_message_event (message_id, event_type, event_time)
+SELECT ${bind(event.messageId)}, ${bind(event.eventType)}, ${bind(event.eventTime)}
 FROM existing_message
 ON CONFLICT (message_id, event_type)
-DO UPDATE SET updated_at = now()
+DO UPDATE SET
+    updated_at = now(),
+    event_time = least(sfi_message_event.event_time, EXCLUDED.event_time)
 RETURNING id
             """
-            )
-        }
-        .executeAndReturnGeneratedKeys()
-        .exactlyOne<SfiMessageEventId>()
+    )
+}
+    .executeAndReturnGeneratedKeys()
+    .exactlyOneOrNull<SfiMessageEventId>()
 
 fun Database.Read.getSfiMessageEventsByMessageId(messageId: SfiMessageId): List<SfiMessageEvent> =
     createQuery {
-            sql(
-                """
-SELECT id, created_at, updated_at, message_id, event_type
+        sql(
+            """
+SELECT id, created_at, updated_at, message_id, event_type, event_time
 FROM sfi_message_event
 WHERE message_id = ${bind(messageId)}
                 """
-            )
-        }
-        .mapTo<SfiMessageEvent>()
-        .toList()
+        )
+    }
+    .mapTo<SfiMessageEvent>()
+    .toList()
 
 data class SfiMessageEvent(
     val id: UUID? = null,
@@ -177,7 +177,11 @@ data class SfiMessageEvent(
     val updatedAt: HelsinkiDateTime? = null,
     val messageId: SfiMessageId,
     val eventType: EventType,
+    /** Timestamp reported by Suomi.fi, which can be much earlier than the ingest time */
+    val eventTime: HelsinkiDateTime,
 )
 
-fun Database.Read.getSfiGetEventsContinuationTokens(): List<String> =
-    createQuery { sql("SELECT continuation_token FROM sfi_get_events_continuation_token") }.toList()
+fun Database.Read.getSfiGetEventsContinuationTokens(): List<String> = createQuery {
+    sql("SELECT continuation_token FROM sfi_get_events_continuation_token")
+}
+    .toList()

@@ -46,13 +46,13 @@ test.describe('Employee - Document templates', () => {
     const templates = new DocumentTemplatesListPage(page)
 
     const jsonPath = await templates.templateRow(template.name).exportToPath()
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    // oxlint-disable-next-line typescript/no-unsafe-assignment
     const data = JSON.parse(
       await promisify(fs.readFile)(jsonPath, {
         encoding: 'utf-8'
       })
     )
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    // oxlint-disable-next-line typescript/no-unsafe-member-access
     expect(data.name).toEqual(template.name)
 
     const name = 'Tuodun uusi nimi'
@@ -76,6 +76,8 @@ test.describe('Employee - Document templates', () => {
         durationYears: 50,
         basis: 'Test legal basis'
       },
+      deletionRetentionDays: 1825,
+      deletionRetentionBasis: 'STATUS_TRANSITION',
       content: {
         sections: [
           {
@@ -102,5 +104,8 @@ test.describe('Employee - Document templates', () => {
     await expect(modal.confidentialityBasisInput).toHaveValue(
       'Test legal basis'
     )
+    await expect(modal.deletionRetentionDaysInput).toHaveValue('1825')
+    await modal.deletionRetentionBasisStatusTransition.waitUntilChecked(true)
+    await modal.deletionRetentionBasisPlacementEnd.waitUntilChecked(false)
   })
 })

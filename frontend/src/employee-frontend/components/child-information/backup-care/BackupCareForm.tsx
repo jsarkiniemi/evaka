@@ -28,7 +28,7 @@ import {
   useQueryResult,
   useSelectMutation
 } from 'lib-common/query'
-import { LegacyButton } from 'lib-components/atoms/buttons/LegacyButton'
+import { Button } from 'lib-components/atoms/buttons/Button'
 import {
   cancelMutation,
   MutateButton
@@ -100,7 +100,7 @@ export default function BackupCareForm({
   backupCares,
   backupCare
 }: Props) {
-  const { i18n } = useTranslation()
+  const { i18n, lang } = useTranslation()
   const { uiMode, clearUiMode } = useContext(UIContext)
   const { permittedActions } = useContext(ChildContext)
 
@@ -118,7 +118,7 @@ export default function BackupCareForm({
         ? unitOperationPeriodsQuery({
             unitIds: unitStubs.map((unit) => unit.id)
           })
-        : constantQuery({} as Partial<Record<DaycareId, UnitOperationPeriod>>)
+        : constantQuery<Partial<Record<DaycareId, UnitOperationPeriod>>>({})
     )
   )
 
@@ -135,28 +135,29 @@ export default function BackupCareForm({
           p !== null
             ? sortBy(p.placements, (placement) =>
                 placement.startDate.toSystemTzDate().getTime()
-              ).reduce((prev, curr) => {
+              ).reduce((arr, curr) => {
                 const currentRange = new FiniteDateRange(
                   curr.startDate,
                   curr.endDate
                 )
-                const fittingExistingIndex = prev.findIndex((range) =>
+                const fittingExistingIndex = arr.findIndex((range) =>
                   range.adjacentTo(currentRange)
                 )
 
                 if (fittingExistingIndex > -1) {
-                  const fittingExisting = prev[fittingExistingIndex]
+                  const fittingExisting = arr[fittingExistingIndex]
 
                   const newRange = fittingExisting.leftAdjacentTo(currentRange)
                     ? fittingExisting.withEnd(curr.endDate)
                     : fittingExisting.withStart(curr.startDate)
 
-                  const copy = Array.from(prev)
+                  const copy = Array.from(arr)
                   copy[fittingExistingIndex] = newRange
                   return copy
                 }
 
-                return [...prev, currentRange]
+                arr.push(currentRange)
+                return arr
               }, [] as FiniteDateRange[])
             : []
         )
@@ -324,14 +325,14 @@ export default function BackupCareForm({
             <DatePicker
               date={formState.startDate}
               onChange={(startDate) => updateFormState({ startDate })}
-              locale="fi"
+              locale={lang}
               data-qa="backup-care-start-date"
             />
             <DatePickerSpacer />
             <DatePicker
               date={formState.endDate}
               onChange={(endDate) => updateFormState({ endDate })}
-              locale="fi"
+              locale={lang}
               data-qa="backup-care-end-date"
             />
           </FixedSpaceRow>
@@ -342,7 +343,7 @@ export default function BackupCareForm({
           </div>
         ))}
         <ActionButtons>
-          <LegacyButton
+          <Button
             onClick={() => clearUiMode()}
             text={i18n.common.cancel}
             data-qa="cancel-backup-care-form"

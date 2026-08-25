@@ -52,7 +52,9 @@ import {
 } from 'lib-components/messages/types'
 import type { SelectOption } from 'lib-components/molecules/Select'
 
+import { useTranslation } from '../../state/i18n'
 import { UserContext } from '../../state/user'
+import { hasGlobalAction } from '../../utils/roles'
 
 import {
   accountsByUserQuery,
@@ -165,6 +167,7 @@ export const MessageContextProvider = React.memo(
     children: React.JSX.Element
   }) {
     const { user } = useContext(UserContext)
+    const { i18n } = useTranslation()
     const queryClient = useQueryClient()
     const [searchParams, setSearchParams] = useSearchParams()
     const accountId = searchParams.get('accountId')
@@ -221,13 +224,15 @@ export const MessageContextProvider = React.memo(
     const [page, setPage] = useState<number>(1)
 
     const accounts = useQueryResult(
-      user?.accessibleFeatures.messages
+      hasGlobalAction(user, 'MESSAGES_PAGE')
         ? accountsByUserQuery()
         : constantQuery<AuthorizedMessageAccount[]>([])
     )
 
     const folders = useQueryResult(
-      user?.accessibleFeatures.messages ? foldersQuery() : constantQuery([])
+      hasGlobalAction(user, 'MESSAGES_PAGE')
+        ? foldersQuery()
+        : constantQuery([])
     )
 
     const municipalAccount = useMemo(
@@ -294,7 +299,7 @@ export const MessageContextProvider = React.memo(
     )
 
     const unreadCountsByAccount = useQueryResult(
-      user?.accessibleFeatures.messages
+      hasGlobalAction(user, 'MESSAGES_PAGE')
         ? unreadMessagesQuery()
         : constantQuery([]),
       {
@@ -452,6 +457,10 @@ export const MessageContextProvider = React.memo(
         sentMessages.map((value) =>
           selectedAccount
             ? value.map((message) => {
+                // The sent folder aggregates N per-recipient message rows into
+                // one row per contentId, but the surrounding UI expects
+                // MessageThread/Message. These derived IDs are local-only
+                // (React keys, URL routing).
                 const fakeMessageId = fromUuid<MessageId>(message.contentId)
                 const fakeThreadId = fromUuid<MessageThreadId>(
                   message.contentId
@@ -459,7 +468,12 @@ export const MessageContextProvider = React.memo(
                 return {
                   id: fakeThreadId,
                   type: message.type,
-                  title: message.threadTitle,
+                  title:
+                    message.firstMessageContentDeletedAt === null
+                      ? message.threadTitle
+                      : message.contentDeletedAt !== null
+                        ? `${i18n.messages.deletion.afterDeletion.threadTitlePrefix} ${message.contentDeletedAt.toLocalDate().format()}`
+                        : `${i18n.messages.deletion.afterDeletion.sentThreadTitlePrefix} ${message.firstMessageContentDeletedAt.toLocalDate().format()}`,
                   urgent: message.urgent,
                   sensitive: message.sensitive,
                   isCopy: false,
@@ -472,20 +486,22 @@ export const MessageContextProvider = React.memo(
                     {
                       id: fakeMessageId,
                       threadId: fakeThreadId,
+                      contentId: message.contentId,
                       sender: { ...selectedAccount.account },
                       sentAt: message.sentAt,
                       recipients: [], // recipientNames should be used when viewing sent messages
                       readAt: HelsinkiDateTime.now(),
                       content: message.content,
                       attachments: message.attachments,
-                      recipientNames: message.recipientNames
+                      recipientNames: message.recipientNames,
+                      contentDeletedAt: message.contentDeletedAt
                     }
                   ]
                 }
               })
             : []
         ),
-      [selectedAccount, sentMessages]
+      [selectedAccount, sentMessages, i18n]
     )
 
     const messageCopiesAsThreads: Result<MessageThread[]> = useMemo(
@@ -504,6 +520,7 @@ export const MessageContextProvider = React.memo(
               {
                 id: message.messageId,
                 threadId: message.threadId,
+                contentId: message.contentId,
                 sender: {
                   id: message.senderId,
                   name: message.senderName,
@@ -522,7 +539,8 @@ export const MessageContextProvider = React.memo(
                 readAt: message.readAt,
                 content: message.content,
                 attachments: message.attachments,
-                recipientNames: message.recipientNames
+                recipientNames: message.recipientNames,
+                contentDeletedAt: message.contentDeletedAt
               }
             ]
           }))

@@ -15,6 +15,7 @@ import evaka.core.invoicing.data.getInvoice
 import evaka.core.invoicing.domain.InvoiceStatus
 import evaka.core.messaging.findMessageAccountIdByDraftId
 import evaka.core.messaging.getMessageAccountIdsByContentId
+import evaka.core.messaging.getMessageContentDeletionInfo
 import evaka.core.messaging.messageAttachmentsAllowedForCitizen
 import evaka.core.pedagogicaldocument.PedagogicalDocumentNotificationService
 import evaka.core.s3.ContentTypePattern
@@ -497,28 +498,27 @@ class AttachmentsController(
         attachTo: AttachmentParent,
         user: AuthenticatedUser.Citizen,
     ) {
-        val count =
-            db.read {
-                when (attachTo) {
-                    is AttachmentParent.None,
-                    is AttachmentParent.Application,
-                    is AttachmentParent.IncomeStatement,
-                    is AttachmentParent.Income,
-                    is AttachmentParent.Invoice,
-                    is AttachmentParent.PedagogicalDocument -> {
-                        it.userAttachmentCount(user.evakaUserId, attachTo)
-                    }
+        val count = db.read {
+            when (attachTo) {
+                is AttachmentParent.None,
+                is AttachmentParent.Application,
+                is AttachmentParent.IncomeStatement,
+                is AttachmentParent.Income,
+                is AttachmentParent.Invoice,
+                is AttachmentParent.PedagogicalDocument -> {
+                    it.userAttachmentCount(user.evakaUserId, attachTo)
+                }
 
-                    is AttachmentParent.MessageDraft,
-                    is AttachmentParent.MessageContent -> {
-                        0
-                    }
+                is AttachmentParent.MessageDraft,
+                is AttachmentParent.MessageContent -> {
+                    0
+                }
 
-                    is AttachmentParent.FeeAlteration -> {
-                        Integer.MAX_VALUE
-                    }
+                is AttachmentParent.FeeAlteration -> {
+                    Integer.MAX_VALUE
                 }
             }
+        }
         if (count >= maxAttachmentsPerUser) {
             throw Forbidden(
                 "Too many uploaded files for ${user.evakaUserId}: $maxAttachmentsPerUser"
@@ -638,109 +638,128 @@ class AttachmentsController(
         @PathVariable attachmentId: AttachmentId,
         @PathVariable requestedFilename: String,
     ): ResponseEntity<Any> {
-        val attachment =
-            db.connect { dbc ->
-                dbc.read {
-                    val (attachment, attachedTo) =
-                        it.getAttachment(attachmentId)
-                            ?: throw NotFound("Attachment $attachmentId not found")
-                    when (attachedTo) {
-                        is AttachmentParent.Application -> {
-                            accessControl.requirePermissionFor(
-                                it,
-                                user,
-                                clock,
-                                Action.Attachment.READ_APPLICATION_ATTACHMENT,
-                                attachment.id,
-                            )
-                        }
+        var senderViewOfDeletedMessage = false
+        val attachment = db.connect { dbc ->
+            dbc.read {
+                val (attachment, attachedTo) =
+                    it.getAttachment(attachmentId)
+                        ?: throw NotFound("Attachment $attachmentId not found")
+                when (attachedTo) {
+                    is AttachmentParent.Application -> {
+                        accessControl.requirePermissionFor(
+                            it,
+                            user,
+                            clock,
+                            Action.Attachment.READ_APPLICATION_ATTACHMENT,
+                            attachment.id,
+                        )
+                    }
 
-                        is AttachmentParent.Income -> {
-                            accessControl.requirePermissionFor(
-                                it,
-                                user,
-                                clock,
-                                Action.Attachment.READ_INCOME_ATTACHMENT,
-                                attachment.id,
-                            )
-                        }
+                    is AttachmentParent.Income -> {
+                        accessControl.requirePermissionFor(
+                            it,
+                            user,
+                            clock,
+                            Action.Attachment.READ_INCOME_ATTACHMENT,
+                            attachment.id,
+                        )
+                    }
 
-                        is AttachmentParent.IncomeStatement -> {
-                            accessControl.requirePermissionFor(
-                                it,
-                                user,
-                                clock,
-                                Action.Attachment.READ_INCOME_STATEMENT_ATTACHMENT,
-                                attachment.id,
-                            )
-                        }
+                    is AttachmentParent.IncomeStatement -> {
+                        accessControl.requirePermissionFor(
+                            it,
+                            user,
+                            clock,
+                            Action.Attachment.READ_INCOME_STATEMENT_ATTACHMENT,
+                            attachment.id,
+                        )
+                    }
 
-                        is AttachmentParent.Invoice -> {
-                            accessControl.requirePermissionFor(
-                                it,
-                                user,
-                                clock,
-                                Action.Attachment.READ_INVOICE_ATTACHMENT,
-                                attachment.id,
-                            )
-                        }
+                    is AttachmentParent.Invoice -> {
+                        accessControl.requirePermissionFor(
+                            it,
+                            user,
+                            clock,
+                            Action.Attachment.READ_INVOICE_ATTACHMENT,
+                            attachment.id,
+                        )
+                    }
 
-                        is AttachmentParent.MessageContent -> {
-                            val accountIds =
-                                it.getMessageAccountIdsByContentId(attachedTo.messageContentId)
-                            accessControl.requirePermissionForSomeTarget(
-                                it,
-                                user,
-                                clock,
-                                Action.MessageAccount.ACCESS,
-                                accountIds,
-                            )
+                    is AttachmentParent.MessageContent -> {
+                        val accountIds =
+                            it.getMessageAccountIdsByContentId(attachedTo.messageContentId)
+                        accessControl.requirePermissionForSomeTarget(
+                            it,
+                            user,
+                            clock,
+                            Action.MessageAccount.ACCESS,
+                            accountIds,
+                        )
+                        val deletionInfo =
+                            it.getMessageContentDeletionInfo(attachedTo.messageContentId)
+                        if (deletionInfo?.isContentDeleted == true) {
+                            // The message content was deleted: only the sender keeps access to
+                            // its attachments, and every such download is audit-logged below.
+                            if (
+                                !accessControl.hasPermissionFor(
+                                    it,
+                                    user,
+                                    clock,
+                                    Action.MessageAccount.ACCESS,
+                                    deletionInfo.senderId,
+                                )
+                            ) {
+                                throw Forbidden("Attachment belongs to a deleted message")
+                            }
+                            senderViewOfDeletedMessage = true
                         }
+                        Unit
+                    }
 
-                        is AttachmentParent.MessageDraft -> {
-                            val accountId = it.findMessageAccountIdByDraftId(attachedTo.draftId)
-                            accessControl.requirePermissionFor(
-                                it,
-                                user,
-                                clock,
-                                Action.MessageAccount.ACCESS,
-                                accountId!!,
-                            )
-                        }
+                    is AttachmentParent.MessageDraft -> {
+                        val accountId = it.findMessageAccountIdByDraftId(attachedTo.draftId)
+                        accessControl.requirePermissionFor(
+                            it,
+                            user,
+                            clock,
+                            Action.MessageAccount.ACCESS,
+                            accountId!!,
+                        )
+                    }
 
-                        is AttachmentParent.PedagogicalDocument -> {
-                            accessControl.requirePermissionFor(
-                                it,
-                                user,
-                                clock,
-                                Action.Attachment.READ_PEDAGOGICAL_DOCUMENT_ATTACHMENT,
-                                attachment.id,
-                            )
-                        }
+                    is AttachmentParent.PedagogicalDocument -> {
+                        accessControl.requirePermissionFor(
+                            it,
+                            user,
+                            clock,
+                            Action.Attachment.READ_PEDAGOGICAL_DOCUMENT_ATTACHMENT,
+                            attachment.id,
+                        )
+                    }
 
-                        is AttachmentParent.FeeAlteration -> {
-                            accessControl.requirePermissionFor(
-                                it,
-                                user,
-                                clock,
-                                Action.Attachment.READ_FEE_ALTERATION_ATTACHMENT,
-                                attachment.id,
-                            )
-                        }
+                    is AttachmentParent.FeeAlteration -> {
+                        accessControl.requirePermissionFor(
+                            it,
+                            user,
+                            clock,
+                            Action.Attachment.READ_FEE_ALTERATION_ATTACHMENT,
+                            attachment.id,
+                        )
+                    }
 
-                        is AttachmentParent.None -> {
-                            accessControl.requirePermissionFor(
-                                it,
-                                user,
-                                clock,
-                                Action.Attachment.READ_ORPHAN_ATTACHMENT,
-                                attachment.id,
-                            )
-                        }
-                    }.exhaust()
-                    attachment
-                }
+                    is AttachmentParent.None -> {
+                        accessControl.requirePermissionFor(
+                            it,
+                            user,
+                            clock,
+                            Action.Attachment.READ_ORPHAN_ATTACHMENT,
+                            attachment.id,
+                        )
+                    }
+                }.exhaust()
+                attachment
             }
+        }
 
         if (requestedFilename != attachment.name)
             throw BadRequest("Requested file name doesn't match actual file name for $attachmentId")
@@ -748,6 +767,9 @@ class AttachmentsController(
         val documentLocation = documentClient.locate(DocumentKey.Attachment(attachmentId))
         return documentClient.responseInline(documentLocation, attachment.name).also {
             Audit.AttachmentsRead.log(targetId = AuditId(attachmentId))
+            if (senderViewOfDeletedMessage) {
+                Audit.MessagingViewDeletedContent.log(targetId = AuditId(attachmentId))
+            }
         }
     }
 

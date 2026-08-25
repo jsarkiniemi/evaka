@@ -4,6 +4,7 @@
 
 package evaka.core.placement
 
+import evaka.core.AuditContext
 import evaka.core.FullApplicationTest
 import evaka.core.absence.getAbsencesOfChildByRange
 import evaka.core.backupcare.getBackupCaresForChild
@@ -16,6 +17,8 @@ import evaka.core.shared.EmployeeId
 import evaka.core.shared.GroupId
 import evaka.core.shared.GroupPlacementId
 import evaka.core.shared.PlacementId
+import evaka.core.shared.async.AsyncJob
+import evaka.core.shared.async.AsyncJobRunner
 import evaka.core.shared.auth.AuthenticatedUser
 import evaka.core.shared.auth.UserRole
 import evaka.core.shared.dev.DevBackupCare
@@ -37,7 +40,14 @@ import evaka.core.shared.domain.HelsinkiDateTime
 import evaka.core.shared.domain.MockEvakaClock
 import evaka.core.shared.domain.NotFound
 import evaka.core.shared.domain.TimeRange
+import evaka.core.shared.noopTracer
+import evaka.core.shared.security.AccessControl
+import evaka.core.shared.security.Action
 import evaka.core.shared.security.PilotFeature
+import evaka.core.shared.security.actionrule.ActionRuleMapping
+import evaka.core.shared.security.actionrule.DefaultActionRuleMapping
+import evaka.core.shared.security.actionrule.ScopedActionRule
+import evaka.core.shared.security.actionrule.UnscopedActionRule
 import java.time.LocalDate
 import java.time.LocalTime
 import java.util.UUID
@@ -56,6 +66,26 @@ import org.springframework.beans.factory.annotation.Autowired
 class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach = true) {
 
     @Autowired lateinit var placementController: PlacementController
+
+    @Autowired lateinit var asyncJobRunner: AsyncJobRunner<AsyncJob>
+
+    // AccessControl that denies Action.Child.READ_SERVICE_NEEDS but otherwise behaves normally
+    private val denyServiceNeedsAccessControl =
+        AccessControl(
+            object : ActionRuleMapping {
+                private val default = DefaultActionRuleMapping()
+
+                override fun rulesOf(action: Action.UnscopedAction): Sequence<UnscopedActionRule> =
+                    default.rulesOf(action)
+
+                override fun <T> rulesOf(
+                    action: Action.ScopedAction<in T>
+                ): Sequence<ScopedActionRule<in T>> =
+                    if (action == Action.Child.READ_SERVICE_NEEDS) emptySequence()
+                    else default.rulesOf(action)
+            },
+            noopTracer(),
+        )
 
     private val mockClock =
         MockEvakaClock(HelsinkiDateTime.of(LocalDate.of(2023, 1, 1), LocalTime.of(12, 0)))
@@ -85,6 +115,7 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
         AuthenticatedUser.Employee(EmployeeId(UUID.randomUUID()), setOf(UserRole.ADMIN))
 
     private val citizenReservationThresholdHours: Long = 150
+    private val calendarOpenBeforePlacementDays = 30
 
     @BeforeEach
     fun setUp() {
@@ -122,6 +153,31 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
         Assertions.assertThat(placement.child.id).isEqualTo(childId)
         Assertions.assertThat(placement.startDate).isEqualTo(placementStart)
         Assertions.assertThat(placement.endDate).isEqualTo(placementEnd)
+    }
+
+    @Test
+    fun `serviceNeedDetail is populated for a user with READ_SERVICE_NEEDS`() {
+        val response = getChildPlacements(user = serviceWorker)
+
+        val placement = response.placements.single()
+        Assertions.assertThat(placement.serviceNeedDetail).isNotNull
+    }
+
+    @Test
+    fun `serviceNeedDetail is nulled for a user without READ_SERVICE_NEEDS`() {
+        // No real role can read placements without also being able to read service needs, so
+        // deny READ_SERVICE_NEEDS via a custom AccessControl to exercise the nulling.
+        val controller =
+            PlacementController(
+                accessControl = denyServiceNeedsAccessControl,
+                asyncJobRunner = asyncJobRunner,
+                featureConfig = featureConfig,
+            )
+        val response =
+            controller.getChildPlacements(dbInstance(), serviceWorker, mockClock, childId)
+
+        val placement = response.placements.single()
+        Assertions.assertThat(placement.serviceNeedDetail).isNull()
     }
 
     @Test
@@ -267,6 +323,7 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
                 it,
                 HelsinkiDateTime.of(activePlacementStart, LocalTime.of(12, 0)),
                 unitSupervisor,
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Absent(childId = childId, date = firstAbsence),
                     DailyReservationRequest.Absent(childId = childId, date = secondAbsence),
@@ -274,6 +331,7 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
                     DailyReservationRequest.Absent(childId = childId, date = fourthAbsence),
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -362,6 +420,7 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
                 it,
                 HelsinkiDateTime.of(activePlacementStart, LocalTime.of(12, 0)),
                 unitSupervisor,
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(
                         childId = childId,
@@ -385,17 +444,17 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
                     ),
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
         // then 4 reservathions
-        val reservations =
-            db.read {
-                it.getReservationsForChildInRange(
-                    childId,
-                    FiniteDateRange(activePlacementStart, activePlacementEnd),
-                )
-            }
+        val reservations = db.read {
+            it.getReservationsForChildInRange(
+                childId,
+                FiniteDateRange(activePlacementStart, activePlacementEnd),
+            )
+        }
         assertEquals(4, reservations.size)
         assertTrue(reservations.containsKey(firstReservation))
         assertTrue(reservations.containsKey(secondReservation))
@@ -440,13 +499,12 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
         assertNotNull(secondGroupPlacementId)
 
         // Verify that the future absences in new placement period has been deleted
-        val updatedReservations =
-            db.read {
-                it.getReservationsForChildInRange(
-                    childId,
-                    FiniteDateRange(activePlacementStart, activePlacementEnd),
-                )
-            }
+        val updatedReservations = db.read {
+            it.getReservationsForChildInRange(
+                childId,
+                FiniteDateRange(activePlacementStart, activePlacementEnd),
+            )
+        }
         assertEquals(2, updatedReservations.size)
         assertTrue(updatedReservations.containsKey(firstReservation))
         assertTrue(updatedReservations.containsKey(secondReservation))
@@ -476,6 +534,7 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
                 it,
                 HelsinkiDateTime.of(activePlacementStart, LocalTime.of(12, 0)),
                 unitSupervisor,
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Absent(childId = childId, date = firstAbsence),
                     DailyReservationRequest.Absent(childId = childId, date = secondAbsence),
@@ -483,6 +542,7 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
                     DailyReservationRequest.Absent(childId = childId, date = fourthAbsence),
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -552,6 +612,7 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
                 it,
                 HelsinkiDateTime.of(activePlacementStart, LocalTime.of(12, 0)),
                 unitSupervisor,
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(
                         childId = childId,
@@ -575,17 +636,17 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
                     ),
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
         // then 4 reservathions
-        val reservations =
-            db.read {
-                it.getReservationsForChildInRange(
-                    childId,
-                    FiniteDateRange(activePlacementStart, activePlacementEnd),
-                )
-            }
+        val reservations = db.read {
+            it.getReservationsForChildInRange(
+                childId,
+                FiniteDateRange(activePlacementStart, activePlacementEnd),
+            )
+        }
         assertEquals(4, reservations.size)
         assertTrue(reservations.containsKey(firstReservation))
         assertTrue(reservations.containsKey(secondReservation))
@@ -611,13 +672,12 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
         assertEquals(updatedPlacement.endDate, newEndDate)
 
         // Verify that the future reservations in new placement period has been deleted
-        val updatedReservations =
-            db.read {
-                it.getReservationsForChildInRange(
-                    childId,
-                    FiniteDateRange(activePlacementStart, activePlacementEnd),
-                )
-            }
+        val updatedReservations = db.read {
+            it.getReservationsForChildInRange(
+                childId,
+                FiniteDateRange(activePlacementStart, activePlacementEnd),
+            )
+        }
         assertEquals(2, updatedReservations.size)
         assertTrue(updatedReservations.containsKey(firstReservation))
         assertTrue(updatedReservations.containsKey(secondReservation))
@@ -647,6 +707,7 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
                 it,
                 HelsinkiDateTime.of(activePlacementStart, LocalTime.of(12, 0)),
                 unitSupervisor,
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Absent(childId = childId, date = firstAbsence),
                     DailyReservationRequest.Absent(childId = childId, date = secondAbsence),
@@ -654,6 +715,7 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
                     DailyReservationRequest.Absent(childId = childId, date = fourthAbsence),
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
@@ -720,6 +782,7 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
                 it,
                 HelsinkiDateTime.of(activePlacementStart, LocalTime.of(12, 0)),
                 unitSupervisor,
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(
                         childId = childId,
@@ -733,16 +796,16 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
                     ),
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
-        val reservations =
-            db.read {
-                it.getReservationsForChildInRange(
-                    childId,
-                    FiniteDateRange(activePlacementStart, futurePlacementEnd),
-                )
-            }
+        val reservations = db.read {
+            it.getReservationsForChildInRange(
+                childId,
+                FiniteDateRange(activePlacementStart, futurePlacementEnd),
+            )
+        }
         assertEquals(2, reservations.size)
         assertTrue(reservations.containsKey(firstReservation))
         assertTrue(reservations.containsKey(secondReservation))
@@ -751,13 +814,12 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
         assertNull(db.read { r -> r.getPlacement(futurePlacement.id) })
 
         // Verify that the future reservations in new placement period has been deleted
-        val updatedReservations =
-            db.read {
-                it.getReservationsForChildInRange(
-                    childId,
-                    FiniteDateRange(activePlacementStart, futurePlacementEnd),
-                )
-            }
+        val updatedReservations = db.read {
+            it.getReservationsForChildInRange(
+                childId,
+                FiniteDateRange(activePlacementStart, futurePlacementEnd),
+            )
+        }
         assertEquals(1, updatedReservations.size)
         assertTrue(updatedReservations.containsKey(firstReservation))
     }
@@ -787,6 +849,7 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
                 it,
                 HelsinkiDateTime.of(activePlacementStart, LocalTime.of(12, 0)),
                 unitSupervisor,
+                AuditContext(),
                 listOf(
                     DailyReservationRequest.Reservations(
                         childId = childId,
@@ -810,17 +873,17 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
                     ),
                 ),
                 citizenReservationThresholdHours,
+                calendarOpenBeforePlacementDays,
             )
         }
 
         // then 4 reservathions
-        val reservations =
-            db.read {
-                it.getReservationsForChildInRange(
-                    childId,
-                    FiniteDateRange(activePlacementStart, activePlacementEnd),
-                )
-            }
+        val reservations = db.read {
+            it.getReservationsForChildInRange(
+                childId,
+                FiniteDateRange(activePlacementStart, activePlacementEnd),
+            )
+        }
         assertEquals(4, reservations.size)
         assertTrue(reservations.containsKey(firstReservation))
         assertTrue(reservations.containsKey(secondReservation))
@@ -834,13 +897,12 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
         assertNull(db.read { r -> r.getPlacement(activePlacement.id) })
 
         // Verify that the future reservations in new placement period has been deleted
-        val updatedReservations =
-            db.read {
-                it.getReservationsForChildInRange(
-                    childId,
-                    FiniteDateRange(activePlacementStart, activePlacementEnd),
-                )
-            }
+        val updatedReservations = db.read {
+            it.getReservationsForChildInRange(
+                childId,
+                FiniteDateRange(activePlacementStart, activePlacementEnd),
+            )
+        }
         assertEquals(2, updatedReservations.size)
         assertTrue(updatedReservations.containsKey(firstReservation))
         assertTrue(updatedReservations.containsKey(secondReservation))
@@ -884,10 +946,9 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
 
     @Test
     fun `deleting group placement works`() {
-        val groupPlacementId =
-            db.transaction { tx ->
-                tx.createGroupPlacement(testPlacement.id, groupId, placementStart, placementEnd)
-            }
+        val groupPlacementId = db.transaction { tx ->
+            tx.createGroupPlacement(testPlacement.id, groupId, placementStart, placementEnd)
+        }
 
         deleteGroupPlacement(groupPlacementId)
 
@@ -899,29 +960,27 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
 
     @Test
     fun `unit supervisor sees placements to her unit only`() {
-        val allowedId =
-            db.transaction { tx ->
-                tx.insert(
-                    DevPlacement(
-                        childId = childId,
-                        unitId = daycareId,
-                        startDate = LocalDate.now(),
-                        endDate = LocalDate.now().plusDays(1),
-                    )
+        val allowedId = db.transaction { tx ->
+            tx.insert(
+                DevPlacement(
+                    childId = childId,
+                    unitId = daycareId,
+                    startDate = LocalDate.now(),
+                    endDate = LocalDate.now().plusDays(1),
                 )
-            }
+            )
+        }
 
-        val restrictedId =
-            db.transaction { tx ->
-                tx.insert(
-                    DevPlacement(
-                        childId = childId,
-                        unitId = daycare2.id,
-                        startDate = LocalDate.now().minusDays(2),
-                        endDate = LocalDate.now().minusDays(1),
-                    )
+        val restrictedId = db.transaction { tx ->
+            tx.insert(
+                DevPlacement(
+                    childId = childId,
+                    unitId = daycare2.id,
+                    startDate = LocalDate.now().minusDays(2),
+                    endDate = LocalDate.now().minusDays(1),
                 )
-            }
+            )
+        }
 
         val response = getChildPlacements(user = unitSupervisor)
 
@@ -938,17 +997,16 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
         val newStart = placementStart.plusDays(1)
         val newEnd = placementEnd.minusDays(2)
         val allowedId = testPlacement.id
-        val restrictedId =
-            db.transaction { tx ->
-                tx.insert(
-                    DevPlacement(
-                        childId = childId,
-                        unitId = daycare2.id,
-                        startDate = placementEnd.plusDays(1),
-                        endDate = placementEnd.plusMonths(2),
-                    )
+        val restrictedId = db.transaction { tx ->
+            tx.insert(
+                DevPlacement(
+                    childId = childId,
+                    unitId = daycare2.id,
+                    startDate = placementEnd.plusDays(1),
+                    endDate = placementEnd.plusMonths(2),
                 )
-            }
+            )
+        }
         val body = PlacementUpdateRequestBody(startDate = newStart, endDate = newEnd)
 
         assertThrows<Forbidden> { updatePlacement(restrictedId, body) }
@@ -987,24 +1045,23 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
     @Test
     fun `unit supervisor can modify placement if it overlaps with another that supervisor has the rights to`() {
         val newEnd = placementEnd.plusDays(1)
-        val secondPlacement =
-            db.transaction { tx ->
-                tx.insert(
-                        DevPlacement(
-                            childId = childId,
-                            unitId = daycare2.id,
-                            startDate = newEnd,
-                            endDate = newEnd.plusMonths(2),
-                        )
+        val secondPlacement = db.transaction { tx ->
+            tx.insert(
+                    DevPlacement(
+                        childId = childId,
+                        unitId = daycare2.id,
+                        startDate = newEnd,
+                        endDate = newEnd.plusMonths(2),
                     )
-                    .also {
-                        tx.updateDaycareAclWithEmployee(
-                            daycare2.id,
-                            unitSupervisor.id,
-                            UserRole.UNIT_SUPERVISOR,
-                        )
-                    }
-            }
+                )
+                .also {
+                    tx.updateDaycareAclWithEmployee(
+                        daycare2.id,
+                        unitSupervisor.id,
+                        UserRole.UNIT_SUPERVISOR,
+                    )
+                }
+        }
 
         val body =
             PlacementUpdateRequestBody(
@@ -1035,10 +1092,9 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
 
     @Test
     fun `service worker cannot remove placements`() {
-        val groupPlacementId =
-            db.transaction { tx ->
-                tx.createGroupPlacement(testPlacement.id, groupId, placementStart, placementEnd)
-            }
+        val groupPlacementId = db.transaction { tx ->
+            tx.createGroupPlacement(testPlacement.id, groupId, placementStart, placementEnd)
+        }
 
         assertThrows<Forbidden> { deleteGroupPlacement(groupPlacementId, serviceWorker) }
     }
@@ -1125,7 +1181,8 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
                 DevBackupCare(
                     childId = childId,
                     unitId = daycare2.id,
-                    period = FiniteDateRange(placementStart.plusDays(1), placementStart.plusDays(5)),
+                    period =
+                        FiniteDateRange(placementStart.plusDays(1), placementStart.plusDays(5)),
                 )
             )
         }
@@ -1194,11 +1251,9 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
                 )
             )
         }
-        val placement =
-            db.read { r ->
-                r.getDaycarePlacements(daycareId, childId, placementStartDate, placementEndDate)
-                    .first()
-            }
+        val placement = db.read { r ->
+            r.getDaycarePlacements(daycareId, childId, placementStartDate, placementEndDate).first()
+        }
         val groupPlacementId =
             placementController.createGroupPlacement(
                 dbInstance(),
@@ -1212,9 +1267,8 @@ class PlacementControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach
         return placement
     }
 
-    private fun getAbsencesOfChildByRange(range: DateRange) =
-        db.read { tx ->
-            tx.getAbsencesOfChildByRange(childId, range)
-                .sortedWith(compareBy({ it.date }, { it.category }))
-        }
+    private fun getAbsencesOfChildByRange(range: DateRange) = db.read { tx ->
+        tx.getAbsencesOfChildByRange(childId, range)
+            .sortedWith(compareBy({ it.date }, { it.category }))
+    }
 }

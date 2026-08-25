@@ -12,6 +12,7 @@ import evaka.core.incomestatement.citizenHasUnhandledIncomeStatements
 import evaka.core.shared.ApplicationId
 import evaka.core.shared.AttachmentId
 import evaka.core.shared.ChildId
+import evaka.core.shared.EmployeeId
 import evaka.core.shared.FeatureConfig
 import evaka.core.shared.MessageAccountId
 import evaka.core.shared.MessageContentId
@@ -24,17 +25,21 @@ import evaka.core.shared.auth.AuthenticatedUser
 import evaka.core.shared.auth.CitizenAuthLevel
 import evaka.core.shared.db.Database
 import evaka.core.shared.domain.BadRequest
+import evaka.core.shared.domain.Conflict
 import evaka.core.shared.domain.EvakaClock
 import evaka.core.shared.domain.Forbidden
 import evaka.core.shared.domain.HelsinkiDateTime
 import evaka.core.shared.domain.NotFound
 import org.springframework.stereotype.Component
 
+private const val DELETION_WINDOW_DAYS = 8L
+
 @Component
 class MessageService(
     private val asyncJobRunner: AsyncJobRunner<AsyncJob>,
     private val notificationEmailService: MessageNotificationEmailService,
     private val messagePushNotifications: MessagePushNotifications,
+    private val messageDeletionEmailService: MessageDeletionEmailService,
     private val featureConfig: FeatureConfig,
     private val citizenCalendarEnv: CitizenCalendarEnv,
 ) {
@@ -268,6 +273,7 @@ class MessageService(
         serviceWorkerAccountName: String,
         financeAccountName: String,
         user: AuthenticatedUser,
+        deletedMessageBody: String,
     ): ThreadReply {
         val today = now.toLocalDate()
         val thread =
@@ -303,14 +309,13 @@ class MessageService(
             val validRecipients =
                 db.read { it.getCitizenRecipients(today, senderAccount) }
                     .mapValues { entry -> entry.value.reply.map { it.account.id }.toSet() }
-            val allRecipientsValid =
-                recipientAccountIds.all { recipient ->
-                    thread.children.any { child ->
-                        validRecipients[child]?.contains(recipient) ?: false
-                    } ||
-                        (recipient == financeAccountId &&
-                            db.read { it.citizenHasUnhandledIncomeStatements(user.id) })
-                }
+            val allRecipientsValid = recipientAccountIds.all { recipient ->
+                thread.children.any { child ->
+                    validRecipients[child]?.contains(recipient) ?: false
+                } ||
+                    (recipient == financeAccountId &&
+                        db.read { it.citizenHasUnhandledIncomeStatements(user.id) })
+            }
             if (!isApplication && !allRecipientsValid)
                 throw Forbidden("Not authorized to send to all recipients")
             val selectedChildren =
@@ -326,49 +331,99 @@ class MessageService(
             if (!isApplication && !selectedChildrenInSameUnit)
                 throw Forbidden("Selected children not in same unit")
         }
-        val message =
-            db.transaction { tx ->
-                tx.upsertSenderThreadParticipants(senderAccount, listOf(threadId), now)
-                val recipientNames =
-                    tx.getAccountNames(
-                        recipientAccountIds,
-                        serviceWorkerAccountName,
-                        financeAccountName,
-                    )
-                val contentId = tx.insertMessageContent(content, senderAccount)
-                val messageId =
-                    tx.insertMessage(
-                        now = now,
-                        contentId = contentId,
-                        threadId = threadId,
-                        sender = senderAccount,
-                        recipientNames = recipientNames,
-                        municipalAccountName = municipalAccountName,
-                        serviceWorkerAccountName = serviceWorkerAccountName,
-                        financeAccountName = financeAccountName,
-                    )
-                tx.insertRecipients(listOf(messageId to recipientAccountIds))
-                asyncJobRunner.scheduleMarkMessagesAsSent(tx, contentId, now)
-                tx.markThreadRead(now, senderAccount, threadId)
-                if (thread.applicationId != null) {
-                    tx.createApplicationNote(
-                        now = now,
-                        applicationId = thread.applicationId,
-                        content = content,
-                        createdBy = user.evakaUserId,
-                        messageContentId = contentId,
-                    )
-                }
-                tx.getSentMessage(
-                    senderAccount,
-                    messageId,
+        val message = db.transaction { tx ->
+            tx.upsertSenderThreadParticipants(senderAccount, listOf(threadId), now)
+            val recipientNames =
+                tx.getAccountNames(
+                    recipientAccountIds,
                     serviceWorkerAccountName,
                     financeAccountName,
                 )
+            val contentId = tx.insertMessageContent(content, senderAccount)
+            val messageId =
+                tx.insertMessage(
+                    now = now,
+                    contentId = contentId,
+                    threadId = threadId,
+                    sender = senderAccount,
+                    recipientNames = recipientNames,
+                    municipalAccountName = municipalAccountName,
+                    serviceWorkerAccountName = serviceWorkerAccountName,
+                    financeAccountName = financeAccountName,
+                )
+            tx.insertRecipients(listOf(messageId to recipientAccountIds))
+            asyncJobRunner.scheduleMarkMessagesAsSent(tx, contentId, now)
+            tx.markThreadRead(now, senderAccount, threadId)
+            if (thread.applicationId != null) {
+                tx.createApplicationNote(
+                    now = now,
+                    applicationId = thread.applicationId,
+                    content = content,
+                    createdBy = user.evakaUserId,
+                    messageContentId = contentId,
+                )
             }
+            tx.getSentMessage(
+                senderAccount,
+                messageId,
+                serviceWorkerAccountName,
+                financeAccountName,
+                deletedMessageBody = deletedMessageBody,
+            )
+        }
         return ThreadReply(threadId, message)
     }
+
+    fun deleteSentMessageContent(
+        tx: Database.Transaction,
+        clock: EvakaClock,
+        deletingEmployeeId: EmployeeId,
+        accountId: MessageAccountId,
+        contentId: MessageContentId,
+    ): MessageContentDeletionResult {
+        val target =
+            tx.getMessageDeletionTarget(contentId) ?: throw NotFound("Message $contentId not found")
+        if (target.senderId != accountId) throw Forbidden("Message was not sent from this account")
+        if (target.senderAccountType == AccountType.MUNICIPAL)
+            throw Forbidden("Messages sent by the municipal account cannot be deleted")
+        val now = clock.now()
+        val windowEnd =
+            HelsinkiDateTime.atStartOfDay(
+                target.sentAt.toLocalDate().plusDays(DELETION_WINDOW_DAYS)
+            )
+        if (!now.isBefore(windowEnd)) throw Forbidden("The deletion window has ended")
+
+        val rows =
+            tx.createUpdate {
+                    sql(
+                        """
+                        UPDATE message
+                        SET content_deleted_at = ${bind(now)},
+                            content_deleted_by_employee_id = ${bind(deletingEmployeeId)}
+                        WHERE content_id = ${bind(contentId)}
+                          AND sender_id = ${bind(accountId)}
+                          AND content_deleted_at IS NULL
+                    """
+                    )
+                }
+                .execute()
+
+        if (rows == 0) throw Conflict("Message already deleted")
+
+        messageDeletionEmailService.planDeletionEmails(tx, contentId, now)
+        return MessageContentDeletionResult(
+            recipientCount = tx.getContentRecipientCount(contentId),
+            sentAt = target.sentAt,
+            deletedAt = now,
+        )
+    }
 }
+
+data class MessageContentDeletionResult(
+    val recipientCount: Int,
+    val sentAt: HelsinkiDateTime,
+    val deletedAt: HelsinkiDateTime,
+)
 
 fun AsyncJobRunner<AsyncJob>.scheduleMarkMessagesAsSent(
     tx: Database.Transaction,

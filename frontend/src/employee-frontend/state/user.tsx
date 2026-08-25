@@ -10,7 +10,8 @@ import React, {
   useState
 } from 'react'
 
-import type { AdRole, User } from 'lib-common/api-types/employee-auth'
+import type { User } from 'lib-common/api-types/employee-auth'
+import type { EmployeeFeatureConfig } from 'lib-common/generated/api-types/shared'
 import { Queries, useQuery } from 'lib-common/query'
 import { LoginStatusChangeEvent } from 'lib-common/utils/login-status'
 
@@ -21,7 +22,7 @@ export interface UserState {
   apiVersion: string | undefined
   loggedIn: boolean
   user: User | undefined
-  roles: AdRole[]
+  featureConfig: EmployeeFeatureConfig | undefined
   refreshAuthStatus: () => void
   unauthorizedApiCallDetected: boolean
   dismissUnauthorizedApiCallDetection: () => void
@@ -32,7 +33,7 @@ export const UserContext = createContext<UserState>({
   apiVersion: undefined,
   loggedIn: false,
   user: undefined,
-  roles: [],
+  featureConfig: undefined,
   refreshAuthStatus: () => undefined,
   unauthorizedApiCallDetected: false,
   dismissUnauthorizedApiCallDetection: () => undefined
@@ -64,9 +65,12 @@ export const UserContextProvider = React.memo(function UserContextProvider({
       loginStatusEvent.preventDefault()
       setUnauthorizedApiCallDetected(!loginStatusEvent.detail)
     }
-    window.addEventListener(LoginStatusChangeEvent.name, eventListener)
+    window.addEventListener(LoginStatusChangeEvent.eventName, eventListener)
     return () => {
-      window.removeEventListener(LoginStatusChangeEvent.name, eventListener)
+      window.removeEventListener(
+        LoginStatusChangeEvent.eventName,
+        eventListener
+      )
     }
   }, [setUnauthorizedApiCallDetected])
 
@@ -76,7 +80,7 @@ export const UserContextProvider = React.memo(function UserContextProvider({
       apiVersion: authStatus?.apiVersion,
       loggedIn: authStatus?.loggedIn ?? false,
       user: authStatus?.user,
-      roles: authStatus?.roles ?? [],
+      featureConfig: authStatus?.featureConfig,
       refreshAuthStatus,
       unauthorizedApiCallDetected,
       dismissUnauthorizedApiCallDetection: () =>

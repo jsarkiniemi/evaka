@@ -1,11 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": ".",
     "composite": true,
     "jsx": "react-jsx",
     "outDir": "../../dist/lib-components",
-    "types": ["node"],
+    "types": ["node"]
   },
   "references": [{ "path": "../lib-common" }, { "path": "../lib-icons" }]
 }

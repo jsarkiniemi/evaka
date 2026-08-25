@@ -30,6 +30,7 @@ enum class OtherIncome : DatabaseEnum {
     ALIMONY,
     INTEREST_AND_INVESTMENT_INCOME,
     RENTAL_INCOME,
+    GENERAL_SOCIAL_SECURITY_BENEFIT,
     UNEMPLOYMENT_ALLOWANCE,
     LABOUR_MARKET_SUBSIDY,
     ADJUSTED_DAILY_ALLOWANCE,
@@ -214,6 +215,7 @@ enum class IncomeStatementAttachmentType {
     ALIMONY,
     INTEREST_AND_INVESTMENT_INCOME,
     RENTAL_INCOME,
+    GENERAL_SOCIAL_SECURITY_BENEFIT,
     UNEMPLOYMENT_ALLOWANCE,
     LABOUR_MARKET_SUBSIDY,
     ADJUSTED_DAILY_ALLOWANCE,
@@ -262,7 +264,11 @@ data class IncomeStatementAttachment(
     val uploadedByEmployee: Boolean,
 )
 
-@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type")
+@JsonTypeInfo(
+    use = JsonTypeInfo.Id.NAME,
+    include = JsonTypeInfo.As.EXISTING_PROPERTY,
+    property = "type",
+)
 sealed class IncomeStatement(val type: IncomeStatementType) {
     abstract val id: IncomeStatementId
     abstract val personId: PersonId
@@ -273,6 +279,7 @@ sealed class IncomeStatement(val type: IncomeStatementType) {
     abstract val createdAt: HelsinkiDateTime
     abstract val modifiedAt: HelsinkiDateTime
     abstract val sentAt: HelsinkiDateTime?
+    abstract val citizenModifiedAt: HelsinkiDateTime?
     abstract val handledAt: HelsinkiDateTime?
     abstract val status: IncomeStatementStatus
     abstract val handlerNote: String
@@ -288,6 +295,7 @@ sealed class IncomeStatement(val type: IncomeStatementType) {
         override val createdAt: HelsinkiDateTime,
         override val modifiedAt: HelsinkiDateTime,
         override val sentAt: HelsinkiDateTime?,
+        override val citizenModifiedAt: HelsinkiDateTime?,
         override val handledAt: HelsinkiDateTime?,
         override val status: IncomeStatementStatus,
         override val handlerNote: String,
@@ -309,6 +317,7 @@ sealed class IncomeStatement(val type: IncomeStatementType) {
         override val createdAt: HelsinkiDateTime,
         override val modifiedAt: HelsinkiDateTime,
         override val sentAt: HelsinkiDateTime?,
+        override val citizenModifiedAt: HelsinkiDateTime?,
         override val handledAt: HelsinkiDateTime?,
         override val status: IncomeStatementStatus,
         override val handlerNote: String,
@@ -327,6 +336,7 @@ sealed class IncomeStatement(val type: IncomeStatementType) {
         override val createdAt: HelsinkiDateTime,
         override val modifiedAt: HelsinkiDateTime,
         override val sentAt: HelsinkiDateTime?,
+        override val citizenModifiedAt: HelsinkiDateTime?,
         override val handledAt: HelsinkiDateTime?,
         override val status: IncomeStatementStatus,
         override val handlerNote: String,

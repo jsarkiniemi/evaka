@@ -90,24 +90,6 @@ CREATE TYPE public.assistance_action_option_category AS ENUM (
     'PRESCHOOL'
 );
 
--- Name: assistance_need_decision_status; Type: TYPE; Schema: public
-
-CREATE TYPE public.assistance_need_decision_status AS ENUM (
-    'DRAFT',
-    'NEEDS_WORK',
-    'ACCEPTED',
-    'REJECTED',
-    'ANNULLED'
-);
-
--- Name: assistance_need_preschool_decision_type; Type: TYPE; Schema: public
-
-CREATE TYPE public.assistance_need_preschool_decision_type AS ENUM (
-    'NEW',
-    'CONTINUING',
-    'TERMINATED'
-);
-
 -- Name: calendar_event_type; Type: TYPE; Schema: public
 
 CREATE TYPE public.calendar_event_type AS ENUM (
@@ -212,6 +194,14 @@ CREATE TYPE public.daycare_assistance_level AS ENUM (
     'SPECIAL_SUPPORT'
 );
 
+-- Name: decision_reasoning_collection_type; Type: TYPE; Schema: public
+
+CREATE TYPE public.decision_reasoning_collection_type AS ENUM (
+    'DAYCARE',
+    'PRESCHOOL',
+    'CLUB'
+);
+
 -- Name: decision_status; Type: TYPE; Schema: public
 
 CREATE TYPE public.decision_status AS ENUM (
@@ -230,6 +220,13 @@ CREATE TYPE public.decision_type AS ENUM (
     'PRESCHOOL_CLUB',
     'PREPARATORY_EDUCATION',
     'CLUB'
+);
+
+-- Name: document_deletion_basis; Type: TYPE; Schema: public
+
+CREATE TYPE public.document_deletion_basis AS ENUM (
+    'PLACEMENT_END',
+    'STATUS_TRANSITION'
 );
 
 -- Name: document_template_type; Type: TYPE; Schema: public
@@ -512,6 +509,7 @@ CREATE TYPE public.other_income_type AS ENUM (
     'ALIMONY',
     'INTEREST_AND_INVESTMENT_INCOME',
     'RENTAL_INCOME',
+    'GENERAL_SOCIAL_SECURITY_BENEFIT',
     'UNEMPLOYMENT_ALLOWANCE',
     'LABOUR_MARKET_SUBSIDY',
     'ADJUSTED_DAILY_ALLOWANCE',
@@ -709,7 +707,8 @@ CREATE TYPE public.ui_language AS ENUM (
 
 CREATE TYPE public.unit_language AS ENUM (
     'fi',
-    'sv'
+    'sv',
+    'en'
 );
 
 -- Name: unit_provider_type; Type: TYPE; Schema: public
@@ -1442,7 +1441,7 @@ CREATE VIEW public.koski_unit AS
  SELECT id,
     language AS unit_language,
     provider_type,
-    unit_manager_name AS approver_name,
+    COALESCE(NULLIF(preschool_manager_name, ''::text), unit_manager_name) AS approver_name,
     NULLIF(oph_unit_oid, ''::text) AS oph_unit_oid,
     NULLIF(oph_organizer_oid, ''::text) AS oph_organizer_oid
    FROM public.daycare
@@ -1805,7 +1804,8 @@ CREATE TABLE public.decision (
     other_guardian_document_key text,
     document_contains_contact_info boolean DEFAULT false NOT NULL,
     archived_at timestamp with time zone,
-    sent_time time without time zone
+    sent_time time without time zone,
+    generic_reasoning_id uuid
 );
 
 -- Name: placement_plan; Type: TABLE; Schema: public
@@ -2036,169 +2036,6 @@ CREATE TABLE public.assistance_factor (
     valid_during daterange NOT NULL,
     capacity_factor numeric NOT NULL,
     CONSTRAINT "check$range_valid" CHECK ((NOT (lower_inf(valid_during) OR upper_inf(valid_during))))
-);
-
--- Name: assistance_need_decision_number_seq; Type: SEQUENCE; Schema: public
-
-CREATE SEQUENCE public.assistance_need_decision_number_seq
-    START WITH 1000
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
--- Name: assistance_need_decision; Type: TABLE; Schema: public
-
-CREATE TABLE public.assistance_need_decision (
-    id uuid DEFAULT ext.uuid_generate_v1mc() NOT NULL,
-    created_at timestamp with time zone DEFAULT now() CONSTRAINT assistance_need_decision_created_not_null NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() CONSTRAINT assistance_need_decision_updated_not_null NOT NULL,
-    decision_number integer DEFAULT nextval('public.assistance_need_decision_number_seq'::regclass) NOT NULL,
-    child_id uuid NOT NULL,
-    language public.official_language NOT NULL,
-    decision_made date,
-    sent_for_decision date,
-    selected_unit uuid,
-    decision_maker_employee_id uuid,
-    decision_maker_title text,
-    preparer_1_employee_id uuid,
-    preparer_1_title text,
-    preparer_2_employee_id uuid,
-    preparer_2_title text,
-    pedagogical_motivation text,
-    structural_motivation_opt_smaller_group boolean DEFAULT false CONSTRAINT assistance_need_decision_structural_motivation_opt_sma_not_null NOT NULL,
-    structural_motivation_opt_special_group boolean DEFAULT false CONSTRAINT assistance_need_decision_structural_motivation_opt_spe_not_null NOT NULL,
-    structural_motivation_opt_small_group boolean DEFAULT false CONSTRAINT assistance_need_decision_structural_motivation_opt_sm_not_null1 NOT NULL,
-    structural_motivation_opt_group_assistant boolean DEFAULT false CONSTRAINT assistance_need_decision_structural_motivation_opt_gro_not_null NOT NULL,
-    structural_motivation_opt_child_assistant boolean DEFAULT false CONSTRAINT assistance_need_decision_structural_motivation_opt_chi_not_null NOT NULL,
-    structural_motivation_opt_additional_staff boolean DEFAULT false CONSTRAINT assistance_need_decision_structural_motivation_opt_add_not_null NOT NULL,
-    structural_motivation_description text,
-    care_motivation text,
-    service_opt_consultation_special_ed boolean DEFAULT false CONSTRAINT assistance_need_decision_service_opt_consultation_spec_not_null NOT NULL,
-    service_opt_part_time_special_ed boolean DEFAULT false CONSTRAINT assistance_need_decision_service_opt_part_time_special_not_null NOT NULL,
-    service_opt_full_time_special_ed boolean DEFAULT false CONSTRAINT assistance_need_decision_service_opt_full_time_special_not_null NOT NULL,
-    service_opt_interpretation_and_assistance_services boolean DEFAULT false CONSTRAINT assistance_need_decision_service_opt_interpretation_an_not_null NOT NULL,
-    service_opt_special_aides boolean DEFAULT false NOT NULL,
-    services_motivation text,
-    expert_responsibilities text,
-    guardians_heard_on date,
-    view_of_guardians text,
-    other_representative_heard boolean DEFAULT false NOT NULL,
-    other_representative_details text,
-    motivation_for_decision text,
-    preparer_1_phone_number text,
-    preparer_2_phone_number text,
-    decision_maker_has_opened boolean DEFAULT false NOT NULL,
-    document_key text,
-    unread_guardian_ids uuid[],
-    assistance_levels text[] DEFAULT ARRAY[]::text[],
-    validity_period daterange,
-    status public.assistance_need_decision_status NOT NULL,
-    annulment_reason text DEFAULT ''::text NOT NULL,
-    document_contains_contact_info boolean DEFAULT false CONSTRAINT assistance_need_decision_document_contains_contact_inf_not_null NOT NULL,
-    process_id uuid,
-    created_by uuid,
-    end_date_not_known boolean NOT NULL,
-    CONSTRAINT "check$annulment_reason" CHECK (
-CASE status
-    WHEN 'ANNULLED'::public.assistance_need_decision_status THEN (annulment_reason <> ''::text)
-    ELSE (annulment_reason = ''::text)
-END)
-);
-
--- Name: assistance_need_decision_guardian; Type: TABLE; Schema: public
-
-CREATE TABLE public.assistance_need_decision_guardian (
-    id uuid DEFAULT ext.uuid_generate_v1mc() NOT NULL,
-    created_at timestamp with time zone DEFAULT now() CONSTRAINT assistance_need_decision_guardian_created_not_null NOT NULL,
-    assistance_need_decision_id uuid CONSTRAINT assistance_need_decision_gu_assistance_need_decision_i_not_null NOT NULL,
-    person_id uuid NOT NULL,
-    is_heard boolean DEFAULT false NOT NULL,
-    details text
-);
-
--- Name: assistance_need_preschool_decision_number_seq; Type: SEQUENCE; Schema: public
-
-CREATE SEQUENCE public.assistance_need_preschool_decision_number_seq
-    START WITH 1000
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
--- Name: assistance_need_preschool_decision; Type: TABLE; Schema: public
-
-CREATE TABLE public.assistance_need_preschool_decision (
-    id uuid DEFAULT ext.uuid_generate_v1mc() NOT NULL,
-    created_at timestamp with time zone DEFAULT now() CONSTRAINT assistance_need_preschool_decision_created_not_null NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() CONSTRAINT assistance_need_preschool_decision_updated_not_null NOT NULL,
-    decision_number integer DEFAULT nextval('public.assistance_need_preschool_decision_number_seq'::regclass) NOT NULL,
-    child_id uuid NOT NULL,
-    status public.assistance_need_decision_status DEFAULT 'DRAFT'::public.assistance_need_decision_status NOT NULL,
-    language public.official_language DEFAULT 'FI'::public.official_language NOT NULL,
-    type public.assistance_need_preschool_decision_type,
-    valid_from date,
-    extended_compulsory_education boolean DEFAULT false CONSTRAINT assistance_need_preschool_d_extended_compulsory_educat_not_null NOT NULL,
-    extended_compulsory_education_info text DEFAULT ''::text CONSTRAINT assistance_need_preschool__extended_compulsory_educat_not_null1 NOT NULL,
-    granted_assistance_service boolean DEFAULT false CONSTRAINT assistance_need_preschool_d_granted_assistance_service_not_null NOT NULL,
-    granted_interpretation_service boolean DEFAULT false CONSTRAINT assistance_need_preschool_d_granted_interpretation_ser_not_null NOT NULL,
-    granted_assistive_devices boolean DEFAULT false CONSTRAINT assistance_need_preschool_de_granted_assistive_devices_not_null NOT NULL,
-    granted_services_basis text DEFAULT ''::text CONSTRAINT assistance_need_preschool_decis_granted_services_basis_not_null NOT NULL,
-    selected_unit uuid,
-    primary_group text DEFAULT ''::text NOT NULL,
-    decision_basis text DEFAULT ''::text NOT NULL,
-    basis_document_pedagogical_report boolean DEFAULT false CONSTRAINT assistance_need_preschool_d_basis_document_pedagogical_not_null NOT NULL,
-    basis_document_psychologist_statement boolean DEFAULT false CONSTRAINT assistance_need_preschool_d_basis_document_psychologis_not_null NOT NULL,
-    basis_document_social_report boolean DEFAULT false CONSTRAINT assistance_need_preschool_d_basis_document_social_repo_not_null NOT NULL,
-    basis_document_doctor_statement boolean DEFAULT false CONSTRAINT assistance_need_preschool_d_basis_document_doctor_stat_not_null NOT NULL,
-    basis_document_other_or_missing boolean DEFAULT false CONSTRAINT assistance_need_preschool_d_basis_document_other_or_mi_not_null NOT NULL,
-    basis_document_other_or_missing_info text DEFAULT ''::text CONSTRAINT assistance_need_preschool__basis_document_other_or_mi_not_null1 NOT NULL,
-    basis_documents_info text DEFAULT ''::text CONSTRAINT assistance_need_preschool_decisio_basis_documents_info_not_null NOT NULL,
-    guardians_heard_on date,
-    other_representative_heard boolean DEFAULT false CONSTRAINT assistance_need_preschool_d_other_representative_heard_not_null NOT NULL,
-    other_representative_details text DEFAULT ''::text CONSTRAINT assistance_need_preschool_d_other_representative_detai_not_null NOT NULL,
-    view_of_guardians text DEFAULT ''::text NOT NULL,
-    preparer_1_employee_id uuid,
-    preparer_1_title text DEFAULT ''::text NOT NULL,
-    preparer_1_phone_number text DEFAULT ''::text CONSTRAINT assistance_need_preschool_deci_preparer_1_phone_number_not_null NOT NULL,
-    preparer_2_employee_id uuid,
-    preparer_2_title text DEFAULT ''::text NOT NULL,
-    preparer_2_phone_number text DEFAULT ''::text CONSTRAINT assistance_need_preschool_deci_preparer_2_phone_number_not_null NOT NULL,
-    decision_maker_employee_id uuid,
-    decision_maker_title text DEFAULT ''::text CONSTRAINT assistance_need_preschool_decisio_decision_maker_title_not_null NOT NULL,
-    sent_for_decision date,
-    decision_made date,
-    decision_maker_has_opened boolean DEFAULT false CONSTRAINT assistance_need_preschool_de_decision_maker_has_opened_not_null NOT NULL,
-    unread_guardian_ids uuid[],
-    annulment_reason text DEFAULT ''::text NOT NULL,
-    document_key text,
-    basis_document_pedagogical_report_date date,
-    basis_document_psychologist_statement_date date,
-    basis_document_social_report_date date,
-    basis_document_doctor_statement_date date,
-    valid_to date,
-    document_contains_contact_info boolean DEFAULT false CONSTRAINT assistance_need_preschool_d_document_contains_contact__not_null NOT NULL,
-    process_id uuid,
-    created_by uuid,
-    CONSTRAINT "check$annulled" CHECK (
-CASE
-    WHEN (status = 'ANNULLED'::public.assistance_need_decision_status) THEN (annulment_reason <> ''::text)
-    ELSE (annulment_reason = ''::text)
-END),
-    CONSTRAINT "check$decision_made" CHECK (((status <> ALL (ARRAY['ACCEPTED'::public.assistance_need_decision_status, 'REJECTED'::public.assistance_need_decision_status, 'ANNULLED'::public.assistance_need_decision_status])) OR ((decision_made IS NOT NULL) AND (unread_guardian_ids IS NOT NULL)))),
-    CONSTRAINT "check$validated" CHECK (((status = 'NEEDS_WORK'::public.assistance_need_decision_status) OR ((status = 'DRAFT'::public.assistance_need_decision_status) AND (sent_for_decision IS NULL)) OR ((type IS NOT NULL) AND (valid_from IS NOT NULL) AND (selected_unit IS NOT NULL) AND (preparer_1_employee_id IS NOT NULL) AND (decision_maker_employee_id IS NOT NULL)))),
-    CONSTRAINT valid_from_before_valid_to CHECK ((valid_from <= valid_to))
-);
-
--- Name: assistance_need_preschool_decision_guardian; Type: TABLE; Schema: public
-
-CREATE TABLE public.assistance_need_preschool_decision_guardian (
-    id uuid DEFAULT ext.uuid_generate_v1mc() NOT NULL,
-    created_at timestamp with time zone DEFAULT now() CONSTRAINT assistance_need_preschool_decision_guardian_created_not_null NOT NULL,
-    assistance_need_decision_id uuid CONSTRAINT assistance_need_preschool_d_assistance_need_decision_i_not_null NOT NULL,
-    person_id uuid NOT NULL,
-    is_heard boolean DEFAULT false NOT NULL,
-    details text DEFAULT ''::text NOT NULL
 );
 
 -- Name: assistance_need_voucher_coefficient; Type: TABLE; Schema: public
@@ -2476,6 +2313,7 @@ CREATE TABLE public.child_document (
     modified_by uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
     created timestamp with time zone GENERATED ALWAYS AS (created_at) STORED,
     updated timestamp with time zone GENERATED ALWAYS AS (updated_at) STORED,
+    status_modified_at timestamp with time zone NOT NULL,
     CONSTRAINT answerable_document CHECK (((type = 'CITIZEN_BASIC'::public.document_template_type) OR ((answered_at IS NULL) AND (answered_by IS NULL)))),
     CONSTRAINT answered_consistency CHECK (((answered_at IS NULL) = (answered_by IS NULL))),
     CONSTRAINT archived_documents_must_be_completed CHECK (((archived_at IS NULL) OR (status = 'COMPLETED'::public.child_document_status))),
@@ -2653,7 +2491,8 @@ CREATE TABLE public.club_term (
 
 CREATE TABLE public.daily_service_time_notification (
     id uuid DEFAULT ext.uuid_generate_v1mc() NOT NULL,
-    guardian_id uuid NOT NULL
+    guardian_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 -- Name: daycare_acl; Type: TABLE; Schema: public
@@ -2794,6 +2633,45 @@ CREATE SEQUENCE public.decision_number_seq
 
 ALTER SEQUENCE public.decision_number_seq OWNED BY public.decision.number;
 
+-- Name: decision_reasoning_generic; Type: TABLE; Schema: public
+
+CREATE TABLE public.decision_reasoning_generic (
+    id uuid DEFAULT ext.uuid_generate_v1mc() NOT NULL,
+    collection_type public.decision_reasoning_collection_type NOT NULL,
+    valid_from date NOT NULL,
+    text_fi text NOT NULL,
+    text_sv text NOT NULL,
+    ready boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    modified_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    removed_at timestamp with time zone
+);
+
+-- Name: decision_reasoning_individual; Type: TABLE; Schema: public
+
+CREATE TABLE public.decision_reasoning_individual (
+    id uuid DEFAULT ext.uuid_generate_v1mc() NOT NULL,
+    collection_type public.decision_reasoning_collection_type NOT NULL,
+    title_fi text NOT NULL,
+    title_sv text NOT NULL,
+    text_fi text NOT NULL,
+    text_sv text NOT NULL,
+    removed_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL,
+    modified_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+-- Name: decision_reasoning_individual_selection; Type: TABLE; Schema: public
+
+CREATE TABLE public.decision_reasoning_individual_selection (
+    decision_id uuid NOT NULL,
+    reasoning_id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    created_by uuid NOT NULL
+);
+
 -- Name: document_template; Type: TABLE; Schema: public
 
 CREATE TABLE public.document_template (
@@ -2817,9 +2695,12 @@ CREATE TABLE public.document_template (
     end_decision_when_unit_changes boolean,
     created timestamp with time zone GENERATED ALWAYS AS (created_at) STORED,
     updated timestamp with time zone GENERATED ALWAYS AS (updated_at) STORED,
+    deletion_retention_days integer NOT NULL,
+    deletion_retention_basis public.document_deletion_basis NOT NULL,
     CONSTRAINT "check$archive_duration_months_positive" CHECK (((archive_duration_months IS NULL) OR (archive_duration_months > 0))),
     CONSTRAINT "check$archive_externally_requires_metadata" CHECK (((NOT archive_externally) OR ((process_definition_number IS NOT NULL) AND (archive_duration_months IS NOT NULL)))),
     CONSTRAINT "check$archive_fields_nullability" CHECK (((process_definition_number IS NOT NULL) = (archive_duration_months IS NOT NULL))),
+    CONSTRAINT "check$deletion_retention_days_positive" CHECK ((deletion_retention_days > 0)),
     CONSTRAINT "check$process_definition_number_not_blank" CHECK ((process_definition_number <> ''::text)),
     CONSTRAINT "check$validity" CHECK ((NOT lower_inf(validity))),
     CONSTRAINT decision_config CHECK (((type = ANY (ARRAY['OTHER_DECISION'::public.document_template_type, 'MIGRATED_DAYCARE_ASSISTANCE_NEED_DECISION'::public.document_template_type, 'MIGRATED_PRESCHOOL_ASSISTANCE_NEED_DECISION'::public.document_template_type])) = (end_decision_when_unit_changes IS NOT NULL))),
@@ -3375,7 +3256,10 @@ CREATE TABLE public.message (
     thread_id uuid CONSTRAINT message_thread_id_not_null1 NOT NULL,
     sender_id uuid NOT NULL,
     sent_at timestamp with time zone,
-    recipient_names text[] DEFAULT '{}'::text[] NOT NULL
+    recipient_names text[] DEFAULT '{}'::text[] NOT NULL,
+    content_deleted_at timestamp with time zone,
+    content_deleted_by_employee_id uuid,
+    CONSTRAINT message_content_deleted_consistency CHECK (((content_deleted_at IS NULL) = (content_deleted_by_employee_id IS NULL)))
 );
 
 -- Name: message_account; Type: TABLE; Schema: public
@@ -3580,7 +3464,10 @@ CREATE TABLE public.nekku_special_diet_choices (
     child_id uuid NOT NULL,
     diet_id text NOT NULL,
     field_id text NOT NULL,
-    value text NOT NULL
+    value text NOT NULL,
+    id uuid DEFAULT ext.uuid_generate_v1mc() NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 -- Name: nekku_special_diet_field; Type: TABLE; Schema: public
@@ -3952,7 +3839,8 @@ CREATE TABLE public.sfi_message_event (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     message_id uuid NOT NULL,
-    event_type public.sfi_message_event_type NOT NULL
+    event_type public.sfi_message_event_type NOT NULL,
+    event_time timestamp with time zone NOT NULL
 );
 
 -- Name: special_diet; Type: TABLE; Schema: public
@@ -4259,26 +4147,6 @@ ALTER TABLE ONLY public.assistance_action
 ALTER TABLE ONLY public.assistance_factor
     ADD CONSTRAINT assistance_factor_pkey PRIMARY KEY (id);
 
--- Name: assistance_need_decision_guardian assistance_need_decision_guardian_pkey; Type: CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_decision_guardian
-    ADD CONSTRAINT assistance_need_decision_guardian_pkey PRIMARY KEY (id);
-
--- Name: assistance_need_decision assistance_need_decision_pkey; Type: CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_decision
-    ADD CONSTRAINT assistance_need_decision_pkey PRIMARY KEY (id);
-
--- Name: assistance_need_preschool_decision_guardian assistance_need_preschool_decision_guardian_pkey; Type: CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_preschool_decision_guardian
-    ADD CONSTRAINT assistance_need_preschool_decision_guardian_pkey PRIMARY KEY (id);
-
--- Name: assistance_need_preschool_decision assistance_need_preschool_decision_pkey; Type: CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_preschool_decision
-    ADD CONSTRAINT assistance_need_preschool_decision_pkey PRIMARY KEY (id);
-
 -- Name: assistance_need_voucher_coefficient assistance_need_voucher_coefficient_pkey; Type: CONSTRAINT; Schema: public
 
 ALTER TABLE ONLY public.assistance_need_voucher_coefficient
@@ -4333,16 +4201,6 @@ ALTER TABLE ONLY public.care_area
 
 ALTER TABLE ONLY public.care_area
     ADD CONSTRAINT care_area_short_name_unique UNIQUE (short_name);
-
--- Name: assistance_need_decision check$assistance_need_decision_no_validity_period_overlap; Type: CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_decision
-    ADD CONSTRAINT "check$assistance_need_decision_no_validity_period_overlap" EXCLUDE USING gist (child_id WITH =, validity_period WITH &&) WHERE ((status = 'ACCEPTED'::public.assistance_need_decision_status));
-
--- Name: assistance_need_preschool_decision check$assistance_need_preschool_decision_no_overlap; Type: CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_preschool_decision
-    ADD CONSTRAINT "check$assistance_need_preschool_decision_no_overlap" EXCLUDE USING gist (child_id WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&) WHERE ((status = 'ACCEPTED'::public.assistance_need_decision_status));
 
 -- Name: assistance_need_voucher_coefficient check$no_validity_overlap; Type: CONSTRAINT; Schema: public
 
@@ -4453,6 +4311,21 @@ ALTER TABLE ONLY public.daycare_group_placement
 
 ALTER TABLE ONLY public.daycare
     ADD CONSTRAINT daycare_pkey PRIMARY KEY (id);
+
+-- Name: decision_reasoning_generic decision_reasoning_generic_pkey; Type: CONSTRAINT; Schema: public
+
+ALTER TABLE ONLY public.decision_reasoning_generic
+    ADD CONSTRAINT decision_reasoning_generic_pkey PRIMARY KEY (id);
+
+-- Name: decision_reasoning_individual decision_reasoning_individual_pkey; Type: CONSTRAINT; Schema: public
+
+ALTER TABLE ONLY public.decision_reasoning_individual
+    ADD CONSTRAINT decision_reasoning_individual_pkey PRIMARY KEY (id);
+
+-- Name: decision_reasoning_individual_selection decision_reasoning_individual_selection_pkey; Type: CONSTRAINT; Schema: public
+
+ALTER TABLE ONLY public.decision_reasoning_individual_selection
+    ADD CONSTRAINT decision_reasoning_individual_selection_pkey PRIMARY KEY (decision_id, reasoning_id);
 
 -- Name: document_template document_template_pkey; Type: CONSTRAINT; Schema: public
 
@@ -4718,6 +4591,11 @@ ALTER TABLE ONLY public.nekku_customer
 
 ALTER TABLE ONLY public.nekku_product
     ADD CONSTRAINT nekku_product_pkey PRIMARY KEY (sku);
+
+-- Name: nekku_special_diet_choices nekku_special_diet_choices_pkey; Type: CONSTRAINT; Schema: public
+
+ALTER TABLE ONLY public.nekku_special_diet_choices
+    ADD CONSTRAINT nekku_special_diet_choices_pkey PRIMARY KEY (id);
 
 -- Name: nekku_special_diet_field nekku_special_diet_field_pkey; Type: CONSTRAINT; Schema: public
 
@@ -5213,22 +5091,6 @@ CREATE INDEX "fk$assistance_action_option_ref_option_id" ON public.assistance_ac
 
 CREATE INDEX "fk$assistance_factor_modified_by" ON public.assistance_factor USING btree (modified_by);
 
--- Name: fk$assistance_need_decision_created_by; Type: INDEX; Schema: public
-
-CREATE INDEX "fk$assistance_need_decision_created_by" ON public.assistance_need_decision USING btree (created_by);
-
--- Name: fk$assistance_need_decision_process_id; Type: INDEX; Schema: public
-
-CREATE INDEX "fk$assistance_need_decision_process_id" ON public.assistance_need_decision USING btree (process_id);
-
--- Name: fk$assistance_need_preschool_decision_created_by; Type: INDEX; Schema: public
-
-CREATE INDEX "fk$assistance_need_preschool_decision_created_by" ON public.assistance_need_preschool_decision USING btree (created_by);
-
--- Name: fk$assistance_need_preschool_decision_process_id; Type: INDEX; Schema: public
-
-CREATE INDEX "fk$assistance_need_preschool_decision_process_id" ON public.assistance_need_preschool_decision USING btree (process_id);
-
 -- Name: fk$assistance_need_voucher_coefficient_modified_by; Type: INDEX; Schema: public
 
 CREATE INDEX "fk$assistance_need_voucher_coefficient_modified_by" ON public.assistance_need_voucher_coefficient USING btree (modified_by);
@@ -5304,6 +5166,18 @@ CREATE INDEX "fk$child_document_published_version_document_id_version_number" ON
 -- Name: fk$created_by; Type: INDEX; Schema: public
 
 CREATE INDEX "fk$created_by" ON public.placement USING btree (created_by);
+
+-- Name: fk$decision_generic_reasoning_id; Type: INDEX; Schema: public
+
+CREATE INDEX "fk$decision_generic_reasoning_id" ON public.decision USING btree (generic_reasoning_id);
+
+-- Name: fk$decision_reasoning_individual_selection_created_by; Type: INDEX; Schema: public
+
+CREATE INDEX "fk$decision_reasoning_individual_selection_created_by" ON public.decision_reasoning_individual_selection USING btree (created_by);
+
+-- Name: fk$decision_reasoning_individual_selection_reasoning_id; Type: INDEX; Schema: public
+
+CREATE INDEX "fk$decision_reasoning_individual_selection_reasoning_id" ON public.decision_reasoning_individual_selection USING btree (reasoning_id);
 
 -- Name: fk$fee_decision_process_id; Type: INDEX; Schema: public
 
@@ -5513,66 +5387,6 @@ CREATE INDEX "idx$assistance_action_updated_by" ON public.assistance_action USIN
 
 CREATE INDEX "idx$assistance_factor_child" ON public.assistance_factor USING btree (child_id);
 
--- Name: idx$assistance_need_decision_child; Type: INDEX; Schema: public
-
-CREATE INDEX "idx$assistance_need_decision_child" ON public.assistance_need_decision USING btree (child_id);
-
--- Name: idx$assistance_need_decision_decision_maker; Type: INDEX; Schema: public
-
-CREATE INDEX "idx$assistance_need_decision_decision_maker" ON public.assistance_need_decision USING btree (decision_maker_employee_id) WHERE (decision_maker_employee_id IS NOT NULL);
-
--- Name: idx$assistance_need_decision_id; Type: INDEX; Schema: public
-
-CREATE INDEX "idx$assistance_need_decision_id" ON public.assistance_need_decision_guardian USING btree (assistance_need_decision_id);
-
--- Name: idx$assistance_need_decision_preparer_1; Type: INDEX; Schema: public
-
-CREATE INDEX "idx$assistance_need_decision_preparer_1" ON public.assistance_need_decision USING btree (preparer_1_employee_id) WHERE (preparer_1_employee_id IS NOT NULL);
-
--- Name: idx$assistance_need_decision_preparer_2; Type: INDEX; Schema: public
-
-CREATE INDEX "idx$assistance_need_decision_preparer_2" ON public.assistance_need_decision USING btree (preparer_2_employee_id) WHERE (preparer_2_employee_id IS NOT NULL);
-
--- Name: idx$assistance_need_decision_unit; Type: INDEX; Schema: public
-
-CREATE INDEX "idx$assistance_need_decision_unit" ON public.assistance_need_decision USING btree (selected_unit) WHERE (selected_unit IS NOT NULL);
-
--- Name: idx$assistance_need_decision_validity_period; Type: INDEX; Schema: public
-
-CREATE INDEX "idx$assistance_need_decision_validity_period" ON public.assistance_need_decision USING gist (validity_period);
-
--- Name: idx$assistance_need_guardian_person; Type: INDEX; Schema: public
-
-CREATE INDEX "idx$assistance_need_guardian_person" ON public.assistance_need_decision_guardian USING btree (person_id);
-
--- Name: idx$assistance_need_preschool_decision_child; Type: INDEX; Schema: public
-
-CREATE INDEX "idx$assistance_need_preschool_decision_child" ON public.assistance_need_preschool_decision USING btree (child_id);
-
--- Name: idx$assistance_need_preschool_decision_decision_maker; Type: INDEX; Schema: public
-
-CREATE INDEX "idx$assistance_need_preschool_decision_decision_maker" ON public.assistance_need_preschool_decision USING btree (decision_maker_employee_id) WHERE (decision_maker_employee_id IS NOT NULL);
-
--- Name: idx$assistance_need_preschool_decision_guardian_decision_id; Type: INDEX; Schema: public
-
-CREATE INDEX "idx$assistance_need_preschool_decision_guardian_decision_id" ON public.assistance_need_preschool_decision_guardian USING btree (assistance_need_decision_id);
-
--- Name: idx$assistance_need_preschool_decision_guardian_person; Type: INDEX; Schema: public
-
-CREATE INDEX "idx$assistance_need_preschool_decision_guardian_person" ON public.assistance_need_preschool_decision_guardian USING btree (person_id);
-
--- Name: idx$assistance_need_preschool_decision_preparer_1; Type: INDEX; Schema: public
-
-CREATE INDEX "idx$assistance_need_preschool_decision_preparer_1" ON public.assistance_need_preschool_decision USING btree (preparer_1_employee_id) WHERE (preparer_1_employee_id IS NOT NULL);
-
--- Name: idx$assistance_need_preschool_decision_preparer_2; Type: INDEX; Schema: public
-
-CREATE INDEX "idx$assistance_need_preschool_decision_preparer_2" ON public.assistance_need_preschool_decision USING btree (preparer_2_employee_id) WHERE (preparer_2_employee_id IS NOT NULL);
-
--- Name: idx$assistance_need_preschool_decision_unit; Type: INDEX; Schema: public
-
-CREATE INDEX "idx$assistance_need_preschool_decision_unit" ON public.assistance_need_preschool_decision USING btree (selected_unit) WHERE (selected_unit IS NOT NULL);
-
 -- Name: idx$assistance_need_voucher_coefficient_child_id; Type: INDEX; Schema: public
 
 CREATE INDEX "idx$assistance_need_voucher_coefficient_child_id" ON public.assistance_need_voucher_coefficient USING btree (child_id);
@@ -5712,10 +5526,6 @@ CREATE INDEX "idx$calendar_event_type_period" ON public.calendar_event USING gis
 -- Name: idx$child_attendance_child; Type: INDEX; Schema: public
 
 CREATE INDEX "idx$child_attendance_child" ON public.child_attendance USING btree (child_id, date);
-
--- Name: idx$child_attendance_child_range; Type: INDEX; Schema: public
-
-CREATE INDEX "idx$child_attendance_child_range" ON public.child_attendance USING gist (child_id, tstzrange(arrived, departed));
 
 -- Name: idx$child_attendance_unit; Type: INDEX; Schema: public
 
@@ -6028,6 +5838,14 @@ CREATE INDEX "idx$koski_study_right_unit" ON public.koski_study_right USING btre
 -- Name: idx$message_content_author; Type: INDEX; Schema: public
 
 CREATE INDEX "idx$message_content_author" ON public.message_content USING btree (author_id);
+
+-- Name: idx$message_content_deleted_at; Type: INDEX; Schema: public
+
+CREATE INDEX "idx$message_content_deleted_at" ON public.message USING btree (content_deleted_at) WHERE (content_deleted_at IS NOT NULL);
+
+-- Name: idx$message_content_deleted_by_employee_id; Type: INDEX; Schema: public
+
+CREATE INDEX "idx$message_content_deleted_by_employee_id" ON public.message USING btree (content_deleted_by_employee_id) WHERE (content_deleted_by_employee_id IS NOT NULL);
 
 -- Name: idx$message_content_id; Type: INDEX; Schema: public
 
@@ -6517,14 +6335,6 @@ CREATE TRIGGER set_timestamp BEFORE UPDATE ON public.assistance_action_option FO
 
 CREATE TRIGGER set_timestamp BEFORE UPDATE ON public.assistance_factor FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_updated_at();
 
--- Name: assistance_need_decision set_timestamp; Type: TRIGGER; Schema: public
-
-CREATE TRIGGER set_timestamp BEFORE UPDATE ON public.assistance_need_decision FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_updated_at();
-
--- Name: assistance_need_preschool_decision set_timestamp; Type: TRIGGER; Schema: public
-
-CREATE TRIGGER set_timestamp BEFORE UPDATE ON public.assistance_need_preschool_decision FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_updated_at();
-
 -- Name: assistance_need_voucher_coefficient set_timestamp; Type: TRIGGER; Schema: public
 
 CREATE TRIGGER set_timestamp BEFORE UPDATE ON public.assistance_need_voucher_coefficient FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_updated_at();
@@ -6632,6 +6442,14 @@ CREATE TRIGGER set_timestamp BEFORE UPDATE ON public.daycare_group_placement FOR
 -- Name: decision set_timestamp; Type: TRIGGER; Schema: public
 
 CREATE TRIGGER set_timestamp BEFORE UPDATE ON public.decision FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_updated();
+
+-- Name: decision_reasoning_generic set_timestamp; Type: TRIGGER; Schema: public
+
+CREATE TRIGGER set_timestamp BEFORE UPDATE ON public.decision_reasoning_generic FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_updated_at();
+
+-- Name: decision_reasoning_individual set_timestamp; Type: TRIGGER; Schema: public
+
+CREATE TRIGGER set_timestamp BEFORE UPDATE ON public.decision_reasoning_individual FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_updated_at();
 
 -- Name: document_template set_timestamp; Type: TRIGGER; Schema: public
 
@@ -6760,6 +6578,10 @@ CREATE TRIGGER set_timestamp BEFORE UPDATE ON public.mobile_device FOR EACH ROW 
 -- Name: mobile_device_push_subscription set_timestamp; Type: TRIGGER; Schema: public
 
 CREATE TRIGGER set_timestamp BEFORE UPDATE ON public.mobile_device_push_subscription FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_updated_at();
+
+-- Name: nekku_special_diet_choices set_timestamp; Type: TRIGGER; Schema: public
+
+CREATE TRIGGER set_timestamp BEFORE UPDATE ON public.nekku_special_diet_choices FOR EACH ROW EXECUTE FUNCTION public.trigger_refresh_updated_at();
 
 -- Name: other_assistance_measure set_timestamp; Type: TRIGGER; Schema: public
 
@@ -6946,96 +6768,6 @@ ALTER TABLE ONLY public.assistance_action_option_ref
 
 ALTER TABLE ONLY public.assistance_action_option_ref
     ADD CONSTRAINT assistance_action_option_ref_option_id_fkey FOREIGN KEY (option_id) REFERENCES public.assistance_action_option(id);
-
--- Name: assistance_need_decision assistance_need_decision_child_id_fkey; Type: FK CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_decision
-    ADD CONSTRAINT assistance_need_decision_child_id_fkey FOREIGN KEY (child_id) REFERENCES public.child(id) ON DELETE RESTRICT;
-
--- Name: assistance_need_decision assistance_need_decision_created_by_fkey; Type: FK CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_decision
-    ADD CONSTRAINT assistance_need_decision_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.employee(id);
-
--- Name: assistance_need_decision assistance_need_decision_decision_maker_employee_id_fkey; Type: FK CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_decision
-    ADD CONSTRAINT assistance_need_decision_decision_maker_employee_id_fkey FOREIGN KEY (decision_maker_employee_id) REFERENCES public.employee(id) ON DELETE RESTRICT;
-
--- Name: assistance_need_decision_guardian assistance_need_decision_guard_assistance_need_decision_id_fkey; Type: FK CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_decision_guardian
-    ADD CONSTRAINT assistance_need_decision_guard_assistance_need_decision_id_fkey FOREIGN KEY (assistance_need_decision_id) REFERENCES public.assistance_need_decision(id) ON DELETE CASCADE;
-
--- Name: assistance_need_decision_guardian assistance_need_decision_guardian_person_id_fkey; Type: FK CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_decision_guardian
-    ADD CONSTRAINT assistance_need_decision_guardian_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.person(id) ON DELETE RESTRICT;
-
--- Name: assistance_need_decision assistance_need_decision_preparer_1_employee_id_fkey; Type: FK CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_decision
-    ADD CONSTRAINT assistance_need_decision_preparer_1_employee_id_fkey FOREIGN KEY (preparer_1_employee_id) REFERENCES public.employee(id) ON DELETE RESTRICT;
-
--- Name: assistance_need_decision assistance_need_decision_preparer_2_employee_id_fkey; Type: FK CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_decision
-    ADD CONSTRAINT assistance_need_decision_preparer_2_employee_id_fkey FOREIGN KEY (preparer_2_employee_id) REFERENCES public.employee(id) ON DELETE RESTRICT;
-
--- Name: assistance_need_decision assistance_need_decision_process_id_fkey; Type: FK CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_decision
-    ADD CONSTRAINT assistance_need_decision_process_id_fkey FOREIGN KEY (process_id) REFERENCES public.case_process(id) ON DELETE SET NULL;
-
--- Name: assistance_need_decision assistance_need_decision_selected_unit_fkey; Type: FK CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_decision
-    ADD CONSTRAINT assistance_need_decision_selected_unit_fkey FOREIGN KEY (selected_unit) REFERENCES public.daycare(id) ON DELETE RESTRICT;
-
--- Name: assistance_need_preschool_decision_guardian assistance_need_preschool_deci_assistance_need_decision_id_fkey; Type: FK CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_preschool_decision_guardian
-    ADD CONSTRAINT assistance_need_preschool_deci_assistance_need_decision_id_fkey FOREIGN KEY (assistance_need_decision_id) REFERENCES public.assistance_need_preschool_decision(id) ON DELETE CASCADE;
-
--- Name: assistance_need_preschool_decision assistance_need_preschool_decis_decision_maker_employee_id_fkey; Type: FK CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_preschool_decision
-    ADD CONSTRAINT assistance_need_preschool_decis_decision_maker_employee_id_fkey FOREIGN KEY (decision_maker_employee_id) REFERENCES public.employee(id) ON DELETE RESTRICT;
-
--- Name: assistance_need_preschool_decision assistance_need_preschool_decision_child_id_fkey; Type: FK CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_preschool_decision
-    ADD CONSTRAINT assistance_need_preschool_decision_child_id_fkey FOREIGN KEY (child_id) REFERENCES public.child(id) ON DELETE RESTRICT;
-
--- Name: assistance_need_preschool_decision assistance_need_preschool_decision_created_by_fkey; Type: FK CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_preschool_decision
-    ADD CONSTRAINT assistance_need_preschool_decision_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.employee(id);
-
--- Name: assistance_need_preschool_decision_guardian assistance_need_preschool_decision_guardian_person_id_fkey; Type: FK CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_preschool_decision_guardian
-    ADD CONSTRAINT assistance_need_preschool_decision_guardian_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.person(id) ON DELETE RESTRICT;
-
--- Name: assistance_need_preschool_decision assistance_need_preschool_decision_preparer_1_employee_id_fkey; Type: FK CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_preschool_decision
-    ADD CONSTRAINT assistance_need_preschool_decision_preparer_1_employee_id_fkey FOREIGN KEY (preparer_1_employee_id) REFERENCES public.employee(id) ON DELETE RESTRICT;
-
--- Name: assistance_need_preschool_decision assistance_need_preschool_decision_preparer_2_employee_id_fkey; Type: FK CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_preschool_decision
-    ADD CONSTRAINT assistance_need_preschool_decision_preparer_2_employee_id_fkey FOREIGN KEY (preparer_2_employee_id) REFERENCES public.employee(id) ON DELETE RESTRICT;
-
--- Name: assistance_need_preschool_decision assistance_need_preschool_decision_process_id_fkey; Type: FK CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_preschool_decision
-    ADD CONSTRAINT assistance_need_preschool_decision_process_id_fkey FOREIGN KEY (process_id) REFERENCES public.case_process(id) ON DELETE SET NULL;
-
--- Name: assistance_need_preschool_decision assistance_need_preschool_decision_selected_unit_fkey; Type: FK CONSTRAINT; Schema: public
-
-ALTER TABLE ONLY public.assistance_need_preschool_decision
-    ADD CONSTRAINT assistance_need_preschool_decision_selected_unit_fkey FOREIGN KEY (selected_unit) REFERENCES public.daycare(id) ON DELETE RESTRICT;
 
 -- Name: assistance_need_voucher_coefficient assistance_need_voucher_coefficient_child_id_fkey; Type: FK CONSTRAINT; Schema: public
 
@@ -7281,6 +7013,26 @@ ALTER TABLE ONLY public.daycare_group_acl
 
 ALTER TABLE ONLY public.daycare_group
     ADD CONSTRAINT daycare_group_daycare_id_fkey FOREIGN KEY (daycare_id) REFERENCES public.daycare(id) ON DELETE CASCADE;
+
+-- Name: decision decision_generic_reasoning_id_fkey; Type: FK CONSTRAINT; Schema: public
+
+ALTER TABLE ONLY public.decision
+    ADD CONSTRAINT decision_generic_reasoning_id_fkey FOREIGN KEY (generic_reasoning_id) REFERENCES public.decision_reasoning_generic(id);
+
+-- Name: decision_reasoning_individual_selection decision_reasoning_individual_selection_created_by_fkey; Type: FK CONSTRAINT; Schema: public
+
+ALTER TABLE ONLY public.decision_reasoning_individual_selection
+    ADD CONSTRAINT decision_reasoning_individual_selection_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.evaka_user(id);
+
+-- Name: decision_reasoning_individual_selection decision_reasoning_individual_selection_decision_id_fkey; Type: FK CONSTRAINT; Schema: public
+
+ALTER TABLE ONLY public.decision_reasoning_individual_selection
+    ADD CONSTRAINT decision_reasoning_individual_selection_decision_id_fkey FOREIGN KEY (decision_id) REFERENCES public.decision(id) ON DELETE CASCADE;
+
+-- Name: decision_reasoning_individual_selection decision_reasoning_individual_selection_reasoning_id_fkey; Type: FK CONSTRAINT; Schema: public
+
+ALTER TABLE ONLY public.decision_reasoning_individual_selection
+    ADD CONSTRAINT decision_reasoning_individual_selection_reasoning_id_fkey FOREIGN KEY (reasoning_id) REFERENCES public.decision_reasoning_individual(id);
 
 -- Name: employee_pin employee_pin_user_id_fkey; Type: FK CONSTRAINT; Schema: public
 
@@ -7591,6 +7343,11 @@ ALTER TABLE ONLY public.absence
 
 ALTER TABLE ONLY public.attachment
     ADD CONSTRAINT "fk$income" FOREIGN KEY (income_id) REFERENCES public.income(id) ON DELETE SET NULL;
+
+-- Name: income_notification fk$income_notification_receiver; Type: FK CONSTRAINT; Schema: public
+
+ALTER TABLE ONLY public.income_notification
+    ADD CONSTRAINT "fk$income_notification_receiver" FOREIGN KEY (receiver_id) REFERENCES public.person(id) ON DELETE CASCADE;
 
 -- Name: attachment fk$income_statement; Type: FK CONSTRAINT; Schema: public
 
@@ -7981,6 +7738,11 @@ ALTER TABLE ONLY public.message_account
 
 ALTER TABLE ONLY public.message_content
     ADD CONSTRAINT message_content_author_id_fkey FOREIGN KEY (author_id) REFERENCES public.message_account(id);
+
+-- Name: message message_content_deleted_by_employee_id_fkey; Type: FK CONSTRAINT; Schema: public
+
+ALTER TABLE ONLY public.message
+    ADD CONSTRAINT message_content_deleted_by_employee_id_fkey FOREIGN KEY (content_deleted_by_employee_id) REFERENCES public.employee(id);
 
 -- Name: message message_content_id_fkey; Type: FK CONSTRAINT; Schema: public
 

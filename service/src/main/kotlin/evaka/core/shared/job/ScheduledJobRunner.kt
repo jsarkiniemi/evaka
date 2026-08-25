@@ -38,12 +38,9 @@ class ScheduledJobRunner(
             schedules.asSequence().flatMap { it.jobs }.map { it.job }.groupBy { it.name }.values
         val notUnique = jobsByName.filterNot { it.count() == 1 }
         require(notUnique.isEmpty()) {
-            val jobNames =
-                notUnique.joinToString { jobs ->
-                    jobs.joinToString(prefix = "[", postfix = "]") {
-                        "${it.javaClass.name}.${it.name}"
-                    }
-                }
+            val jobNames = notUnique.joinToString { jobs ->
+                jobs.joinToString(prefix = "[", postfix = "]") { "${it.javaClass.name}.${it.name}" }
+            }
             "Scheduled job name conflict: $jobNames"
         }
         asyncJobRunner.registerHandler(::runJob)
@@ -86,7 +83,11 @@ class ScheduledJobRunner(
         val logMeta = mapOf("jobName" to job.name)
         logger.info(logMeta) { "Planning scheduled job ${job.name}" }
         val payload =
-            if (definition.settings.schedule is Nightly) AsyncJob.RunNightlyJob(job.name)
+            if (
+                definition.settings.schedule is Nightly ||
+                    definition.settings.schedule is AnnualOnIsoWeek
+            )
+                AsyncJob.RunNightlyJob(job.name)
             else AsyncJob.RunScheduledJob(job.name)
         db.transaction { tx ->
             asyncJobRunner.plan(

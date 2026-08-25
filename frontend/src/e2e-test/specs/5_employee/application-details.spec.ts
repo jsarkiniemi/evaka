@@ -47,6 +47,7 @@ test.describe('Application details', () => {
 
   test.beforeEach(async ({ evaka }) => {
     await resetServiceState()
+    await Fixture.decisionReasoningGenericDefaults().save()
     await testCareArea.save()
     await testDaycare.save()
     await testPreschool.save()
@@ -161,7 +162,7 @@ test.describe('Application details', () => {
       HelsinkiDateTime.now() // TODO: use mock clock
     )
     const preferredStartDate =
-      // eslint-disable-next-line @typescript-eslint/no-extra-non-null-assertion,@typescript-eslint/no-unnecessary-type-assertion
+      // oxlint-disable-next-line typescript/no-extra-non-null-assertion,typescript/no-unnecessary-type-assertion
       restrictedDetailsGuardianApplication.form.preferences.preferredStartDate!!
     await createApplicationPlacementPlan({
       applicationId: restrictedDetailsGuardianApplication.id,
@@ -206,7 +207,7 @@ test.describe('Application details', () => {
       HelsinkiDateTime.now() // TODO: use mock clock
     )
     const preferredStartDate =
-      // eslint-disable-next-line @typescript-eslint/no-extra-non-null-assertion,@typescript-eslint/no-unnecessary-type-assertion
+      // oxlint-disable-next-line typescript/no-extra-non-null-assertion,typescript/no-unnecessary-type-assertion
       singleParentApplication.form.preferences.preferredStartDate!!
     await createApplicationPlacementPlan({
       applicationId: singleParentApplication.id,

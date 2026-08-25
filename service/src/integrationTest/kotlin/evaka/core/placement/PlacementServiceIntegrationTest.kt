@@ -160,21 +160,20 @@ class PlacementServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = 
      */
     @Test
     fun `inserting identical placement`() {
-        val newPlacements =
-            db.transaction {
-                createPlacement(
-                    it,
-                    childId,
-                    unitId,
-                    FiniteDateRange(LocalDate.of(year, month, 10), LocalDate.of(year, month, 20)),
-                    PlacementType.PRESCHOOL,
-                    useFiveYearsOldDaycare = true,
-                    placeGuarantee = false,
-                    now = now,
-                    userId = employee.evakaUserId,
-                    source = PlacementSource.MANUAL,
-                )
-            }
+        val newPlacements = db.transaction {
+            createPlacement(
+                it,
+                childId,
+                unitId,
+                FiniteDateRange(LocalDate.of(year, month, 10), LocalDate.of(year, month, 20)),
+                PlacementType.PRESCHOOL,
+                useFiveYearsOldDaycare = true,
+                placeGuarantee = false,
+                now = now,
+                userId = employee.evakaUserId,
+                source = PlacementSource.MANUAL,
+            )
+        }
 
         val placements = db.read { it.getPlacementsForChild(childId) }
 
@@ -779,27 +778,25 @@ class PlacementServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = 
             )
         }
 
-        val groupPlacementEndDates =
-            db.read {
-                it.createQuery {
-                        sql(
-                            "SELECT end_date FROM daycare_group_placement WHERE daycare_group_id = ${bind(groupId)}"
-                        )
-                    }
-                    .toList<LocalDate>()
-            }
+        val groupPlacementEndDates = db.read {
+            it.createQuery {
+                    sql(
+                        "SELECT end_date FROM daycare_group_placement WHERE daycare_group_id = ${bind(groupId)}"
+                    )
+                }
+                .toList<LocalDate>()
+        }
         assertEquals(1, groupPlacementEndDates.size)
         assertEquals(LocalDate.of(year, month, 15), groupPlacementEndDates.first())
 
-        val serviceNeedEndDates =
-            db.read {
-                it.createQuery {
-                        sql(
-                            "SELECT end_date FROM service_need WHERE placement_id = ${bind(oldPlacement.id)}"
-                        )
-                    }
-                    .toList<LocalDate>()
-            }
+        val serviceNeedEndDates = db.read {
+            it.createQuery {
+                    sql(
+                        "SELECT end_date FROM service_need WHERE placement_id = ${bind(oldPlacement.id)}"
+                    )
+                }
+                .toList<LocalDate>()
+        }
         assertEquals(1, serviceNeedEndDates.size)
         assertEquals(LocalDate.of(year, month, 15), serviceNeedEndDates.first())
     }
@@ -865,29 +862,27 @@ class PlacementServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = 
 
         data class QueryResult(val startDate: LocalDate, val endDate: LocalDate)
 
-        val groupPlacements =
-            db.read {
-                it.createQuery {
-                        sql(
-                            "SELECT start_date, end_date FROM daycare_group_placement WHERE daycare_group_id = ${bind(groupId)}"
-                        )
-                    }
-                    .toList<QueryResult>()
-            }
+        val groupPlacements = db.read {
+            it.createQuery {
+                    sql(
+                        "SELECT start_date, end_date FROM daycare_group_placement WHERE daycare_group_id = ${bind(groupId)}"
+                    )
+                }
+                .toList<QueryResult>()
+        }
 
         assertEquals(1, groupPlacements.size)
         assertEquals(LocalDate.of(year, month, 1), groupPlacements.first().startDate)
         assertEquals(LocalDate.of(year, month, 14), groupPlacements.first().endDate)
 
-        val serviceNeeds =
-            db.read {
-                it.createQuery {
-                        sql(
-                            "SELECT start_date, end_date FROM service_need WHERE placement_id = ${bind(oldPlacement.id)}"
-                        )
-                    }
-                    .toList<QueryResult>()
-            }
+        val serviceNeeds = db.read {
+            it.createQuery {
+                    sql(
+                        "SELECT start_date, end_date FROM service_need WHERE placement_id = ${bind(oldPlacement.id)}"
+                    )
+                }
+                .toList<QueryResult>()
+        }
 
         assertEquals(1, serviceNeeds.size)
         assertEquals(LocalDate.of(year, month, 1), serviceNeeds.first().startDate)
@@ -1037,6 +1032,7 @@ class PlacementServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = 
                     unitId = daycare2.id,
                     startDate = daycarePlacementStartDate,
                     endDate = daycarePlacementEndDate,
+                    source = PlacementSource.MANUAL,
                     modifiedAt = null,
                     modifiedBy = null,
                 )
@@ -1047,7 +1043,7 @@ class PlacementServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = 
 
         assertThat(placements)
             .usingRecursiveFieldByFieldElementComparatorIgnoringFields(
-                "defaultServiceNeedOption.updated"
+                "serviceNeedDetail.defaultServiceNeedOption.updated"
             )
             .isEqualTo(
                 setOf(
@@ -1073,7 +1069,12 @@ class PlacementServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = 
                         startDate = daycarePlacementStartDate,
                         endDate = daycarePlacementEndDate,
                         type = daycarePlacementType,
-                        missingServiceNeedDays = 6,
+                        serviceNeedDetail =
+                            PlacementServiceNeedDetail(
+                                serviceNeeds = emptyList(),
+                                defaultServiceNeedOption = snDefaultDaycare,
+                                missingServiceNeedDays = 6,
+                            ),
                         groupPlacements =
                             listOf(
                                 DaycareGroupPlacement(
@@ -1085,8 +1086,6 @@ class PlacementServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = 
                                     endDate = daycarePlacementEndDate,
                                 )
                             ),
-                        serviceNeeds = emptyList(),
-                        defaultServiceNeedOption = snDefaultDaycare,
                         terminatedBy = null,
                         terminationRequestedDate = null,
                         placeGuarantee = false,
@@ -1122,6 +1121,7 @@ class PlacementServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = 
                     unitId = daycare2.id,
                     startDate = daycarePlacementStartDate,
                     endDate = daycarePlacementEndDate,
+                    source = PlacementSource.MANUAL,
                     modifiedAt = null,
                     modifiedBy = null,
                 )
@@ -1161,7 +1161,7 @@ class PlacementServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = 
 
         assertThat(placements)
             .usingRecursiveFieldByFieldElementComparatorIgnoringFields(
-                "defaultServiceNeedOption.updated"
+                "serviceNeedDetail.defaultServiceNeedOption.updated"
             )
             .isEqualTo(
                 setOf(
@@ -1187,7 +1187,12 @@ class PlacementServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = 
                         startDate = daycarePlacementStartDate,
                         endDate = daycarePlacementEndDate,
                         type = daycarePlacementType,
-                        missingServiceNeedDays = 20,
+                        serviceNeedDetail =
+                            PlacementServiceNeedDetail(
+                                serviceNeeds = emptyList(),
+                                defaultServiceNeedOption = snDefaultDaycare,
+                                missingServiceNeedDays = 20,
+                            ),
                         groupPlacements =
                             listOf(
                                 DaycareGroupPlacement(
@@ -1263,8 +1268,6 @@ class PlacementServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = 
                                     endDate = date(20),
                                 ),
                             ),
-                        serviceNeeds = emptyList(),
-                        defaultServiceNeedOption = snDefaultDaycare,
                         terminatedBy = null,
                         terminationRequestedDate = null,
                         placeGuarantee = false,
@@ -1287,29 +1290,28 @@ class PlacementServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = 
         val evakaLaunch = LocalDate.of(2020, 3, 1)
         val startDate = evakaLaunch.minusYears(1)
         val endDate = evakaLaunch.plusYears(1)
-        val placementId =
-            db.transaction { tx ->
-                val placementId =
-                    tx.insert(
-                        DevPlacement(
-                            type = PlacementType.DAYCARE,
-                            childId = child1.id,
-                            unitId = daycare1.id,
-                            startDate = startDate,
-                            endDate = endDate,
-                            placeGuarantee = false,
-                        )
-                    )
+        val placementId = db.transaction { tx ->
+            val placementId =
                 tx.insert(
-                    DevDaycareGroupPlacement(
-                        daycarePlacementId = placementId,
-                        daycareGroupId = groupId1,
-                        startDate = evakaLaunch,
-                        endDate = evakaLaunch.plusMonths(6),
+                    DevPlacement(
+                        type = PlacementType.DAYCARE,
+                        childId = child1.id,
+                        unitId = daycare1.id,
+                        startDate = startDate,
+                        endDate = endDate,
+                        placeGuarantee = false,
                     )
                 )
-                placementId
-            }
+            tx.insert(
+                DevDaycareGroupPlacement(
+                    daycarePlacementId = placementId,
+                    daycareGroupId = groupId1,
+                    startDate = evakaLaunch,
+                    endDate = evakaLaunch.plusMonths(6),
+                )
+            )
+            placementId
+        }
 
         val (group, backup) = db.read { tx -> getMissingGroupPlacements(tx, daycare1.id) }
         assertEquals(
@@ -1324,7 +1326,10 @@ class PlacementServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = 
                     child1.dateOfBirth,
                     listOf(),
                     "Kokopäiväinen",
-                    FiniteDateRange(evakaLaunch.plusMonths(6).plusDays(1), evakaLaunch.plusYears(1)),
+                    FiniteDateRange(
+                        evakaLaunch.plusMonths(6).plusDays(1),
+                        evakaLaunch.plusYears(1),
+                    ),
                 )
             ),
             group,
@@ -1337,45 +1342,43 @@ class PlacementServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = 
         val evakaLaunch = LocalDate.of(2020, 3, 1)
         val startDate = evakaLaunch.minusYears(1)
         val endDate = evakaLaunch.plusYears(1)
-        val backupCareId =
-            db.transaction { tx ->
-                val placementId =
-                    tx.insert(
-                        DevPlacement(
-                            type = PlacementType.DAYCARE,
-                            childId = child1.id,
-                            unitId = daycare1.id,
-                            startDate = startDate,
-                            endDate = endDate,
-                            placeGuarantee = false,
-                        )
-                    )
+        val backupCareId = db.transaction { tx ->
+            val placementId =
                 tx.insert(
-                    DevDaycareGroupPlacement(
-                        daycarePlacementId = placementId,
-                        daycareGroupId = groupId1,
+                    DevPlacement(
+                        type = PlacementType.DAYCARE,
+                        childId = child1.id,
+                        unitId = daycare1.id,
                         startDate = startDate,
                         endDate = endDate,
+                        placeGuarantee = false,
                     )
                 )
-                tx.insert(
-                    DevBackupCare(
-                        childId = child1.id,
-                        unitId = daycare2.id,
-                        groupId = null,
-                        period =
-                            FiniteDateRange(evakaLaunch.minusYears(1), evakaLaunch.minusDays(1)),
-                    )
+            tx.insert(
+                DevDaycareGroupPlacement(
+                    daycarePlacementId = placementId,
+                    daycareGroupId = groupId1,
+                    startDate = startDate,
+                    endDate = endDate,
                 )
-                tx.insert(
-                    DevBackupCare(
-                        childId = child1.id,
-                        unitId = daycare2.id,
-                        groupId = null,
-                        period = FiniteDateRange(evakaLaunch, evakaLaunch.plusYears(1)),
-                    )
+            )
+            tx.insert(
+                DevBackupCare(
+                    childId = child1.id,
+                    unitId = daycare2.id,
+                    groupId = null,
+                    period = FiniteDateRange(evakaLaunch.minusYears(1), evakaLaunch.minusDays(1)),
                 )
-            }
+            )
+            tx.insert(
+                DevBackupCare(
+                    childId = child1.id,
+                    unitId = daycare2.id,
+                    groupId = null,
+                    period = FiniteDateRange(evakaLaunch, evakaLaunch.plusYears(1)),
+                )
+            )
+        }
 
         val (group, backup) = db.read { tx -> getMissingGroupPlacements(tx, daycare2.id) }
         assertEquals(emptyList(), group)

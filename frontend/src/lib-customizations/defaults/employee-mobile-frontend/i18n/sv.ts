@@ -10,15 +10,23 @@ export const sv: typeof fi = {
   common: {
     yesIDo: 'Ja',
     noIDoNot: 'Nej',
-    loadingFailed: 'Det gick inte att hämta data',
-    noAccess: 'Rättigheter saknas',
-    endpointDisabled:
-      'eVaka genomgår för närvarande ett partiellt underhållsavbrott. Vissa funktioner är inte tillgängliga just nu. Försök igen om en stund.',
+    loadingFailed: 'Datahämtningen misslyckades',
+    loadingFailedInfo:
+      'Försök att uppdatera sidan om en stund. Problemet är oftast tillfälligt.',
+    noAccess: 'Ingen tillgång',
+    noAccessInfo:
+      'Kontakta din chef eller systemadministratör om du behöver åtkomst.',
+    endpointDisabled: 'Delvis serviceavbrott',
+    endpointDisabledInfo:
+      'En del av funktionerna är inte tillgängliga just nu. Försök igen om en stund.',
+    networkError: 'Ingen internetanslutning',
+    networkErrorInfo: 'Kontrollera din internetanslutning och försök igen.',
     add: 'Lägg till',
     cancel: 'Ångra',
     confirm: 'Bekräfta',
     sort: 'Ordna',
     all: 'Alla',
+    allGroups: 'Alla grupper',
     shiftCare: 'Skiftvård',
     statuses: {
       active: 'Aktiv',
@@ -235,6 +243,7 @@ export const sv: typeof fi = {
     searchPlaceholder: 'Sök på barnets namn',
     noAbsences: 'Ingen frånvaro',
     removeAbsence: 'Ångra frånvaro',
+    addAttendanceTimes: 'Lägg till närvarotider',
     timeError: 'Felaktig tid',
     arrived: 'Ankomsttid',
     departed: 'Avgångstid',
@@ -250,6 +259,7 @@ export const sv: typeof fi = {
       noServiceTodayShort: 'Ingen lämplig tid idag',
       notSet: 'Närvaroanmälan saknas',
       notSetShort: 'Anmälan saknas',
+      reservationNoTimes: 'Närvarande, klockslag ännu inte känd',
       variableTimes: 'Varierande tid i småbarnspedagogik',
       variableTimesShort: 'Lämplig tid varierar',
       present: 'På plats',
@@ -295,7 +305,7 @@ export const sv: typeof fi = {
         LAUNDRY: 'Smutsiga kläder i ryggsäcken'
       },
       placeholders: {
-        note: 'Lekar, framgång, glädjeämnen och lärdomar i dag (inga hälsouppgifter eller andra sekretessbelagda uppgifter).',
+        note: 'Lekar, aktiv rörelse, framgång, glädjeämnen och lärdomar i dag (inga hälsouppgifter eller andra sekretessbelagda uppgifter).',
         childStickyNote:
           'Anteckning för personalen (inga hälsouppgifter eller andra sekretessbelagda uppgifter).',
         groupNote: 'Anteckning om hela gruppen',
@@ -318,14 +328,18 @@ export const sv: typeof fi = {
         employeeNotFound: 'Arbetstagaren hittades inte',
         wrongPin: 'Felaktig PIN-kod'
       },
+      searchPlaceholder: 'Sök på namn',
       previousDays: 'Tidigare anteckningar',
       nextDays: 'Kommande arbetsskift och frånvaro',
       continuationAttendance: '*registrering som började föregående dag',
       editContinuationAttendance: 'Gå till redigering',
       absent: 'Frånvaro',
-      externalPerson: 'Annan person',
+      externalPersonCantFindYourName: 'Hittar du inte ditt namn?',
       markExternalPerson: 'Registrera annan person',
       markExternalPersonTitle: 'Registrera annan arbetstagare in',
+      markExternalPersonNotificationTitle: 'Om du är anställd i enheten',
+      markExternalPersonNotificationMessage:
+        'Be enhetschefen att godkänna dig till enheten, så kommer ditt namn att visas på listan. Därefter kan du logga in som vanligt från listan. Du måste också ställa in en PIN-kod på datorn.',
       markArrived: 'Anteckna dig som närvarande',
       markDeparted: 'Anteckna dig som frånvarande',
       loginWithPin: 'Logga in med PIN-kod',
@@ -469,7 +483,7 @@ export const sv: typeof fi = {
       type: {
         label: 'Typ av meddelande',
         message: 'Meddelande',
-        bulletin: 'Nyhetsbrev (mottagaren kan inte svara)'
+        bulletin: 'Infobrev (mottagaren kan inte svara)'
       },
       urgent: {
         heading: 'Markera som brådskande',

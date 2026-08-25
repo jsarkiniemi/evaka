@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import React, { useContext, useState } from 'react'
+import React, { useCallback, useContext, useState } from 'react'
 import styled from 'styled-components'
 
 import { useBoolean } from 'lib-common/form/hooks'
@@ -36,12 +36,14 @@ import {
 } from 'lib-components/layout/flex-helpers'
 import { PersonName } from 'lib-components/molecules/PersonNames'
 import { MutateFormModal } from 'lib-components/molecules/modals/FormModal'
+import InfoModal from 'lib-components/molecules/modals/InfoModal'
 import { Bold, H1, Italic, LabelLike, Light } from 'lib-components/typography'
 import { defaultMargins, Gap } from 'lib-components/white-space'
 import colors, { applicationBasisColors } from 'lib-customizations/common'
 import {
   faCheck,
   faCommentAlt,
+  faExclamation,
   faPaperclip,
   fasCommentAltLines,
   faTimes,
@@ -51,10 +53,9 @@ import {
 import { getEmployeeUrlPrefix } from '../../constants'
 import { ApplicationUIContext } from '../../state/application-ui'
 import { useTranslation } from '../../state/i18n'
-import { UserContext } from '../../state/user'
 import type { SearchOrder } from '../../types'
 import { isPartDayPlacement } from '../../utils/placements'
-import { hasRole, RequireRole } from '../../utils/roles'
+import { RequirePermittedGlobalAction } from '../../utils/roles'
 import { AgeIndicatorChip } from '../common/AgeIndicatorChip'
 import { CareTypeChip } from '../common/CareTypeLabel'
 
@@ -169,7 +170,7 @@ const ApplicationsList = React.memo(function Applications({
 }: Props) {
   const { data: applications, pages, total } = applicationsResult
 
-  const { i18n } = useTranslation()
+  const { i18n, lang } = useTranslation()
   const {
     page,
     setPage,
@@ -179,15 +180,25 @@ const ApplicationsList = React.memo(function Applications({
     confirmedSearchFilters: searchFilters
   } = useContext(ApplicationUIContext)
 
-  const { roles } = useContext(UserContext)
-  const enableApplicationActions =
-    hasRole(roles, 'SERVICE_WORKER') ||
-    hasRole(roles, 'FINANCE_ADMIN') ||
-    hasRole(roles, 'ADMIN')
+  const enableApplicationActions = applications.some(
+    (application) => application.permittedActions.length > 0
+  )
+
+  const checkedApplications = applications.filter((application) =>
+    checkedIds.includes(application.id)
+  )
 
   // used to disable all actions when one is in progress
   const [actionInProgress, { on: actionStarted, off: actionEnded }] =
     useBoolean(false)
+
+  const [decisionReasoningBlockedCount, setDecisionReasoningBlockedCount] =
+    useState<number | null>(null)
+  const onDecisionReasoningBlocked = useCallback(
+    (applicationCount: number) =>
+      setDecisionReasoningBlockedCount(applicationCount),
+    []
+  )
 
   const [editedNote, setEditedNote] = useState<ApplicationSummary | null>(null)
 
@@ -286,7 +297,9 @@ const ApplicationsList = React.memo(function Applications({
             }
             label={
               application.serviceNeed !== null
-                ? application.serviceNeed.nameFi
+                ? lang === 'sv'
+                  ? application.serviceNeed.nameSv
+                  : application.serviceNeed.nameFi
                 : i18n.placement.type[application.placementType]
             }
           />
@@ -403,7 +416,9 @@ const ApplicationsList = React.memo(function Applications({
           )}
         </Td>
 
-        <RequireRole oneOf={['SERVICE_WORKER']}>
+        <RequirePermittedGlobalAction
+          oneOf={['READ_SERVICE_WORKER_APPLICATION_NOTES']}
+        >
           <Td>
             <Tooltip
               tooltip={
@@ -433,14 +448,16 @@ const ApplicationsList = React.memo(function Applications({
               />
             </Tooltip>
           </Td>
-        </RequireRole>
+        </RequirePermittedGlobalAction>
         <Td>
           {enableApplicationActions && (
             <ApplicationActions
               application={application}
+              permittedActions={application.permittedActions}
               actionInProgress={actionInProgress}
               onActionStarted={actionStarted}
               onActionEnded={actionEnded}
+              onDecisionReasoningBlocked={onDecisionReasoningBlocked}
             />
           )}
         </Td>
@@ -515,9 +532,11 @@ const ApplicationsList = React.memo(function Applications({
               >
                 {i18n.applications.list.status}
               </SortableTh>
-              <RequireRole oneOf={['SERVICE_WORKER']}>
+              <RequirePermittedGlobalAction
+                oneOf={['READ_SERVICE_WORKER_APPLICATION_NOTES']}
+              >
                 <Th>{i18n.applications.list.note}</Th>
-              </RequireRole>
+              </RequirePermittedGlobalAction>
               <Th>
                 {showCheckboxes ? (
                   <CheckAllContainer>
@@ -536,9 +555,11 @@ const ApplicationsList = React.memo(function Applications({
           <Tbody>{rows}</Tbody>
         </Table>
         <ActionBar
+          checkedApplications={checkedApplications}
           actionInProgress={actionInProgress}
           onActionStarted={actionStarted}
           onActionEnded={actionEnded}
+          onDecisionReasoningBlocked={onDecisionReasoningBlocked}
         />
       </ApplicationsTableContainer>
 
@@ -547,6 +568,24 @@ const ApplicationsList = React.memo(function Applications({
           applicationId={editedNote.id}
           serviceWorkerNote={editedNote.serviceWorkerNote}
           onClose={() => setEditedNote(null)}
+        />
+      )}
+
+      {decisionReasoningBlockedCount !== null && (
+        <InfoModal
+          type="danger"
+          icon={faExclamation}
+          title={i18n.applications.decisionReasoning.sendBlockedTitle(
+            decisionReasoningBlockedCount
+          )}
+          text={i18n.applications.decisionReasoning.sendBlockedText(
+            decisionReasoningBlockedCount
+          )}
+          resolve={{
+            action: () => setDecisionReasoningBlockedCount(null),
+            label: i18n.common.close
+          }}
+          data-qa="decision-reasoning-blocked-modal"
         />
       )}
     </div>

@@ -86,6 +86,7 @@ class IncomeStatementControllerCitizenIntegrationTest :
                     createdAt = incomeStatements[0].createdAt,
                     modifiedAt = incomeStatements[0].modifiedAt,
                     sentAt = incomeStatements[0].sentAt,
+                    citizenModifiedAt = incomeStatements[0].sentAt,
                     status = IncomeStatementStatus.SENT,
                     handledAt = null,
                     handlerNote = "",
@@ -196,6 +197,7 @@ class IncomeStatementControllerCitizenIntegrationTest :
                     createdAt = incomeStatements[0].createdAt,
                     modifiedAt = incomeStatements[0].modifiedAt,
                     sentAt = incomeStatements[0].sentAt,
+                    citizenModifiedAt = incomeStatements[0].sentAt,
                     status = IncomeStatementStatus.SENT,
                     handlerNote = "",
                     handledAt = null,
@@ -249,6 +251,7 @@ class IncomeStatementControllerCitizenIntegrationTest :
                     createdAt = incomeStatements[0].createdAt,
                     modifiedAt = incomeStatements[0].modifiedAt,
                     sentAt = incomeStatements[0].sentAt,
+                    citizenModifiedAt = incomeStatements[0].sentAt,
                     status = IncomeStatementStatus.SENT,
                     handlerNote = "",
                     handledAt = null,
@@ -378,7 +381,8 @@ class IncomeStatementControllerCitizenIntegrationTest :
                             partnership = true,
                             lightEntrepreneur = false,
                             // Accountant name, phone or email cannot be empty
-                            accountant = Accountant(name = "", address = "", phone = "", email = ""),
+                            accountant =
+                                Accountant(name = "", address = "", phone = "", email = ""),
                         ),
                     student = false,
                     alimonyPayer = false,
@@ -438,6 +442,7 @@ class IncomeStatementControllerCitizenIntegrationTest :
                     createdAt = incomeStatements[0].createdAt,
                     modifiedAt = incomeStatements[0].modifiedAt,
                     sentAt = incomeStatements[0].sentAt,
+                    citizenModifiedAt = incomeStatements[0].sentAt,
                     status = IncomeStatementStatus.SENT,
                     handlerNote = "",
                     handledAt = null,
@@ -518,6 +523,7 @@ class IncomeStatementControllerCitizenIntegrationTest :
                     createdAt = incomeStatements[0].createdAt,
                     modifiedAt = incomeStatements[0].modifiedAt,
                     sentAt = incomeStatements[0].sentAt,
+                    citizenModifiedAt = incomeStatements[0].sentAt,
                     status = IncomeStatementStatus.SENT,
                     handlerNote = "",
                     handledAt = null,
@@ -709,6 +715,7 @@ class IncomeStatementControllerCitizenIntegrationTest :
                 createdAt = original.createdAt,
                 modifiedAt = modifiedAt,
                 sentAt = clock.now(),
+                citizenModifiedAt = clock.now(),
                 status = IncomeStatementStatus.SENT,
                 handlerNote = "",
                 handledAt = null,
@@ -718,6 +725,9 @@ class IncomeStatementControllerCitizenIntegrationTest :
         )
 
         // attachments and otherInfo can be still updated after sending
+        val sentAt = getIncomeStatement(original.id).sentAt
+        clock.tick()
+
         updateSentIncomeStatement(
             id = original.id,
             body =
@@ -732,6 +742,10 @@ class IncomeStatementControllerCitizenIntegrationTest :
                 listOf(idToAttachment(attachment1), idToAttachment(attachment3)),
                 it.attachments,
             )
+
+            // sentAt should not be updated, citizenModifiedAt is updated
+            assertEquals(sentAt, it.sentAt)
+            assertEquals(clock.now(), it.citizenModifiedAt)
         }
 
         // full update is not allowed after sending
@@ -766,7 +780,10 @@ class IncomeStatementControllerCitizenIntegrationTest :
         assertThrows<Forbidden> {
             updateIncomeStatement(
                 id,
-                IncomeStatementBody.HighestFee(startDate = LocalDate.of(2030, 4, 3), endDate = null),
+                IncomeStatementBody.HighestFee(
+                    startDate = LocalDate.of(2030, 4, 3),
+                    endDate = null,
+                ),
             )
         }
     }
@@ -826,11 +843,10 @@ class IncomeStatementControllerCitizenIntegrationTest :
         id: IncomeStatementId,
         handlerId: EmployeeId,
         note: String,
-    ) =
-        db.transaction { tx ->
-            tx.execute {
-                sql(
-                    """
+    ) = db.transaction { tx ->
+        tx.execute {
+            sql(
+                """
 UPDATE income_statement
 SET handler_id = ${bind(handlerId)}, 
     handler_note = ${bind(note)}, 
@@ -838,9 +854,9 @@ SET handler_id = ${bind(handlerId)},
     handled_at = ${bind(clock.now())}
 WHERE id = ${bind(id)}
 """
-                )
-            }
+            )
         }
+    }
 
     @Test
     fun `employee attachments are not visible to citizen`() {

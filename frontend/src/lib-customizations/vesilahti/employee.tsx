@@ -294,9 +294,20 @@ const customizations: EmployeeCustomizations = {
         title: 'Esiopetussijoitusten tuonti',
         description:
           'Voit luoda tuotetuista sijoitusehdotuksista hakemukset eVakaan. Hakemukset luodaan suoraan odottamaan päätöstä.'
+      },
+      components: {
+        metadata: {
+          organizationName: 'Vesilahden kunta, varhaiskasvatus'
+        }
       }
     },
-    sv: {}
+    sv: {
+      components: {
+        metadata: {
+          organizationName: 'Vesilahden kunta, varhaiskasvatus'
+        }
+      }
+    }
   },
   cityLogo: {
     src: VesilahtiLogo,
@@ -312,6 +323,11 @@ const customizations: EmployeeCustomizations = {
     'FORCE_MAJEURE',
     'FREE_ABSENCE',
     'UNAUTHORIZED_ABSENCE'
+  ],
+  absenceTypesNotSelectableInWeekCalendar: [
+    'FREE_ABSENCE',
+    'PARENTLEAVE',
+    'FORCE_MAJEURE'
   ],
   daycareAssistanceLevels: daycareAssistanceLevels.filter(
     (level) => level !== 'GENERAL_SUPPORT'

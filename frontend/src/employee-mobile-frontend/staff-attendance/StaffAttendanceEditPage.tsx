@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import classNames from 'classnames'
 import sortBy from 'lodash/sortBy'
 import React, { useMemo, useState } from 'react'
@@ -45,7 +44,6 @@ import UnderRowStatusIcon from 'lib-components/atoms/StatusIcon'
 import Title from 'lib-components/atoms/Title'
 import { Button } from 'lib-components/atoms/buttons/Button'
 import { IconOnlyButton } from 'lib-components/atoms/buttons/IconOnlyButton'
-import { LegacyButton } from 'lib-components/atoms/buttons/LegacyButton'
 import { MutateButton } from 'lib-components/atoms/buttons/MutateButton'
 import { SelectF } from 'lib-components/atoms/dropdowns/Select'
 import { CheckboxF } from 'lib-components/atoms/form/Checkbox'
@@ -76,8 +74,8 @@ import { StaffMemberPageContainer } from './components/StaffMemberPageContainer'
 import { staffAttendanceMutation, staffAttendanceQuery } from './queries'
 import { toStaff } from './utils'
 
-const typesWithoutGroup: StaffAttendanceType[] = staffAttendanceTypes.filter(
-  (type) => !presentInGroup(type)
+const typesWithoutGroup = new Set(
+  staffAttendanceTypes.filter((type) => !presentInGroup(type))
 )
 const emptyGroupIdDomValue = ''
 
@@ -107,7 +105,7 @@ const staffAttendanceForm = mapped(
       occupancyEffect: required(boolean())
     }),
     (output) => {
-      if (!typesWithoutGroup.includes(output.type) && output.groupId === null) {
+      if (!typesWithoutGroup.has(output.type) && output.groupId === null) {
         return { groupId: 'required' }
       }
       const departed = getDeparted(
@@ -131,7 +129,7 @@ const staffAttendanceForm = mapped(
       output.arrivedTime,
       output.departedTime
     ),
-    hasStaffOccupancyEffect: typesWithoutGroup.includes(output.type)
+    hasStaffOccupancyEffect: typesWithoutGroup.has(output.type)
       ? false
       : output.occupancyEffect
   })
@@ -253,25 +251,34 @@ export default React.memo(function StaffAttendanceEditPage({
     [employeeId, unitInfoResponse, staffAttendanceResponse]
   )
 
-  return renderResult(combinedResult, ({ groups, staff, staffMember }) => (
-    <StaffMemberPageContainer>
-      {staffMember === undefined || staff === undefined ? (
-        <ErrorSegment title={i18n.attendances.staff.errors.employeeNotFound} />
-      ) : !staff.pinSet ? (
-        <ErrorSegment title={i18n.attendances.staff.pinNotSet} />
-      ) : staff.pinLocked ? (
-        <ErrorSegment title={i18n.attendances.staff.pinLocked} />
-      ) : (
-        <StaffAttendancesEditor
-          date={date}
-          unitOrGroup={unitOrGroup}
-          employeeId={employeeId}
-          groups={groups}
-          staffMember={staffMember}
-        />
-      )}
-    </StaffMemberPageContainer>
-  ))
+  return renderResult(
+    combinedResult,
+    ({ groups, staff, staffMember }, isReloading) => {
+      if (isReloading) return null
+
+      return (
+        <StaffMemberPageContainer>
+          {staffMember === undefined || staff === undefined ? (
+            <ErrorSegment
+              title={i18n.attendances.staff.errors.employeeNotFound}
+            />
+          ) : !staff.pinSet ? (
+            <ErrorSegment title={i18n.attendances.staff.pinNotSet} />
+          ) : staff.pinLocked ? (
+            <ErrorSegment title={i18n.attendances.staff.pinLocked} />
+          ) : (
+            <StaffAttendancesEditor
+              date={date}
+              unitOrGroup={unitOrGroup}
+              employeeId={employeeId}
+              groups={groups}
+              staffMember={staffMember}
+            />
+          )}
+        </StaffMemberPageContainer>
+      )
+    }
+  )
 })
 
 const StaffAttendancesEditor = ({
@@ -330,16 +337,15 @@ const StaffAttendancesEditor = ({
         </ContentArea>
         <ContentArea $opaque $paddingHorizontal="s">
           <FixedSpaceRow $justifyContent="space-between">
-            <LegacyButton
+            <Button
               data-qa="cancel"
               onClick={() => {
                 pinCode.update(() => EMPTY_PIN)
                 setErrorCode(undefined)
                 setMode('editor')
               }}
-            >
-              {i18n.common.cancel}
-            </LegacyButton>
+              text={i18n.common.cancel}
+            />
             <MutateButton
               primary
               data-qa="confirm"
@@ -542,7 +548,7 @@ const StaffAttendancesEditor = ({
       </ContentArea>
       <ContentArea $opaque $paddingHorizontal="s">
         <FixedSpaceRow $justifyContent="space-between">
-          <LegacyButton
+          <Button
             data-qa="cancel"
             onClick={() =>
               navigate(
@@ -550,17 +556,16 @@ const StaffAttendancesEditor = ({
                   .value
               )
             }
-          >
-            {i18n.common.cancel}
-          </LegacyButton>
-          <LegacyButton
+            text={i18n.common.cancel}
+          />
+          <Button
             primary
             data-qa="save"
             onClick={() => setMode('pin')}
             disabled={!form.isValid()}
-          >
-            <FontAwesomeIcon icon={faLockAlt} /> {i18n.common.saveChanges}
-          </LegacyButton>
+            text={i18n.common.saveChanges}
+            icon={faLockAlt}
+          />
         </FixedSpaceRow>
       </ContentArea>
     </>
@@ -673,7 +678,7 @@ const StaffAttendanceEditor = ({
       </FixedSpaceRow>
       <Gap $size="s" />
       {isStaffAttendanceTypesEnabled &&
-      typesWithoutGroup.includes(type.value()) ? null : (
+      typesWithoutGroup.has(type.value()) ? null : (
         <CheckboxF
           bind={occupancyEffect}
           label={i18n.staff.staffOccupancyEffect}

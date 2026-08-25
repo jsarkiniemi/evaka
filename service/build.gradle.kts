@@ -23,7 +23,6 @@ plugins {
     alias(libs.plugins.versions)
     alias(libs.plugins.ktfmt)
     alias(libs.plugins.ktlint.gradle)
-    alias(libs.plugins.owasp)
 
     idea
 }
@@ -35,8 +34,9 @@ sourceSets {
     }
 }
 
-val integrationTestImplementation: Configuration by
-    configurations.getting { extendsFrom(configurations.testImplementation.get()) }
+val integrationTestImplementation: Configuration by configurations.getting {
+    extendsFrom(configurations.testImplementation.get())
+}
 
 val downloadOnly: Configuration by configurations.creating { isTransitive = false }
 
@@ -168,7 +168,6 @@ dependencies {
     implementation("org.apache.commons:commons-text")
     implementation("org.glassfish.jaxb:jaxb-runtime")
     implementation("org.bouncycastle:bcprov-jdk18on")
-    implementation("org.bouncycastle:bcpkix-jdk18on")
     implementation("org.apache.tika:tika-core")
     implementation("org.apache.commons:commons-imaging")
     implementation("org.jsoup:jsoup")
@@ -179,6 +178,7 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter")
 
     testImplementation("io.kotest:kotest-property")
+    testImplementation("org.bouncycastle:bcpkix-jdk18on")
     testImplementation("net.logstash.logback:logstash-logback-encoder")
     testImplementation("org.mockito:mockito-core")
     testImplementation("org.mockito:mockito-junit-jupiter")
@@ -188,7 +188,7 @@ dependencies {
     testImplementation("com.networknt:json-schema-validator")
     testImplementation("com.squareup.okhttp3:mockwebserver")
     testImplementation("org.junit-pioneer:junit-pioneer:2.3.0")
-    testImplementation("org.wiremock.integrations:wiremock-spring-boot:4.2.1")
+    testImplementation("org.wiremock.integrations:wiremock-spring-boot:4.2.2")
 
     integrationTestImplementation("org.apache.cxf:cxf-rt-frontend-jaxws")
     integrationTestImplementation("org.apache.cxf:cxf-rt-transports-http")
@@ -223,9 +223,6 @@ allprojects {
                     // This will become the default in the future
                     // https://kotlinlang.org/docs/whatsnew2020.html#data-class-copy-function-to-have-the-same-visibility-as-constructor
                     "-Xconsistent-data-class-copy-visibility",
-
-                    // https://kotlinlang.org/docs/whatsnew22.html#new-defaulting-rules-for-use-site-annotation-targets
-                    "-Xannotation-default-target=param-property",
                 )
         }
     }
@@ -270,7 +267,20 @@ tasks.getByName<Jar>("jar") { archiveClassifier.set("") }
 tasks.getByName<BootJar>("bootJar") { archiveClassifier.set("boot") }
 
 tasks {
-    test { systemProperty("spring.profiles.active", "test") }
+    test {
+        systemProperty("spring.profiles.active", "test")
+        useJUnitPlatform { excludeTags("schemaValidation") }
+    }
+
+    register<Test>("validateArchiveMetadata") {
+        description =
+            "Validates generated archive metadata XML against XSD schemas (requires local schema files)"
+        group = "verification"
+        testClassesDirs = sourceSets["test"].output.classesDirs
+        classpath = sourceSets["test"].runtimeClasspath
+        useJUnitPlatform { includeTags("schemaValidation") }
+        systemProperty("sarma.schema.dir", project.findProperty("sarma.schema.dir") ?: "")
+    }
 
     register("integrationTest", Test::class) {
         useJUnitPlatform()
@@ -311,28 +321,27 @@ tasks {
         classpath = sourceSets["test"].runtimeClasspath
     }
 
+    register("seedApplications", JavaExec::class) {
+        description = "Seed the local dev database with a season of applications"
+        mainClass.set("evaka.core.shared.dev.seed.SeedApplicationsCliKt")
+        classpath = sourceSets["test"].runtimeClasspath
+        systemProperties(
+            mapOf(
+                "evaka.database.url" to
+                    "jdbc:postgresql://localhost:${System.getenv("EVAKA_DATABASE_PORT") ?: "5432"}/evaka_local",
+                "evaka.database.username" to "postgres",
+                "evaka.database.password" to "postgres",
+                "evaka.integration.vtj.mock_url" to
+                    "http://localhost:${System.getenv("EVAKA_IDP_PORT") ?: "9090"}",
+            )
+        )
+    }
+
     register("copyDownloadOnlyDeps", Copy::class) {
         from(downloadOnly)
         into(layout.buildDirectory.dir("download-only"))
         // remove version numbers from jar filenames
         rename(Pattern.compile("-([0-9]+[.]?)+.jar"), ".jar")
-    }
-
-    dependencyCheck {
-        failBuildOnCVSS = 0.0f
-        analyzers.apply {
-            assemblyEnabled = false
-            centralEnabled = false
-            nodeAuditEnabled = false
-            nodeEnabled = false
-            nuspecEnabled = false
-            ossIndex.apply {
-                username = System.getenv("OSS_INDEX_USERNAME")
-                password = System.getenv("OSS_INDEX_PASSWORD")
-            }
-        }
-        nvd.apply { apiKey = System.getenv("NVD_API_KEY") }
-        suppressionFile = "$projectDir/owasp-suppressions.xml"
     }
 }
 

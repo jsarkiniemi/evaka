@@ -89,9 +89,15 @@ export default {
     openExpandingInfo: 'Avaa lisätietokenttä',
     errors: {
       genericGetError: 'Tietojen hakeminen ei onnistunut',
+      genericGetErrorInfo:
+        'Kokeile päivittää sivu hetken kuluttua. Ongelma on yleensä hetkellinen.',
       http403Error: 'Oikeudet puuttuvat',
-      endpointDisabled:
-        'eVakassa on käynnissä osittainen huoltokatko. Osa toiminnoista ei ole tällä hetkellä käytettävissä. Yritä hetken kuluttua uudelleen.'
+      http403ErrorInfo: 'Sinulla ei ole oikeuksia nähdä näitä tietoja.',
+      endpointDisabled: 'Osittainen huoltokatko',
+      endpointDisabledInfo:
+        'Osa toiminnoista ei ole juuri nyt käytettävissä. Yritä uudelleen hetken kuluttua.',
+      networkError: 'Ei verkkoyhteyttä',
+      networkErrorInfo: 'Tarkista internet-yhteytesi ja kokeile uudelleen.'
     },
     today: 'Tänään',
     datetime: {
@@ -383,7 +389,10 @@ export default {
     serviceVoucherLink:
       'https://www.espoo.fi/fi/kasvatus-ja-opetus/varhaiskasvatus/yksityiseen-varhaiskasvatukseen-hakeminen#section-55369',
     noApplying: 'Ei hakua eVakan kautta, ota yhteys yksikköön',
-    backToSearch: 'Takaisin hakuun'
+    backToSearch: 'Takaisin hakuun',
+    zoomIn: 'Lähennä',
+    zoomOut: 'Loitonna',
+    closePopup: 'Sulje yksikön tiedot'
   },
   calendar: {
     title: 'Kalenteri',
@@ -461,7 +470,7 @@ export default {
     attendance: 'Toteutunut läsnäolo',
     exceedStart: 'Saapunut ilmoitettua aikaisemmin.',
     exceedEnd: 'Lähtenyt ilmoitettua myöhemmin.',
-    exceedGeneric: 'Toteunut läsnäoloaika ylittää ilmoitetun ajan.',
+    exceedGeneric: 'Toteutunut läsnäoloaika ylittää ilmoitetun ajan.',
     calculatedUsedServiceTime:
       'Käytetty palveluntarve määräytyy kuukauden palveluntarpeen mukaan.',
     usedService: 'Käytetty palveluntarve',
@@ -1036,6 +1045,10 @@ export default {
           otherInfoLabel: 'Hakuun liittyvät lisätiedot',
           dietLabel: 'Erityisruokavalio',
           allergiesLabel: 'Allergiat'
+        },
+        otherGuardianAgreement: {
+          title: 'Hakemuksen lisätiedot',
+          text: 'Toinen huoltaja on ilmoittanut, että olette sopineet yhdessä hakemuksen lähettämisestä.'
         }
       },
       serviceNeed: {
@@ -1249,8 +1262,8 @@ export default {
         assistanceNeedPlaceholder: 'Kerro lapsen tuen tarpeesta.',
         assistanceNeedInstructions: {
           DAYCARE:
-            'Valitse hakemuksesta tämä kohta, jos lapsi tarvitsee tukea kehitykselleen, oppimiselleen tai hyvinvoinnilleen. Tukea toteutetaan lapsen arjessa osana varhaiskasvatuksen toimintaa. Jos lapsellanne on tuen tarvetta, varhaiskasvatuksen erityisopettaja ottaa hakijaan yhteyttä, jotta lapsen tarpeet voidaan ottaa huomioon varhaiskasvatuspaikkaa osoitettaessa.',
-          CLUB: 'Valitse hakemuksesta tämä kohta, jos lapsi tarvitsee tukea kehitykselleen, oppimiselleen tai hyvinvoinnilleen. Tukea toteutetaan lapsen arjessa osana varhaiskasvatuksen muuta toimintaa. Jos lapsellanne on tuen tarvetta, varhaiskasvatuksen erityisopettaja ottaa hakijaan yhteyttä, jotta lapsen tarpeet voidaan ottaa huomioon varhaiskasvatuspaikkaa osoitettaessa.',
+            'Valitse hakemuksesta tämä kohta, jos lapsi tarvitsee tukea kehitykselleen, oppimiselleen tai hyvinvoinnilleen. Tukea toteutetaan lapsen arjessa osana varhaiskasvatuksen toimintaa. Jos lapsellanne on tuen tarvetta, varhaiskasvatuksen erityisopettaja ottaa hakijaan yhteyttä, jotta lapsen tarpeet voidaan ottaa huomioon varhaiskasvatuspaikkaa osoitettaessa.' as React.ReactNode,
+          CLUB: 'Valitse hakemuksesta tämä kohta, jos lapsi tarvitsee tukea kehitykselleen, oppimiselleen tai hyvinvoinnilleen. Tukea toteutetaan lapsen arjessa osana varhaiskasvatuksen muuta toimintaa. Jos lapsellanne on tuen tarvetta, varhaiskasvatuksen erityisopettaja ottaa hakijaan yhteyttä, jotta lapsen tarpeet voidaan ottaa huomioon varhaiskasvatuspaikkaa osoitettaessa.' as React.ReactNode,
           PRESCHOOL:
             'Valitse hakemuksesta tämä kohta, jos lapsi tarvitsee kasvulleen ja/tai oppimiselleen tukea esiopetusvuonna. Tukea toteutetaan lapsen arjessa osana esiopetuksen ja varhaiskasvatuksen toimintaa. Valitse tämä kohta myös, jos lapsella on muu erityinen syy, jolla on suoranaista vaikutusta esiopetuksen järjestämiseen ja siihen, missä yksikössä lapsen esiopetus tulee järjestää. Jos lapsella on kasvun ja/tai oppimisen tuen tarvetta, varhaiskasvatuksen erityisopettaja ottaa hakijaan yhteyttä, jotta lapsen tarpeet voidaan ottaa huomioon esiopetuspaikkaa osoitettaessa.' as React.ReactNode
         },
@@ -1419,7 +1432,8 @@ export default {
           languageFilter: {
             label: 'Yksikön kieli',
             fi: 'suomi',
-            sv: 'ruotsi'
+            sv: 'ruotsi',
+            en: 'englanti'
           },
           select: {
             label: (maxUnits: number): string =>
@@ -2167,13 +2181,38 @@ export default {
   },
   personalDetails: {
     title: 'Omat tiedot',
-    description: (
-      <P>
-        Täällä voit tarkistaa ja täydentää omat henkilö- ja yhteystietosi.
-        Nimesi ja osoitteesi haetaan väestötietojärjestelmästä, ja mikäli ne
-        muuttuvat, sinun tulee tehdä ilmoitus maistraattiin.
-      </P>
-    ),
+    editInfo:
+      'Nimesi ja osoitteesi haetaan väestötietojärjestelmästä, ja mikäli ne muuttuvat, sinun tulee tehdä ilmoitus Digi- ja väestötietovirastoon.',
+    tasks: {
+      addEmail: {
+        title: 'Lisää sähköpostiosoite',
+        description: 'Voit vastaanottaa sähköposti-ilmoituksia.'
+      },
+      verifyEmail: {
+        title: 'Vahvista sähköpostiosoite',
+        description: 'Voit vastaanottaa sähköposti-ilmoituksia.'
+      },
+      addPhone: {
+        title: 'Lisää puhelinnumero',
+        description: 'Sinut tavoitetaan kiireellisissä asioissa.'
+      }
+    },
+    familySizeSection: {
+      title: 'Perhekoko',
+      description: (
+        <P $noMargin>
+          Samassa taloudessa asuvien aikuisten ja lasten määrä vaikuttaa
+          asiakasmaksuihin. Jos perheen tiedoissa on tapahtunut muutos, ole
+          yhteydessä asiakasmaksutiimiin, sähköposti{' '}
+          <a href="mailto:vaka.maksut@espoo.fi">vaka.maksut@espoo.fi</a>.
+        </P>
+      ),
+      summary: (adults: number, children: number) =>
+        `${adults} ${adults === 1 ? 'aikuinen' : 'aikuista'} ja ${children} ${children === 1 ? 'lapsi' : 'lasta'}`,
+      adults: 'Aikuiset',
+      children: 'Lapset',
+      self: '(sinä)'
+    },
     detailsSection: {
       title: 'Henkilötiedot',
       noEmailAlert:
@@ -2183,13 +2222,12 @@ export default {
       preferredName: 'Kutsumanimi',
       contactInfo: 'Yhteystiedot',
       address: 'Osoite',
-      phone: 'Puhelinnumero*',
+      phone: 'Puhelinnumero',
       backupPhone: 'Varapuhelinnumero',
       backupPhonePlaceholder: 'Esim. työpuhelin',
       email: 'Sähköpostiosoite',
       emailMissing: 'Sähköpostiosoite puuttuu',
       phoneMissing: 'Puhelinnumero puuttuu',
-      noEmail: 'Minulla ei ole sähköpostiosoitetta',
       emailInfo:
         'Sähköpostiosoite tarvitaan, jotta voimme lähettää sinulle ilmoitukset uusista viesteistä, läsnäoloaikojen varaamisesta sekä muista lapsen varhaiskasvatukseen liittyvistä asioista.',
       contactEmailInfo: 'Tähän osoitteeseen saat kaikki ilmoitukset eVakasta.',
@@ -2208,7 +2246,7 @@ export default {
           `Käyttäjätunnuksen vaihtaaksesi syötä vahvistuskoodi, joka on lähetetty osoitteeseen ${verification.email}. Koodi on voimassa ${verification.expiresAt.toLocalTime().format()} asti.`,
         toast: 'Käyttäjätunnus vaihdettu'
       },
-      codeNotReceived: 'En ole saanut koodia.',
+      codeNotReceived: 'Etkö ole saanut koodia?',
       codeNotReceivedInfo:
         'Tarkista roskapostikansio ja varmista, että sähköpostiosoite on kirjoitettu oikein.',
       verificationForm: 'Syötä saamasi vahvistuskoodi',
@@ -2227,18 +2265,15 @@ export default {
         `Vaihda käyttäjätunnukseksi ${newUsername}`
     },
     loginDetailsSection: {
-      title: 'Kirjautumistiedot',
+      title: 'Sähköpostikirjautuminen',
       weakLoginCredentials: 'Sähköpostilla kirjautuminen',
       status: {
-        enabled: 'Sallittu',
-        disabled: 'Ei sallittu',
-        info: 'Sähköpostilla kirjautumalla voit lukea eVakaan saapuvia viestejä ja tehdä läsnäoloilmoituksia ilman vahvaa tunnistautumista.'
+        enabled: 'Otettu käyttöön'
       },
-      usernameInfo: 'Tällä tunnuksella kirjaudut eVakaan',
       weakLoginUsername: 'Käyttäjätunnus',
       password: 'Salasana',
       unverifiedEmailWarning:
-        'Sähköpostikirjautumisen voi sallia vain, jos olet vahvistanut sähköpostiosoitteesi',
+        'Voit ottaa tämän käyttöön, kun olet ensin vahvistanut sähköpostiosoitteesi.',
       updatePassword: 'Vaihda salasana',
       activateCredentials: 'Salli sähköpostikirjautuminen',
       activationSuccess: 'Sähköpostilla kirjautuminen otettu käyttöön',
@@ -2267,18 +2302,19 @@ export default {
         `Käyttäjätunnus ${username} on jo käytössä toisella henkilöllä`
     },
     notificationsSection: {
-      title: 'Sähköposti-ilmoitukset',
-      info: 'Voit saada ilmoituksia sähköpostiin seuraavista aiheista. Asetuksia pystyy muokkaamaan muokkaa-nappia painamalla.',
-      subtitle: 'Sähköpostiin lähetettävät ilmoitukset',
-      message: 'eVakaan saapuneista henkilökunnan lähettämistä viesteistä',
-      bulletin: 'eVakaan saapuneista kunnan yleisistä tiedotteista',
-      income: 'Muistutukset tulotietojen päivittämisestä',
+      title: 'Ilmoitukset',
+      subtitle: 'Haluan ilmoituksen',
+      moreInfo: 'Lisätiedot',
+      email: 'Sähköposti',
+      push: 'Push',
+      message: 'Henkilökunnan lähettämistä viesteistä',
+      bulletin: 'Kunnan yleisistä tiedotteista',
+      income: 'Tulotietojen päivittämisen tarpeesta',
       incomeInfo:
         'Mikäli ette maksa korkeinta varhaiskasvatusmaksua, on tulotiedot päivitettävä säännöllisesti. Jos tulotiedot puuttuvat tai vanhenevat, merkitään varhaiskasvatuksesta maksettavaksi korkein maksu.',
       incomeWarning:
         'Jos tulotiedot puuttuvat tai vanhenevat, merkitään varhaiskasvatuksesta maksettavaksi korkein maksu.',
-      calendarEvent:
-        'Muistutukset kalenteriin merkityistä uusista tapahtumista',
+      calendarEvent: 'Uusista kalenteritapahtumista',
       decision: 'Saapuneista päätöksistä',
       document: 'Saapuneista pedagogisista asiakirjoista',
       documentInfo:
@@ -2286,13 +2322,13 @@ export default {
       informalDocument: 'Muista lapsen arkeen liittyvistä dokumenteista',
       informalDocumentInfo:
         'Muut lapsen arkeen liittyvät dokumentit voivat olla esimerkiksi kuvia lapsen tekemistä piirustuksista.',
-      attendanceReservation: 'Muistutukset puuttuvista läsnäoloilmoituksista',
+      attendanceReservation: 'Puuttuvista läsnäoloilmoituksista',
       attendanceReservationInfo:
         'Muistutus lähetetään ennen läsnäoloilmoitusten määräaikaa, mikäli jollakin lapsistasi puuttuu läsnäoloilmoitus tai poissaolomerkintä seuraavalta kahdelta viikolta.',
-      discussionTime: 'Keskusteluaikoihin liittyvät ilmoitukset',
+      discussionTime: 'Keskusteluaikoihin liittyvistä asioista',
       discussionTimeInfo: (
         <div>
-          <div>Saat ilmoituksen seuraavista asioista:</div>
+          <div>Ilmoitukset seuraavista asioista:</div>
           <ul>
             <li>
               kun sinulta kysytään sopivia aikoja esimerkiksi lapsesi
@@ -2496,6 +2532,7 @@ export default {
         ALIMONY: 'Elatusapu tai -tuki',
         INTEREST_AND_INVESTMENT_INCOME: 'Korko- ja osinkotulot',
         RENTAL_INCOME: 'Vuokratulot',
+        GENERAL_SOCIAL_SECURITY_BENEFIT: 'Yleistuki',
         UNEMPLOYMENT_ALLOWANCE: 'Työttömyyspäiväraha',
         LABOUR_MARKET_SUBSIDY: 'Työmarkkinatuki',
         ADJUSTED_DAILY_ALLOWANCE: 'Soviteltu päiväraha',
@@ -2555,15 +2592,7 @@ export default {
       timeRange: 'Aikavälillä'
     },
     limitedCompany: {
-      info: (
-        <>
-          <strong>
-            Kirjanpitäjän selvitys luontoiseduista ja osingoista tulee toimittaa
-            liitteenä.
-          </strong>{' '}
-          Valitse alta sopiva tapa muiden tietojen toimittamiseen.
-        </>
-      ),
+      info: 'Valitse alta sopiva tapa muiden tietojen toimittamiseen',
       incomesRegister:
         'Tuloni voi tarkastaa tulorekisteristä sekä tarvittaessa Kelasta.',
       attachments:
@@ -2613,6 +2642,7 @@ export default {
         HOME_CARE_ALLOWANCE: 'Päätös kotihoidontuesta',
         FLEXIBLE_AND_PARTIAL_HOME_CARE_ALLOWANCE: 'Päätös hoitorahasta',
         ALIMONY: 'Elatussopimus tai päätös elatustuesta',
+        GENERAL_SOCIAL_SECURITY_BENEFIT: 'Päätös yleistuesta',
         UNEMPLOYMENT_ALLOWANCE: 'Päätös työttömyyspäivärahasta',
         LABOUR_MARKET_SUBSIDY: 'Päätös työmarkkinatuesta',
         ADJUSTED_DAILY_ALLOWANCE: 'Päätös päivärahasta',
@@ -2656,6 +2686,7 @@ export default {
         HOME_CARE_ALLOWANCE: 'Lisää päätös kotihoidontuesta',
         FLEXIBLE_AND_PARTIAL_HOME_CARE_ALLOWANCE: 'Lisää päätös hoitorahasta',
         ALIMONY: 'Lisää elatussopimus tai päätös elatustuesta',
+        GENERAL_SOCIAL_SECURITY_BENEFIT: 'Lisää päätös yleistuesta',
         UNEMPLOYMENT_ALLOWANCE: 'Lisää päätös työttömyyspäivärahasta',
         LABOUR_MARKET_SUBSIDY: 'Lisää päätös työmarkkinatuesta',
         ADJUSTED_DAILY_ALLOWANCE: 'Lisää päätös päivärahasta',
@@ -3009,67 +3040,57 @@ export default {
         <a href="https://espoonvarhaiskasvatus.fi">espoonvarhaiskasvatus.fi</a>.
         Espoon kaupunki pyrkii takaamaan verkkopalvelun saavutettavuuden,
         parantamaan käyttäjäkokemusta jatkuvasti ja soveltamaan asianmukaisia
-        saavutettavuusstandardeja.
-      </P>
-      <P>
-        Palvelun saavutettavuuden on arvioinut palvelun kehitystiimi, ja seloste
-        on laadittu 12.4.2022.
+        saavutettavuusvaatimuksia.
       </P>
       <H2>Palvelun vaatimustenmukaisuus</H2>
       <P>
-        Verkkopalvelu täyttää lain asettamat kriittiset
-        saavutettavuusvaatimukset WCAG v2.1 -tason AA mukaisesti. Palvelu ei ole
-        vielä kaikilta osin vaatimusten mukainen.
+        Verkkopalvelu täyttää lain asettamat saavutettavuusvaatimukset (WCAG
+        2.1, taso AA) suurimmalta osin, mutta palvelussa on vielä joitakin osia,
+        jotka eivät ole vaatimusten mukaisia.
       </P>
       <H2>Toimet saavutettavuuden tukemiseksi</H2>
       <P>
-        Verkkopalvelun saavutettavuus varmistetaan muun muassa seuraavilla
+        Varmistamme verkkopalvelun saavutettavuuden muun muassa seuraavilla
         toimenpiteillä:
       </P>
       <ul>
         <li>
-          Saavutettavuus huomioidaan alusta lähtien suunnitteluvaiheessa, mm.
-          valitsemalla palvelun värit ja kirjaisinten koot saavutettavasti.
+          Saavutettavuus huomioidaan jo palvelun suunnitteluvaiheessa, muun
+          muassa valitsemalla saavutettavat värit ja kirjasinten koot.
         </li>
         <li>
-          Palvelun elementit on määritelty semantiikaltaan johdonmukaisesti.
+          Palvelun elementit on määritelty semantiikaltaan johdonmukaisiksi.
         </li>
-        <li>Palvelua testataan jatkuvasti ruudunlukijalla.</li>
+        <li>Palvelua testataan ruudunlukijalla kehitystyön yhteydessä.</li>
         <li>
           Erilaiset käyttäjät testaavat palvelua ja antavat saavutettavuudesta
           palautetta.
         </li>
         <li>
-          Sivuston saavutettavuudesta huolehditaan jatkuvalla valvonnalla
-          tekniikan tai sisällön muuttuessa.
+          Palvelun saavutettavuudesta huolehditaan jatkuvalla valvonnalla
+          sisällön ja/tai teknisen toteutuksen muuttuessa.
         </li>
       </ul>
       <P>
-        Tätä selostetta päivitetään sivuston muutosten ja saavutettavuuden
-        tarkistusten yhteydessä.
+        Tätä saavutettavuusselostetta päivitetään palvelun muutosten ja
+        saavutettavuuden tarkistusten yhteydessä.
       </P>
       <H2>Tunnetut saavutettavuusongelmat</H2>
       <P>
-        Käyttäjät saattavat edelleen kohdata sivustolla joitakin ongelmia.
-        Seuraavassa on kuvaus tunnetuista saavutettavuusongelmista. Jos huomaat
-        sivustolla ongelman, joka ei ole luettelossa, otathan meihin yhteyttä.
+        Käyttäjät saattavat edelleen kohdata verkkopalvelussa joitakin ongelmia.
+        Tunnetut saavutettavuusongelmat on kuvattu alla. Jos huomaat palvelussa
+        ongelman, joka ei ole luettelossa, otathan yhteyttä meihin ylläpitäjiin.
       </P>
       <ul>
         <li>
-          Palvelun päivämäärävalitsinta ja monivalintojen alasvetovalikkoa ei
-          ole optimoitu käytettäväksi ruudunlukijalla.
-        </li>
-        <li>
-          Palvelun yksikkökartassa ei pysty liikkumaan
-          näppäimistöllä/ruudunlukijalla, mutta yksikköjä voi selata samassa
-          näkymässä olevalta listalta. Palvelussa käytetty kartta on kolmannen
-          osapuolen tuottama.
+          Kosketusnäyttöä käytettäessä joidenkin toimintojen kosketusalueet
+          saattavat olla liian pieniä.
         </li>
       </ul>
       <H2>Kolmannet osapuolet</H2>
       <P>
         Verkkopalvelussa käytetään seuraavia kolmannen osapuolen palveluita,
-        joiden saavutettavuudesta emme voi vastata.
+        joiden saavutettavuutta emme voi taata.
       </P>
       <ul>
         <li>Suomi.fi-tunnistautuminen</li>
@@ -3077,51 +3098,59 @@ export default {
       </ul>
       <H2>Vaihtoehtoiset asiointitavat</H2>
       <P>
+        Saat apua sähköiseen asiointiin{' '}
         <ExternalLink
           href="https://www.espoo.fi/fi/espoon-kaupunki/asiakaspalvelu/asiointipisteet-ja-espoo-info/asiointipisteet"
           text="Espoon kaupungin asiointipisteistä"
-        />{' '}
-        saa apua sähköiseen asiointiin. Asiointipisteiden palveluneuvojat
-        auttavat käyttäjiä, joille digipalvelut eivät ole saavutettavissa.
+        />
+        . Asiointipisteiden palveluneuvojat auttavat käyttäjiä, joille
+        digipalvelut eivät ole saavutettavissa.
+      </P>
+      <H2>Selosteen laatiminen</H2>
+      <P>
+        Tämä seloste on laadittu 12.4.2022. Palvelun saavutettavuuden on
+        arvioinut palvelun kehitystiimi sekä ulkopuolinen asiantuntija-arvioija.
+        Viimeisin ulkopuolinen asiantuntija-arvio on tehty keväällä 2024.
+        Saavutettavuusseloste on päivitetty viimeksi 30.6.2026.
       </P>
       <H2>Anna palautetta</H2>
       <P>
-        Jos huomaat saavutettavuuspuutteen verkkopalvelussamme, kerro siitä
-        meille. Voit antaa palautetta{' '}
+        Jos huomaat saavutettavuusongelman eVaka-verkkopalvelussa, kerro siitä
+        meille ylläpitäjille. Voit kertoa saavutettavuusongelmasta tai antaa
+        meille palautetta{' '}
         <ExternalLink
           href="https://easiointi.espoo.fi/eFeedback/fi/Feedback/20-S%C3%A4hk%C3%B6iset%20asiointipalvelut"
           text="verkkolomakkeella"
         />{' '}
         tai sähköpostitse{' '}
-        <a href="mailto:evakatuki@espoo.fi">evakatuki@espoo.fi</a>.
+        <a href="mailto:evakatuki@espoo.fi">evakatuki@espoo.fi</a>. Vastauksen
+        saamisessa voi kestää 14 päivää.
       </P>
-      <H2>Valvontaviranomainen</H2>
+      <H2>Täytäntöönpanomenettely</H2>
       <P>
-        Jos huomaat sivustolla saavutettavuusongelmia, anna ensin palautetta
-        meille sivuston ylläpitäjille. Vastauksessa voi mennä 14 päivää. Jos et
-        ole tyytyväinen saamaasi vastaukseen, tai et saa vastausta lainkaan
-        kahden viikon aikana, voit antaa palautteen Etelä-Suomen
-        aluehallintovirastoon. Etelä-Suomen aluehallintoviraston sivulla
-        kerrotaan tarkasti, miten valituksen voi tehdä, ja miten asia
-        käsitellään.
+        Jos et ole tyytyväinen ylläpitäjiltä saamaasi vastaukseen, tai et saa
+        vastausta 14 päivän aikana, voit tehdä ilmoituksen Traficomille.
+        Traficomin sivulla kerrotaan tarkasti, miten ilmoituksen voi tehdä ja
+        miten asia käsitellään.
       </P>
 
       <P>
-        <strong>Valvontaviranomaisen yhteystiedot </strong>
+        <strong>Valvontaviranomaisen yhteystiedot:</strong>
         <br />
-        Etelä-Suomen aluehallintovirasto <br />
-        Saavutettavuuden valvonnan yksikkö
+        Liikenne- ja viestintävirasto Traficom
+        <br />
+        Saavutettavuusvalvonta
+        <br />
+        <a href="mailto:saavutettavuus@traficom.fi">
+          saavutettavuus@traficom.fi
+        </a>
+        <br />
+        Vaihde: 029 534 5000
         <br />
         <ExternalLink
           href="https://www.saavutettavuusvaatimukset.fi"
           text="www.saavutettavuusvaatimukset.fi"
         />
-        <br />
-        <a href="mailto:saavutettavuus@avi.fi">saavutettavuus@avi.fi</a>
-        <br />
-        puhelinnumero vaihde 0295 016 000
-        <br />
-        Avoinna: ma-pe klo 8.00–16.15
       </P>
     </>
   ),

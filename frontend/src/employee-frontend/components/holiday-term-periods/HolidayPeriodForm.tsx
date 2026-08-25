@@ -12,9 +12,8 @@ import { ValidationError, ValidationSuccess } from 'lib-common/form/types'
 import type { HolidayPeriod } from 'lib-common/generated/api-types/holidayperiod'
 import LocalDate from 'lib-common/local-date'
 import { useMutationResult } from 'lib-common/query'
-import { mockToday } from 'lib-common/utils/helpers'
 import { AsyncButton } from 'lib-components/atoms/buttons/AsyncButton'
-import { LegacyButton } from 'lib-components/atoms/buttons/LegacyButton'
+import { Button } from 'lib-components/atoms/buttons/Button'
 import { CheckboxF } from 'lib-components/atoms/form/Checkbox'
 import ButtonContainer from 'lib-components/layout/ButtonContainer'
 import ListGrid from 'lib-components/layout/ListGrid'
@@ -31,7 +30,7 @@ import {
   updateHolidayPeriodMutation
 } from './queries'
 
-const minStartDate = (mockToday() ?? LocalDate.todayInSystemTz()).addWeeks(4)
+const minStartDate = LocalDate.todayInSystemTz().addWeeks(4)
 const maxPeriod = 15 * 7 * 24 * 60 * 60 * 1000 // 15 weeks
 
 function makeHolidayPeriodForm(mode: 'create' | 'update') {
@@ -229,7 +228,7 @@ export default React.memo(function HolidayPeriodForm({
           onClick={() => onSubmit().then((res) => res.map(() => undefined))}
           data-qa="save-btn"
         />
-        <LegacyButton onClick={onCancel} text={i18n.common.goBack} />
+        <Button onClick={onCancel} text={i18n.common.goBack} />
       </ButtonContainer>
     </>
   )

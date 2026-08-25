@@ -11,6 +11,7 @@ import type { CitizenAuthLevel } from './shared'
 import type { CitizenFeatures } from './shared'
 import DateRange from '../../date-range'
 import type { DaycareId } from './shared'
+import type { EmployeeFeatureConfig } from './shared'
 import type { EmployeeFeatures } from './shared'
 import type { EmployeeId } from './shared'
 import type { EvakaUser } from './user'
@@ -210,6 +211,14 @@ export interface Employee {
 }
 
 /**
+* Generated from evaka.core.pis.SystemController.EmployeeAuthResponse
+*/
+export interface EmployeeAuthResponse {
+  featureConfig: EmployeeFeatureConfig
+  user: EmployeeUserResponse
+}
+
+/**
 * Generated from evaka.core.pis.controllers.EmployeeController.EmployeeEmailRequest
 */
 export interface EmployeeEmailRequest {
@@ -232,6 +241,17 @@ export interface EmployeeSetPreferredFirstNameUpdateRequest {
 }
 
 /**
+* Generated from evaka.core.pis.EmployeeStartPage
+*/
+export type EmployeeStartPage =
+  | 'APPLICATIONS'
+  | 'UNITS'
+  | 'REPORTS'
+  | 'MESSAGES'
+  | 'WELCOME'
+  | 'SEARCH'
+
+/**
 * Generated from evaka.core.pis.SystemController.EmployeeUserResponse
 */
 export interface EmployeeUserResponse {
@@ -242,6 +262,7 @@ export interface EmployeeUserResponse {
   id: EmployeeId
   lastName: string
   permittedGlobalActions: Action.Global[]
+  startPage: EmployeeStartPage
 }
 
 /**
@@ -322,6 +343,23 @@ export interface FamilyContactUpdate {
   contactPersonId: PersonId
   email: string | null
   phone: string | null
+}
+
+/**
+* Generated from evaka.core.pis.service.FamilyMember
+*/
+export interface FamilyMember {
+  firstName: string
+  lastName: string
+  personId: PersonId
+}
+
+/**
+* Generated from evaka.core.pis.service.FamilyMembers
+*/
+export interface FamilyMembers {
+  adults: FamilyMember[]
+  children: FamilyMember[]
 }
 
 /**
@@ -659,10 +697,10 @@ export interface PersonWithChildrenDTO {
 * Generated from evaka.core.pis.PersonalDataUpdate
 */
 export interface PersonalDataUpdate {
-  backupPhone: string
-  email: string
-  phone: string
-  preferredName: string
+  backupPhone: string | null
+  email: string | null
+  phone: string | null
+  preferredName: string | null
 }
 
 /**

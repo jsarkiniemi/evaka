@@ -25,23 +25,24 @@ fun replaceImage(
     contentType: String,
 ): ChildImageId {
     var deletedId: ChildImageId? = null
-    val imageId =
-        db.transaction { tx ->
-            deletedId = tx.deleteChildImage(childId)
-            val imageId = tx.insertChildImage(childId)
+    val imageId = db.transaction { tx ->
+        deletedId = tx.deleteChildImage(childId)
+        val imageId = tx.insertChildImage(childId)
 
-            documentClient.upload(DocumentKey.ChildImage(imageId), file.bytes, contentType)
-            imageId
-        }
+        documentClient.upload(DocumentKey.ChildImage(imageId), file.bytes, contentType)
+        imageId
+    }
     deletedId?.let { documentClient.delete(DocumentKey.ChildImage(it)) }
     return imageId
 }
 
-fun removeImage(
+fun deleteImage(
     tx: Database.Transaction,
     documentClient: DocumentService,
     childId: ChildId,
 ): ChildImageId? =
-    tx.deleteChildImage(childId)?.also { imageId ->
-        documentClient.delete(DocumentKey.ChildImage(imageId))
-    }
+    tx.deleteChildImage(childId)?.also { imageId -> deleteImageFile(documentClient, imageId) }
+
+fun deleteImageFile(documentClient: DocumentService, childImageId: ChildImageId) {
+    documentClient.delete(DocumentKey.ChildImage(childImageId))
+}

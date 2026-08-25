@@ -6,15 +6,13 @@ package evaka.core.document
 
 import evaka.core.Audit
 import evaka.core.AuditId
-import evaka.core.CitizenCalendarEnv
 import evaka.core.EvakaEnv
 import evaka.core.ForcePlainGet
 import evaka.core.absence.getDaycareIdByGroup
-import evaka.core.daycare.domain.Language
 import evaka.core.daycare.getDaycare
-import evaka.core.placement.PlacementType
 import evaka.core.shared.ChildId
 import evaka.core.shared.DocumentTemplateId
+import evaka.core.shared.FeatureConfig
 import evaka.core.shared.GroupId
 import evaka.core.shared.auth.AuthenticatedUser
 import evaka.core.shared.db.Database
@@ -26,8 +24,6 @@ import evaka.core.shared.domain.NotFound
 import evaka.core.shared.domain.UiLanguage
 import evaka.core.shared.security.AccessControl
 import evaka.core.shared.security.Action
-import evaka.core.shared.security.PilotFeature
-import java.time.LocalDate
 import org.springframework.http.ContentDisposition
 import org.springframework.http.HttpHeaders
 import org.springframework.http.ResponseEntity
@@ -46,7 +42,7 @@ import org.springframework.web.bind.annotation.RestController
 class DocumentTemplateController(
     private val accessControl: AccessControl,
     private val evakaEnv: EvakaEnv,
-    private val citizenCalendarEnv: CitizenCalendarEnv,
+    private val featureConfig: FeatureConfig,
 ) {
     @PostMapping
     fun createTemplate(
@@ -130,41 +126,23 @@ class DocumentTemplateController(
                         Action.Global.READ_DOCUMENT_TEMPLATE,
                     )
 
-                    val activePlacement = tx.getChildActivePlacementInfo(childId, clock.today())
-                    val timeRelevantPlacement =
-                        tx.getChildActivePlacementInfo(
+                    val placement =
+                        tx.getCurrentOrNextPlacement(
                             childId,
                             clock.today(),
-                            citizenCalendarEnv.calendarOpenBeforePlacementDays,
-                        )
-
-                    if (timeRelevantPlacement == null && activePlacement == null)
-                        return@read emptyList()
-                    val placement =
-                        if (activePlacement != null) {
-                            activePlacement // Both exist or only active exists, prefer active
-                        } else {
-                            timeRelevantPlacement!! // Only non-started exists
-                        }
+                            CITIZEN_DOCUMENT_CREATION_DAYS_BEFORE_PLACEMENT,
+                        ) ?: return@read emptyList()
 
                     tx.getTemplateSummaries().filter {
                         it.published &&
                             it.validity.includes(clock.today()) &&
-                            it.placementTypes.contains(placement.type) &&
-                            (it.language.name.uppercase() ==
-                                placement.unitLanguage.name.uppercase() ||
-                                it.language == UiLanguage.EN) &&
-                            (placement.enabledPilotFeatures.contains(
-                                PilotFeature.VASU_AND_PEDADOC
-                            ) || !isPedagogicalDocument((it.type))) &&
-                            (placement.enabledPilotFeatures.contains(PilotFeature.OTHER_DECISION) ||
-                                it.type != ChildDocumentType.OTHER_DECISION) &&
-                            (placement.enabledPilotFeatures.contains(
-                                PilotFeature.CITIZEN_BASIC_DOCUMENT
-                            ) || it.type != ChildDocumentType.CITIZEN_BASIC) &&
-                            // Allow not-yet-started placements only for CITIZEN_BASIC documents,
-                            // require an active placement for others
-                            (it.type == ChildDocumentType.CITIZEN_BASIC || activePlacement != null)
+                            isTemplateApplicableToPlacement(
+                                it.type,
+                                it.language,
+                                it.placementTypes,
+                                placement,
+                                clock.today(),
+                            )
                     }
                 }
             }
@@ -194,7 +172,8 @@ class DocumentTemplateController(
                         it.published &&
                             it.validity.includes(clock.today()) &&
                             (types.isEmpty() || types.contains(it.type)) &&
-                            (it.language.name.uppercase() == unit.language.name.uppercase())
+                            languageMatches(it.language, it.type, unit.language) &&
+                            isAllowedByPilotFeatures(it.type, unit.enabledPilotFeatures)
                     }
                 }
             }
@@ -440,20 +419,25 @@ class DocumentTemplateController(
                         Action.DocumentTemplate.DELETE,
                         templateId,
                     )
-                    tx.getTemplate(templateId)?.also {
-                        if (it.published) throw BadRequest("Cannot delete published template")
-                    } ?: throw NotFound("Template $templateId not found")
+                    if (tx.getTemplate(templateId) == null)
+                        throw NotFound("Template $templateId not found")
+                    if (tx.templateHasDocuments(templateId))
+                        throw BadRequest("Cannot delete template that has documents")
 
-                    tx.deleteDraftTemplate(templateId)
+                    tx.deleteUnusedTemplate(templateId)
                 }
             }
             .also { Audit.DocumentTemplateDelete.log(targetId = AuditId(templateId)) }
     }
-}
 
-private fun validateLanguage(lang: UiLanguage, type: ChildDocumentType) {
-    if (type != ChildDocumentType.CITIZEN_BASIC && lang == UiLanguage.EN) {
-        throw BadRequest("English is not supported for this document type")
+    private fun validateLanguage(lang: UiLanguage, type: ChildDocumentType) {
+        if (
+            lang == UiLanguage.EN &&
+                type != ChildDocumentType.CITIZEN_BASIC &&
+                !featureConfig.allowEnglishChildDocumentsForAllTypes
+        ) {
+            throw BadRequest("English is not supported for this document type")
+        }
     }
 }
 
@@ -475,43 +459,3 @@ private fun assertUniqueIds(content: DocumentTemplateContent) {
     if (questionIds.size > questionIds.distinct().size)
         throw BadRequest("Found non unique question ids")
 }
-
-private data class ActivePlacementInfo(
-    val type: PlacementType,
-    val unitLanguage: Language,
-    val enabledPilotFeatures: Set<PilotFeature>,
-)
-
-private fun Database.Read.getChildActivePlacementInfo(
-    childId: ChildId,
-    date: LocalDate,
-    daysAllowedBeforePlacementStart: Int = 0,
-): ActivePlacementInfo? =
-    createQuery {
-            sql(
-                """
-SELECT pl.type, d.language AS unit_language, d.enabled_pilot_features AS enabled_pilot_features
-FROM placement pl
-JOIN daycare d on d.id = pl.unit_id
-WHERE pl.child_id = ${bind(childId)} 
-    AND pl.start_date <= ${bind(date.plusDays(daysAllowedBeforePlacementStart.toLong()))} 
-    AND pl.end_date >= ${bind(date)}
-ORDER BY pl.start_date
-"""
-            )
-        }
-        .toList<ActivePlacementInfo>()
-        .firstOrNull()
-
-private val PEDAGOGICAL_DOCUMENT_TYPES =
-    setOf(
-        ChildDocumentType.HOJKS,
-        ChildDocumentType.LEOPS,
-        ChildDocumentType.MIGRATED_LEOPS,
-        ChildDocumentType.MIGRATED_VASU,
-        ChildDocumentType.PEDAGOGICAL_ASSESSMENT,
-        ChildDocumentType.VASU,
-        ChildDocumentType.OTHER,
-    )
-
-private fun isPedagogicalDocument(type: ChildDocumentType) = type in PEDAGOGICAL_DOCUMENT_TYPES

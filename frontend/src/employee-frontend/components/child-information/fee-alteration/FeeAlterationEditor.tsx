@@ -17,7 +17,7 @@ import { useMutationResult } from 'lib-common/query'
 import type { UUID } from 'lib-common/types'
 import Title from 'lib-components/atoms/Title'
 import { AsyncButton } from 'lib-components/atoms/buttons/AsyncButton'
-import { LegacyButton } from 'lib-components/atoms/buttons/LegacyButton'
+import { Button } from 'lib-components/atoms/buttons/Button'
 import TextArea from 'lib-components/atoms/form/TextArea'
 import { FixedSpaceRow } from 'lib-components/layout/flex-helpers'
 import FileUpload from 'lib-components/molecules/FileUpload'
@@ -64,16 +64,18 @@ interface Props {
   onFailure?: () => void
 }
 
+const noop = () => Promise.resolve(Success.of())
+
 export default React.memo(function FeeAlterationEditor({
   personId,
   baseFeeAlteration,
   cancel,
-  create = () => Promise.resolve(Success.of()),
-  update = () => Promise.resolve(Success.of()),
+  create = noop,
+  update = noop,
   onSuccess,
   onFailure
 }: Props) {
-  const { i18n } = useTranslation()
+  const { i18n, lang } = useTranslation()
   const [edited, setEdited] = useState(
     baseFeeAlteration || newFeeAlteration(personId)
   )
@@ -146,7 +148,7 @@ export default React.memo(function FeeAlterationEditor({
                     onValidationResult={(isValid) => {
                       setValidationErrors({ dates: !isValid })
                     }}
-                    locale="fi"
+                    locale={lang}
                   />
                 </FixedSpaceRow>
               )
@@ -181,7 +183,7 @@ export default React.memo(function FeeAlterationEditor({
         />
         <Gap $size="m" />
         <FixedSpaceRow $justifyContent="flex-end">
-          <LegacyButton
+          <Button
             onClick={cancel}
             text={i18n.childInformation.feeAlteration.editor.cancel}
           />

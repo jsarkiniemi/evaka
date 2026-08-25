@@ -8,6 +8,8 @@ import evaka.core.Audit
 import evaka.core.AuditId
 import evaka.core.Sensitive
 import evaka.core.pis.*
+import evaka.core.pis.service.FamilyMembers
+import evaka.core.pis.service.getFamilyMembersByAdult
 import evaka.core.shared.PersonEmailVerificationId
 import evaka.core.shared.async.AsyncJob
 import evaka.core.shared.async.AsyncJobRunner
@@ -66,36 +68,40 @@ class PersonalDataControllerCitizen(
 
                 val validationErrors =
                     listOfNotNull(
-                        "invalid preferredName"
-                            .takeUnless {
-                                person.firstName.split(" ").contains(body.preferredName)
-                            },
-                        "invalid phone".takeUnless { PHONE_PATTERN.matches(body.phone) },
-                        "invalid backup phone"
-                            .takeUnless {
-                                body.backupPhone.isBlank() ||
-                                    PHONE_PATTERN.matches(body.backupPhone)
-                            },
-                        "invalid email"
-                            .takeUnless {
-                                body.email.isBlank() || EMAIL_PATTERN.matches(body.email)
-                            },
+                        body.preferredName?.let { preferredName ->
+                            "invalid preferredName"
+                                .takeUnless { person.firstName.split(" ").contains(preferredName) }
+                        },
+                        body.phone?.let { phone ->
+                            "invalid phone".takeUnless { PHONE_PATTERN.matches(phone) }
+                        },
+                        body.backupPhone?.let { backupPhone ->
+                            "invalid backup phone"
+                                .takeUnless {
+                                    backupPhone.isBlank() || PHONE_PATTERN.matches(backupPhone)
+                                }
+                        },
+                        body.email?.let { email ->
+                            "invalid email"
+                                .takeUnless { email.isBlank() || EMAIL_PATTERN.matches(email) }
+                        },
                     )
 
                 if (validationErrors.isNotEmpty())
                     throw BadRequest(validationErrors.joinToString(", "))
 
                 tx.updatePersonalDetails(user.id, body)
-                val hasWeakCredentials = tx.hasWeakCredentials(user.id)
-                if (hasWeakCredentials) {
-                    sendEmailVerificationCode(tx, clock, user)
-                }
-                if (body.email != person.email && person.email != null) {
-                    asyncJobRunner.plan(
-                        tx,
-                        listOf(AsyncJob.SendEmailChangedEmail(user.id, person.email)),
-                        runAt = clock.now(),
-                    )
+                if (body.email != null) {
+                    if (tx.hasWeakCredentials(user.id)) {
+                        sendEmailVerificationCode(tx, clock, user)
+                    }
+                    if (body.email != person.email && person.email != null) {
+                        asyncJobRunner.plan(
+                            tx,
+                            listOf(AsyncJob.SendEmailChangedEmail(user.id, person.email)),
+                            runAt = clock.now(),
+                        )
+                    }
                 }
             }
         }
@@ -227,11 +233,28 @@ class PersonalDataControllerCitizen(
                     EmailVerificationStatusResponse(
                         email = emails.email,
                         verifiedEmail = emails.verifiedEmail,
-                        latestVerification = verification?.takeUnless { it.expiresAt < clock.now() },
+                        latestVerification =
+                            verification?.takeUnless { it.expiresAt < clock.now() },
                     )
                 }
             }
             .also { Audit.CitizenEmailVerificationStatusRead.log(targetId = AuditId(user.id)) }
+
+    @GetMapping("/family")
+    fun getFamily(db: Database, user: AuthenticatedUser.Citizen, clock: EvakaClock): FamilyMembers =
+        db.connect { dbc ->
+                dbc.read { tx ->
+                    accessControl.requirePermissionFor(
+                        tx,
+                        user,
+                        clock,
+                        Action.Citizen.Person.READ_FAMILY,
+                        user.id,
+                    )
+                    tx.getFamilyMembersByAdult(user.id, clock.today())
+                }
+            }
+            .also { Audit.CitizenFamilyRead.log(targetId = AuditId(user.id)) }
 
     @PostMapping("/email-verification-code")
     fun sendEmailVerificationCode(
@@ -310,10 +333,11 @@ class PersonalDataControllerCitizen(
         }
     }
 
-    private fun generateConfirmationCode(): String =
-        generateSequence { "0123456789".random(secureRandom.asKotlinRandom()) }
-            .take(CONFIRMATION_CODE_LENGTH)
-            .joinToString(separator = "")
+    private fun generateConfirmationCode(): String = generateSequence {
+        "0123456789".random(secureRandom.asKotlinRandom())
+    }
+        .take(CONFIRMATION_CODE_LENGTH)
+        .joinToString(separator = "")
 
     @GetMapping("/password-constraints")
     fun getPasswordConstraints(user: AuthenticatedUser.Citizen): PasswordConstraints =

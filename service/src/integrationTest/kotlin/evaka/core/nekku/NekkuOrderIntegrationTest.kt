@@ -417,6 +417,53 @@ class NekkuOrderIntegrationTest : FullApplicationTest(resetDbBeforeEach = true) 
     }
 
     @Test
+    fun `daily meal order jobs are not re-planned for days without nekku customer weekday mapping`() {
+
+        val client = TestNekkuClient(customers = weekdayOnlyTestClientCustomers)
+        fetchAndUpdateNekkuCustomers(client, db, asyncJobRunner, now)
+
+        val area = DevCareArea()
+
+        val daycare =
+            DevDaycare(
+                areaId = area.id,
+                mealtimeBreakfast = TimeRange(LocalTime.of(8, 0), LocalTime.of(8, 20)),
+                mealtimeLunch = TimeRange(LocalTime.of(11, 15), LocalTime.of(11, 45)),
+                mealtimeSnack = TimeRange(LocalTime.of(13, 30), LocalTime.of(13, 50)),
+                shiftCareOperationTimes =
+                    listOf(
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                    ),
+            )
+        val group = DevDaycareGroup(daycareId = daycare.id, nekkuCustomerNumber = "2501K6089")
+
+        db.transaction { tx ->
+            tx.insert(area)
+            tx.insert(daycare)
+            tx.insert(group)
+        }
+
+        // Saturday: seed a failed-order row so the planner would otherwise re-plan it
+        val originalDate = LocalDate.of(2025, 3, 29)
+        db.transaction { tx ->
+            tx.setNekkuReportOrderErrorReport(group.id, originalDate, "seeded failure", now)
+        }
+
+        // Friday → daycareOpenNextTime is Saturday
+        val now = HelsinkiDateTime.of(LocalDate.of(2025, 3, 28), LocalTime.of(2, 25))
+
+        planNekkuDailyOrderJobs(db, asyncJobRunner, now)
+
+        assertEquals(0, getNekkuJobs(db).count())
+    }
+
+    @Test
     fun `meal order jobs for daycare groups are re-planned four days before actual date even if there is a faulty order`() {
 
         val client = TestNekkuClient(customers = basicTestClientCustomers)
@@ -439,18 +486,10 @@ class NekkuOrderIntegrationTest : FullApplicationTest(resetDbBeforeEach = true) 
             tx.insert(group)
         }
 
-        // Original order
-        val originalDate = HelsinkiDateTime.of(LocalDate.of(2025, 3, 28), LocalTime.of(2, 25))
-        assertThrows<RuntimeException> {
-            createAndSendNekkuOrder(
-                client,
-                db,
-                group.id,
-                originalDate.toLocalDate(),
-                asyncJobRunner,
-                now,
-                remainingAttempts = 0,
-            )
+        // Seed a previously failed order
+        val originalDate = LocalDate.of(2025, 3, 28)
+        db.transaction { tx ->
+            tx.setNekkuReportOrderErrorReport(group.id, originalDate, "seeded failure", now)
         }
 
         // Monday
@@ -499,16 +538,13 @@ class NekkuOrderIntegrationTest : FullApplicationTest(resetDbBeforeEach = true) 
         // Wednesday
         val now = HelsinkiDateTime.of(LocalDate.of(2025, 3, 26), LocalTime.of(2, 25))
 
-        // Sunday
-        val toFourDays = HelsinkiDateTime.of(LocalDate.of(2025, 3, 30), LocalTime.of(2, 25))
-
         planNekkuSpecifyOrderJobs(db, asyncJobRunner, now)
 
         assertEquals(0, getNekkuJobs(db).count())
     }
 
     @Test
-    fun `meal order jobs for daycare groups are re-planned four days before actual date also on weekend if daycare is open`() {
+    fun `specify meal order jobs are planned four working days before a weekend delivery date if daycare is open`() {
 
         val client = TestNekkuClient(customers = basicTestClientCustomers)
         fetchAndUpdateNekkuCustomers(client, db, asyncJobRunner, now)
@@ -540,29 +576,187 @@ class NekkuOrderIntegrationTest : FullApplicationTest(resetDbBeforeEach = true) 
             tx.insert(group)
         }
 
-        // Original order
-        val originalDate = HelsinkiDateTime.of(LocalDate.of(2025, 3, 30), LocalTime.of(2, 25))
-        assertThrows<RuntimeException> {
-            createAndSendNekkuOrder(
-                client,
-                db,
-                group.id,
-                originalDate.toLocalDate(),
-                asyncJobRunner,
-                now,
-                remainingAttempts = 0,
-            )
+        // Seed a previously failed order
+        val originalDate = LocalDate.of(2025, 3, 30)
+        db.transaction { tx ->
+            tx.setNekkuReportOrderErrorReport(group.id, originalDate, "seeded failure", now)
         }
 
-        // Wednesday
-        val now = HelsinkiDateTime.of(LocalDate.of(2025, 3, 26), LocalTime.of(2, 25))
+        // Tuesday: four working days before the Sunday delivery date
+        val now = HelsinkiDateTime.of(LocalDate.of(2025, 3, 25), LocalTime.of(2, 25))
 
         // Sunday
-        val toFourDays = HelsinkiDateTime.of(LocalDate.of(2025, 3, 30), LocalTime.of(2, 25))
+        val deliveryDate = HelsinkiDateTime.of(LocalDate.of(2025, 3, 30), LocalTime.of(2, 25))
 
         planNekkuSpecifyOrderJobs(db, asyncJobRunner, now)
 
-        assertEquals(toFourDays.toLocalDate().toString(), getNekkuJobs(db).single().date.toString())
+        assertEquals(
+            deliveryDate.toLocalDate().toString(),
+            getNekkuJobs(db).single().date.toString(),
+        )
+    }
+
+    @Test
+    fun `specify meal order jobs are only planned for dates within the nekku customer weekday mapping`() {
+
+        val client = TestNekkuClient(customers = weekdayOnlyTestClientCustomers)
+        fetchAndUpdateNekkuCustomers(client, db, asyncJobRunner, now)
+
+        val area = DevCareArea()
+
+        val daycare =
+            DevDaycare(
+                areaId = area.id,
+                mealtimeBreakfast = TimeRange(LocalTime.of(8, 0), LocalTime.of(8, 20)),
+                mealtimeLunch = TimeRange(LocalTime.of(11, 15), LocalTime.of(11, 45)),
+                mealtimeSnack = TimeRange(LocalTime.of(13, 30), LocalTime.of(13, 50)),
+                operationTimes =
+                    listOf(
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                    ),
+            )
+        val group = DevDaycareGroup(daycareId = daycare.id, nekkuCustomerNumber = "2501K6089")
+
+        db.transaction { tx ->
+            tx.insert(area)
+            tx.insert(daycare)
+            tx.insert(group)
+        }
+
+        // seed all three delivery dates of the Tuesday run, so the planner would plan them all
+        // if it did not filter
+        val saturday = LocalDate.of(2025, 3, 29)
+        val sunday = LocalDate.of(2025, 3, 30)
+        val monday = LocalDate.of(2025, 3, 31)
+        db.transaction { tx ->
+            listOf(saturday, sunday, monday).forEach {
+                tx.setNekkuReportOrderErrorReport(group.id, it, "seeded failure", now)
+            }
+        }
+
+        // Tuesday: the deadline for all three seeded delivery dates
+        val now = HelsinkiDateTime.of(LocalDate.of(2025, 3, 25), LocalTime.of(2, 25))
+
+        planNekkuSpecifyOrderJobs(db, asyncJobRunner, now)
+
+        // the customer takes orders on MON-FRI only, so the weekend delivery dates are dropped
+        assertEquals(monday.toString(), getNekkuJobs(db).single().date.toString())
+    }
+
+    @Test
+    fun `specify meal order jobs are not planned for dates before the group is valid`() {
+
+        val client = TestNekkuClient(customers = basicTestClientCustomers)
+        fetchAndUpdateNekkuCustomers(client, db, asyncJobRunner, now)
+
+        val area = DevCareArea()
+
+        val daycare =
+            DevDaycare(
+                areaId = area.id,
+                mealtimeBreakfast = TimeRange(LocalTime.of(8, 0), LocalTime.of(8, 20)),
+                mealtimeLunch = TimeRange(LocalTime.of(11, 15), LocalTime.of(11, 45)),
+                mealtimeSnack = TimeRange(LocalTime.of(13, 30), LocalTime.of(13, 50)),
+                operationTimes =
+                    listOf(
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                    ),
+            )
+        // the group only becomes valid on the Sunday: the open group lookup covers the whole
+        // delivery date range, so only the per-date validity check can drop the Saturday
+        val sunday = LocalDate.of(2025, 3, 30)
+        val group =
+            DevDaycareGroup(
+                daycareId = daycare.id,
+                nekkuCustomerNumber = "2501K6089",
+                startDate = sunday,
+            )
+
+        db.transaction { tx ->
+            tx.insert(area)
+            tx.insert(daycare)
+            tx.insert(group)
+        }
+
+        val saturday = LocalDate.of(2025, 3, 29)
+        val monday = LocalDate.of(2025, 3, 31)
+        db.transaction { tx ->
+            listOf(saturday, sunday, monday).forEach {
+                tx.setNekkuReportOrderErrorReport(group.id, it, "seeded failure", now)
+            }
+        }
+
+        // Tuesday: the deadline for all three seeded delivery dates
+        val now = HelsinkiDateTime.of(LocalDate.of(2025, 3, 25), LocalTime.of(2, 25))
+
+        planNekkuSpecifyOrderJobs(db, asyncJobRunner, now)
+
+        assertEquals(listOf(sunday, monday), getNekkuJobs(db).map { it.date }.sorted())
+    }
+
+    @Test
+    fun `a single specify run plans jobs for every delivery date whose deadline is that day`() {
+
+        val client = TestNekkuClient(customers = basicTestClientCustomers)
+        fetchAndUpdateNekkuCustomers(client, db, asyncJobRunner, now)
+
+        val area = DevCareArea()
+
+        val daycare =
+            DevDaycare(
+                areaId = area.id,
+                mealtimeBreakfast = TimeRange(LocalTime.of(8, 0), LocalTime.of(8, 20)),
+                mealtimeLunch = TimeRange(LocalTime.of(11, 15), LocalTime.of(11, 45)),
+                mealtimeSnack = TimeRange(LocalTime.of(13, 30), LocalTime.of(13, 50)),
+                // closed on Saturdays
+                operationTimes =
+                    listOf(
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                        null,
+                        TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59")),
+                    ),
+            )
+        val group = DevDaycareGroup(daycareId = daycare.id, nekkuCustomerNumber = "2501K6089")
+
+        db.transaction { tx ->
+            tx.insert(area)
+            tx.insert(daycare)
+            tx.insert(group)
+        }
+
+        // Tuesday is the deadline for Saturday, Sunday and the following Monday alike
+        val saturday = LocalDate.of(2025, 3, 29)
+        val sunday = LocalDate.of(2025, 3, 30)
+        val monday = LocalDate.of(2025, 3, 31)
+        db.transaction { tx ->
+            listOf(saturday, sunday, monday).forEach {
+                tx.setNekkuReportOrderErrorReport(group.id, it, "seeded failure", now)
+            }
+        }
+
+        // Tuesday
+        val now = HelsinkiDateTime.of(LocalDate.of(2025, 3, 25), LocalTime.of(2, 25))
+
+        planNekkuSpecifyOrderJobs(db, asyncJobRunner, now)
+
+        // the group is not open on the Saturday, so only the other two are specified
+        assertEquals(listOf(sunday, monday), getNekkuJobs(db).map { it.date }.sorted())
     }
 
     @Test
@@ -3186,10 +3380,9 @@ class NekkuOrderIntegrationTest : FullApplicationTest(resetDbBeforeEach = true) 
         )
         val plannedJobs = getNekkuJobs(db)
 
-        val expectedJobs =
-            expectedOrders.flatMap { (groupId, days) ->
-                days.map { day -> AsyncJob.SendNekkuOrder(groupId, day) }
-            }
+        val expectedJobs = expectedOrders.flatMap { (groupId, days) ->
+            days.map { day -> AsyncJob.SendNekkuOrder(groupId, day) }
+        }
 
         assertEquals(expectedJobs.toSet(), plannedJobs.toSet())
     }

@@ -31,6 +31,7 @@ import evaka.core.shared.dev.insert
 import evaka.core.shared.dev.insertTestApplication
 import evaka.core.shared.domain.HelsinkiDateTime
 import evaka.core.shared.domain.MockEvakaClock
+import evaka.core.shared.security.Action
 import evaka.core.snPreschoolClub45
 import evaka.core.snPreschoolDaycare45
 import java.time.LocalDate
@@ -327,37 +328,67 @@ class ApplicationSearchIntegrationTest : FullApplicationTest(resetDbBeforeEach =
     }
 
     @Test
-    fun `application summary has details of sibling basis`() {
-        val applicationId =
-            db.transaction { tx ->
-                tx.insert(
-                    DevPlacement(
-                        type = PlacementType.DAYCARE,
-                        childId = child2.id,
-                        unitId = daycare.id,
-                        startDate = now.today().minusMonths(12),
-                        endDate = now.today().plusMonths(6),
-                    )
-                )
-                tx.insertTestApplication(
-                    childId = child4.id,
-                    guardianId = adult.id,
-                    type = ApplicationType.DAYCARE,
-                    document =
-                        DaycareFormV0(
-                            type = ApplicationType.DAYCARE,
-                            child = Child(dateOfBirth = null),
-                            guardian = Adult(),
-                            apply =
-                                Apply(
-                                    preferredUnits = listOf(daycare.id),
-                                    siblingBasis = true,
-                                    siblingSsn = child2.ssn!!,
-                                    siblingName = "does not matter",
-                                ),
-                        ),
-                )
+    fun `service worker search rows include MOVE_TO_WAITING_PLACEMENT in permittedActions`() {
+        val summary =
+            getApplicationSummaries(
+                type = ApplicationTypeToggle.ALL,
+                status = setOf(ApplicationStatusOption.SENT),
+            )
+        assertEquals(3, summary.total)
+        summary.data.forEach { row ->
+            assert(Action.Application.MOVE_TO_WAITING_PLACEMENT in row.permittedActions) {
+                "Expected MOVE_TO_WAITING_PLACEMENT in permittedActions for application ${row.id}"
             }
+        }
+    }
+
+    @Test
+    fun `service worker search rows do not include ADMIN-only READ_METADATA in permittedActions`() {
+        // READ_METADATA is restricted to ADMIN only; SERVICE_WORKER must not get it
+        val summary =
+            getApplicationSummaries(
+                type = ApplicationTypeToggle.ALL,
+                status = setOf(ApplicationStatusOption.SENT),
+            )
+        assertEquals(3, summary.total)
+        summary.data.forEach { row ->
+            assert(Action.Application.READ_METADATA !in row.permittedActions) {
+                "Expected READ_METADATA to be absent from permittedActions for SERVICE_WORKER on application ${row.id}"
+            }
+        }
+    }
+
+    @Test
+    fun `application summary has details of sibling basis`() {
+        val applicationId = db.transaction { tx ->
+            tx.insert(
+                DevPlacement(
+                    type = PlacementType.DAYCARE,
+                    childId = child2.id,
+                    unitId = daycare.id,
+                    startDate = now.today().minusMonths(12),
+                    endDate = now.today().plusMonths(6),
+                )
+            )
+            tx.insertTestApplication(
+                childId = child4.id,
+                guardianId = adult.id,
+                type = ApplicationType.DAYCARE,
+                document =
+                    DaycareFormV0(
+                        type = ApplicationType.DAYCARE,
+                        child = Child(dateOfBirth = null),
+                        guardian = Adult(),
+                        apply =
+                            Apply(
+                                preferredUnits = listOf(daycare.id),
+                                siblingBasis = true,
+                                siblingSsn = child2.ssn!!,
+                                siblingName = "does not matter",
+                            ),
+                    ),
+            )
+        }
         val summary =
             getApplicationSummaries(
                     type = ApplicationTypeToggle.ALL,
@@ -424,32 +455,31 @@ class ApplicationSearchIntegrationTest : FullApplicationTest(resetDbBeforeEach =
         additionalDaycareApplication: Boolean = false,
         serviceNeedOption: ServiceNeedOption? = null,
     ): ApplicationId {
-        val applicationId =
-            db.transaction { tx ->
-                tx.insertTestApplication(
-                    childId = child.id,
-                    guardianId = guardian.id,
-                    type = type,
-                    additionalDaycareApplication = additionalDaycareApplication,
-                    document =
-                        DaycareFormV0(
-                            type = type,
-                            child = Child(dateOfBirth = null),
-                            guardian = Adult(),
-                            apply = Apply(preferredUnits = listOf(daycare.id)),
-                            urgent = urgent,
-                            extendedCare = extendedCare,
-                            connectedDaycare =
-                                if (type == ApplicationType.PRESCHOOL) connectedDaycare else null,
-                            serviceNeedOption = serviceNeedOption,
-                            careDetails =
-                                CareDetails(
-                                    preparatory =
-                                        if (type == ApplicationType.PRESCHOOL) preparatory else null
-                                ),
-                        ),
-                )
-            }
+        val applicationId = db.transaction { tx ->
+            tx.insertTestApplication(
+                childId = child.id,
+                guardianId = guardian.id,
+                type = type,
+                additionalDaycareApplication = additionalDaycareApplication,
+                document =
+                    DaycareFormV0(
+                        type = type,
+                        child = Child(dateOfBirth = null),
+                        guardian = Adult(),
+                        apply = Apply(preferredUnits = listOf(daycare.id)),
+                        urgent = urgent,
+                        extendedCare = extendedCare,
+                        connectedDaycare =
+                            if (type == ApplicationType.PRESCHOOL) connectedDaycare else null,
+                        serviceNeedOption = serviceNeedOption,
+                        careDetails =
+                            CareDetails(
+                                preparatory =
+                                    if (type == ApplicationType.PRESCHOOL) preparatory else null
+                            ),
+                    ),
+            )
+        }
 
         if (attachment) {
             attachmentsController.uploadApplicationAttachment(

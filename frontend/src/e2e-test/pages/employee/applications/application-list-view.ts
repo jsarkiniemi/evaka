@@ -23,6 +23,7 @@ import {
 import { PlacementDraftPage } from '../placement-draft-page'
 
 import ApplicationReadView from './application-read-view'
+import { DecisionDraftPage } from './decision-draft-page'
 
 export default class ApplicationListView {
   applicationStatus: Element
@@ -170,6 +171,11 @@ export class ApplicationRow extends Element {
     return new DecisionEditorPage(this.page)
   }
 
+  async primaryActionEditDecisionsRedesign() {
+    await this.root.findByDataQa('primary-action-edit-decisions').click()
+    return new DecisionDraftPage(this.page)
+  }
+
   async assertStartDate(date: LocalDate) {
     await expect(this.root.findByDataQa('start-date')).toHaveText(date.format())
   }
@@ -178,7 +184,7 @@ export class ApplicationRow extends Element {
     const note = this.root.findByDataQa('service-worker-note')
     await note.hover()
     const tooltip = await note.text
-    const match = tooltip.match(matchingText)
+    const match = RegExp(matchingText).exec(tooltip)
     return match ? match.length > 0 : false
   }
 }

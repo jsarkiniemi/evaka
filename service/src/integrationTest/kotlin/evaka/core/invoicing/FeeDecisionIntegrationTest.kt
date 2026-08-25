@@ -8,6 +8,7 @@ import evaka.core.EmailEnv
 import evaka.core.FullApplicationTest
 import evaka.core.caseprocess.CaseProcessState
 import evaka.core.caseprocess.ProcessMetadataController
+import evaka.core.caseprocess.ProcessType
 import evaka.core.caseprocess.getCaseProcessByFeeDecisionId
 import evaka.core.emailclient.Email
 import evaka.core.emailclient.IEmailMessageProvider
@@ -72,6 +73,7 @@ import evaka.core.snDaycarePartDay25
 import evaka.core.snDefaultDaycare
 import evaka.core.toFeeDecisionServiceNeed
 import java.time.LocalDate
+import java.time.LocalTime
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -910,6 +912,304 @@ class FeeDecisionIntegrationTest : FullApplicationTest(resetDbBeforeEach = true)
     }
 
     @Test
+    fun `search with NO_OPEN_INCOME_STATEMENTS excludes decisions with open statements during decision period`() {
+        val clock =
+            MockEvakaClock(HelsinkiDateTime.of(LocalDate.of(2024, 6, 15), LocalTime.of(12, 0)))
+        val decisionWithMidPeriodOpenStatement =
+            createFeeDecisionsForFamily(
+                headOfFamily = adult1,
+                partner = null,
+                familyChildren = listOf(child1),
+                period = FiniteDateRange(clock.today().plusMonths(1), clock.today().plusMonths(6)),
+            )
+        val decisionWithNoOpenStatements =
+            createFeeDecisionsForFamily(
+                headOfFamily = adult3,
+                partner = null,
+                familyChildren = listOf(child2),
+                period = FiniteDateRange(clock.today().plusMonths(1), clock.today().plusMonths(6)),
+            )
+
+        db.transaction { tx ->
+            tx.upsertFeeDecisions(
+                listOf(decisionWithMidPeriodOpenStatement, decisionWithNoOpenStatements)
+            )
+
+            tx.insert(
+                DevIncomeStatement(
+                    personId = adult1.id,
+                    data =
+                        IncomeStatementBody.HighestFee(
+                            clock.today().plusMonths(3),
+                            clock.today().plusMonths(5),
+                        ),
+                    status = IncomeStatementStatus.SENT,
+                    handledAt = null,
+                    handlerId = null,
+                )
+            )
+        }
+
+        val result =
+            searchDecisions(
+                SearchFeeDecisionRequest(
+                    page = 0,
+                    distinctions = listOf(DistinctiveParams.NO_OPEN_INCOME_STATEMENTS),
+                )
+            )
+
+        assertEqualEnough(listOf(toSummary(decisionWithNoOpenStatements)), result.data)
+    }
+
+    @Test
+    fun `search with NO_OPEN_INCOME_STATEMENTS excludes decisions when statement starts exactly on decision end`() {
+        val clock =
+            MockEvakaClock(HelsinkiDateTime.of(LocalDate.of(2024, 6, 15), LocalTime.of(12, 0)))
+        val decisionStart = clock.today().plusMonths(1)
+        val decisionEnd = clock.today().plusMonths(6)
+
+        val decision =
+            createFeeDecisionsForFamily(
+                headOfFamily = adult1,
+                partner = null,
+                familyChildren = listOf(child1),
+                period = FiniteDateRange(decisionStart, decisionEnd),
+            )
+
+        db.transaction { tx ->
+            tx.upsertFeeDecisions(listOf(decision))
+
+            tx.insert(
+                DevIncomeStatement(
+                    personId = adult1.id,
+                    data = IncomeStatementBody.HighestFee(decisionEnd, decisionEnd.plusMonths(2)),
+                    status = IncomeStatementStatus.SENT,
+                    handledAt = null,
+                    handlerId = null,
+                )
+            )
+        }
+
+        val result =
+            searchDecisions(
+                SearchFeeDecisionRequest(
+                    page = 0,
+                    distinctions = listOf(DistinctiveParams.NO_OPEN_INCOME_STATEMENTS),
+                )
+            )
+
+        assertEqualEnough(listOf(), result.data)
+    }
+
+    @Test
+    fun `search with NO_OPEN_INCOME_STATEMENTS excludes decisions when statement ends exactly on decision start`() {
+        val clock =
+            MockEvakaClock(HelsinkiDateTime.of(LocalDate.of(2024, 6, 15), LocalTime.of(12, 0)))
+        val decisionStart = clock.today().plusMonths(1)
+        val decisionEnd = clock.today().plusMonths(6)
+
+        val decision =
+            createFeeDecisionsForFamily(
+                headOfFamily = adult1,
+                partner = null,
+                familyChildren = listOf(child1),
+                period = FiniteDateRange(decisionStart, decisionEnd),
+            )
+
+        db.transaction { tx ->
+            tx.upsertFeeDecisions(listOf(decision))
+
+            tx.insert(
+                DevIncomeStatement(
+                    personId = adult1.id,
+                    data =
+                        IncomeStatementBody.HighestFee(decisionStart.minusMonths(2), decisionStart),
+                    status = IncomeStatementStatus.SENT,
+                    handledAt = null,
+                    handlerId = null,
+                )
+            )
+        }
+
+        val result =
+            searchDecisions(
+                SearchFeeDecisionRequest(
+                    page = 0,
+                    distinctions = listOf(DistinctiveParams.NO_OPEN_INCOME_STATEMENTS),
+                )
+            )
+
+        assertEqualEnough(listOf(), result.data)
+    }
+
+    @Test
+    fun `search with NO_OPEN_INCOME_STATEMENTS excludes decisions when open statement belongs to partner`() {
+        val clock =
+            MockEvakaClock(HelsinkiDateTime.of(LocalDate.of(2024, 6, 15), LocalTime.of(12, 0)))
+        val decision =
+            createFeeDecisionsForFamily(
+                headOfFamily = adult1,
+                partner = adult2,
+                familyChildren = listOf(child1),
+                period = FiniteDateRange(clock.today().plusMonths(1), clock.today().plusMonths(6)),
+            )
+
+        db.transaction { tx ->
+            tx.upsertFeeDecisions(listOf(decision))
+
+            tx.insert(
+                DevIncomeStatement(
+                    personId = adult2.id,
+                    data =
+                        IncomeStatementBody.HighestFee(
+                            clock.today().plusMonths(3),
+                            clock.today().plusMonths(5),
+                        ),
+                    status = IncomeStatementStatus.SENT,
+                    handledAt = null,
+                    handlerId = null,
+                )
+            )
+        }
+
+        val result =
+            searchDecisions(
+                SearchFeeDecisionRequest(
+                    page = 0,
+                    distinctions = listOf(DistinctiveParams.NO_OPEN_INCOME_STATEMENTS),
+                )
+            )
+
+        assertEqualEnough(listOf(), result.data)
+    }
+
+    @Test
+    fun `search with NO_OPEN_INCOME_STATEMENTS excludes decisions when open statement belongs to child`() {
+        val clock =
+            MockEvakaClock(HelsinkiDateTime.of(LocalDate.of(2024, 6, 15), LocalTime.of(12, 0)))
+        val decision =
+            createFeeDecisionsForFamily(
+                headOfFamily = adult1,
+                partner = null,
+                familyChildren = listOf(child1),
+                period = FiniteDateRange(clock.today().plusMonths(1), clock.today().plusMonths(6)),
+            )
+
+        db.transaction { tx ->
+            tx.upsertFeeDecisions(listOf(decision))
+
+            tx.insert(
+                DevIncomeStatement(
+                    personId = child1.id,
+                    data =
+                        IncomeStatementBody.HighestFee(
+                            clock.today().plusMonths(3),
+                            clock.today().plusMonths(5),
+                        ),
+                    status = IncomeStatementStatus.SENT,
+                    handledAt = null,
+                    handlerId = null,
+                )
+            )
+        }
+
+        val result =
+            searchDecisions(
+                SearchFeeDecisionRequest(
+                    page = 0,
+                    distinctions = listOf(DistinctiveParams.NO_OPEN_INCOME_STATEMENTS),
+                )
+            )
+
+        assertEqualEnough(listOf(), result.data)
+    }
+
+    @Test
+    fun `search with NO_OPEN_INCOME_STATEMENTS includes decisions when in-period statement is HANDLED`() {
+        val clock =
+            MockEvakaClock(HelsinkiDateTime.of(LocalDate.of(2024, 6, 15), LocalTime.of(12, 0)))
+        val decision =
+            createFeeDecisionsForFamily(
+                headOfFamily = adult1,
+                partner = null,
+                familyChildren = listOf(child1),
+                period = FiniteDateRange(clock.today().plusMonths(1), clock.today().plusMonths(6)),
+            )
+
+        db.transaction { tx ->
+            tx.upsertFeeDecisions(listOf(decision))
+
+            tx.insert(
+                DevIncomeStatement(
+                    personId = adult1.id,
+                    data =
+                        IncomeStatementBody.HighestFee(
+                            clock.today().plusMonths(3),
+                            clock.today().plusMonths(5),
+                        ),
+                    status = IncomeStatementStatus.HANDLED,
+                    handledAt = clock.now(),
+                    handlerId = decisionMaker1.id,
+                )
+            )
+        }
+
+        val result =
+            searchDecisions(
+                SearchFeeDecisionRequest(
+                    page = 0,
+                    distinctions = listOf(DistinctiveParams.NO_OPEN_INCOME_STATEMENTS),
+                )
+            )
+
+        assertEqualEnough(listOf(toSummary(decision)), result.data)
+    }
+
+    @Test
+    fun `search with NO_OPEN_INCOME_STATEMENTS includes decisions when open statement starts the day after decision end`() {
+        val clock =
+            MockEvakaClock(HelsinkiDateTime.of(LocalDate.of(2024, 6, 15), LocalTime.of(12, 0)))
+        val decisionStart = clock.today().plusMonths(1)
+        val decisionEnd = clock.today().plusMonths(6)
+
+        val decision =
+            createFeeDecisionsForFamily(
+                headOfFamily = adult1,
+                partner = null,
+                familyChildren = listOf(child1),
+                period = FiniteDateRange(decisionStart, decisionEnd),
+            )
+
+        db.transaction { tx ->
+            tx.upsertFeeDecisions(listOf(decision))
+
+            tx.insert(
+                DevIncomeStatement(
+                    personId = adult1.id,
+                    data =
+                        IncomeStatementBody.HighestFee(
+                            decisionEnd.plusDays(1),
+                            decisionEnd.plusMonths(2),
+                        ),
+                    status = IncomeStatementStatus.SENT,
+                    handledAt = null,
+                    handlerId = null,
+                )
+            )
+        }
+
+        val result =
+            searchDecisions(
+                SearchFeeDecisionRequest(
+                    page = 0,
+                    distinctions = listOf(DistinctiveParams.NO_OPEN_INCOME_STATEMENTS),
+                )
+            )
+
+        assertEqualEnough(listOf(toSummary(decision)), result.data)
+    }
+
+    @Test
     fun `search works as expected with existing area param`() {
         db.transaction { tx -> tx.upsertFeeDecisions(testDecisions) }
 
@@ -950,10 +1250,9 @@ class FeeDecisionIntegrationTest : FullApplicationTest(resetDbBeforeEach = true)
 
         val result = searchDecisions(SearchFeeDecisionRequest(page = 0, unit = daycare1.id))
 
-        val expected =
-            testDecisions.filter { decision ->
-                decision.children.any { it.placement.unitId == daycare1.id }
-            }
+        val expected = testDecisions.filter { decision ->
+            decision.children.any { it.placement.unitId == daycare1.id }
+        }
         assertEqualEnough(expected.map(::toSummary), result.data)
     }
 
@@ -1163,6 +1462,11 @@ class FeeDecisionIntegrationTest : FullApplicationTest(resetDbBeforeEach = true)
                 draft.id,
             )
         assertEquals(process.caseIdentifier, metadata.data?.process?.caseIdentifier)
+        assertEquals(ProcessType.FEE_DECISION, metadata.data?.processType)
+        assertEquals(
+            FinanceDecisionType.FEE_DECISION,
+            metadata.data?.primaryDocument?.financeDecisionType,
+        )
     }
 
     @Test
@@ -1586,10 +1890,9 @@ class FeeDecisionIntegrationTest : FullApplicationTest(resetDbBeforeEach = true)
 
     @Test
     fun `confirmDrafts ignores decisions that have related manual sending decisions`() {
-        val toBeCreatedDecisions =
-            testDecisions.filter {
-                it.status == FeeDecisionStatus.DRAFT && it.decisionType == FeeDecisionType.NORMAL
-            }
+        val toBeCreatedDecisions = testDecisions.filter {
+            it.status == FeeDecisionStatus.DRAFT && it.decisionType == FeeDecisionType.NORMAL
+        }
         db.transaction { tx -> tx.upsertFeeDecisions(toBeCreatedDecisions) }
         val notToBeCreated = toBeCreatedDecisions.first()
         val requiresManualSending =
@@ -1613,10 +1916,9 @@ class FeeDecisionIntegrationTest : FullApplicationTest(resetDbBeforeEach = true)
 
     @Test
     fun `confirmDrafts ignores decisions that have related decision waiting for sending`() {
-        val toBeCreatedDecisions =
-            testDecisions.filter {
-                it.status == FeeDecisionStatus.DRAFT && it.decisionType == FeeDecisionType.NORMAL
-            }
+        val toBeCreatedDecisions = testDecisions.filter {
+            it.status == FeeDecisionStatus.DRAFT && it.decisionType == FeeDecisionType.NORMAL
+        }
         db.transaction { tx -> tx.upsertFeeDecisions(toBeCreatedDecisions) }
         val notToBeCreated = toBeCreatedDecisions.first()
         val requiresSending =
@@ -2572,6 +2874,7 @@ class FeeDecisionIntegrationTest : FullApplicationTest(resetDbBeforeEach = true)
         asyncJobRunner.runPendingJobsSync(MockEvakaClock(HelsinkiDateTime.now()))
 
         val messageId = MockSfiMessagesClient.getMessages().first().messageId
+        val expectedEventTime = MockSfiMessagesClient.getEvents().first().events.first().eventTime
 
         db.read { assertEquals(0, it.getSfiGetEventsContinuationTokens().size) }
 
@@ -2581,6 +2884,7 @@ class FeeDecisionIntegrationTest : FullApplicationTest(resetDbBeforeEach = true)
             val processedEvents = it.getSfiMessageEventsByMessageId(messageId)
             assertEquals(1, processedEvents.size)
             assertEquals(EventType.ELECTRONIC_MESSAGE_CREATED, processedEvents[0].eventType)
+            assertEquals(expectedEventTime, processedEvents[0].eventTime)
 
             assertEquals(1, it.getSfiGetEventsContinuationTokens().size)
         }

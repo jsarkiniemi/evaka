@@ -8,10 +8,7 @@ import { useLocation } from 'wouter'
 
 import type { BoundForm } from 'lib-common/form/hooks'
 import { useFormFields } from 'lib-common/form/hooks'
-import type {
-  CalendarEvent,
-  CalendarEventType
-} from 'lib-common/generated/api-types/calendarevent'
+import type { CalendarEvent } from 'lib-common/generated/api-types/calendarevent'
 import type {
   ChildId,
   DaycareId,
@@ -19,7 +16,7 @@ import type {
 } from 'lib-common/generated/api-types/shared'
 import { cancelMutation } from 'lib-common/query'
 import type { UUID } from 'lib-common/types'
-import { LegacyButton } from 'lib-components/atoms/buttons/LegacyButton'
+import { Button } from 'lib-components/atoms/buttons/Button'
 import { MutateButton } from 'lib-components/atoms/buttons/MutateButton'
 import type { TreeNode } from 'lib-components/atoms/dropdowns/TreeDropdown'
 import TreeDropdown, {
@@ -181,7 +178,7 @@ export default React.memo(function DiscussionSurveyForm({
       </SurveyFormSectionGroup>
 
       <FixedSpaceRow $justifyContent="flex-start" $alignItems="center">
-        <LegacyButton
+        <Button
           text={t.discussionReservation.cancelButton}
           onClick={() => setCancelConfirmModalVisible(true)}
           data-qa="cancel-button"
@@ -235,7 +232,7 @@ export default React.memo(function DiscussionSurveyForm({
                     title: values.title,
                     description: values.description,
                     times: values.times,
-                    eventType: 'DISCUSSION_SURVEY' as CalendarEventType,
+                    eventType: 'DISCUSSION_SURVEY' as const,
                     tree: getTreeSelectionAsRecord(values.attendees),
                     period: getPeriodFromDatesOrToday(
                       values.times.map((t) => t.date)

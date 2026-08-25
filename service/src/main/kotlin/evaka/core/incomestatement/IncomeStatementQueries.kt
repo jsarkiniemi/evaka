@@ -97,6 +97,7 @@ SELECT
     ist.created_at,
     ist.modified_at,
     ist.sent_at,
+    ist.citizen_modified_at,
     ist.handled_at,
     status,
     handler_note,
@@ -144,6 +145,7 @@ private fun Row.mapIncomeStatement(isCitizen: Boolean): IncomeStatement {
     val createdAt = column<HelsinkiDateTime>("created_at")
     val modifiedAt = column<HelsinkiDateTime>("modified_at")
     val sentAt = column<HelsinkiDateTime?>("sent_at")
+    val citizenModifiedAt = column<HelsinkiDateTime?>("citizen_modified_at")
     val handledAt = column<HelsinkiDateTime?>("handled_at")
     val status = column<IncomeStatementStatus>("status")
     val handlerNote = if (isCitizen) "" else column("handler_note")
@@ -159,6 +161,7 @@ private fun Row.mapIncomeStatement(isCitizen: Boolean): IncomeStatement {
                 createdAt = createdAt,
                 modifiedAt = modifiedAt,
                 sentAt = sentAt,
+                citizenModifiedAt = citizenModifiedAt,
                 handledAt = handledAt,
                 status = status,
                 handlerNote = handlerNote,
@@ -261,6 +264,7 @@ private fun Row.mapIncomeStatement(isCitizen: Boolean): IncomeStatement {
                 createdAt = createdAt,
                 modifiedAt = modifiedAt,
                 sentAt = sentAt,
+                citizenModifiedAt = citizenModifiedAt,
                 handledAt = handledAt,
                 status = status,
                 handlerNote = handlerNote,
@@ -279,6 +283,7 @@ private fun Row.mapIncomeStatement(isCitizen: Boolean): IncomeStatement {
                 createdAt = createdAt,
                 modifiedAt = modifiedAt,
                 sentAt = sentAt,
+                citizenModifiedAt = citizenModifiedAt,
                 handledAt = handledAt,
                 status = status,
                 handlerNote = handlerNote,
@@ -436,8 +441,8 @@ fun Database.Transaction.insertIncomeStatement(
 ): IncomeStatementId {
     val bindings = IncomeStatementBindings.of(body)
     return createQuery {
-            sql(
-                """
+        sql(
+            """
 INSERT INTO income_statement (
     created_at,
     created_by,
@@ -515,8 +520,8 @@ INSERT INTO income_statement (
 )
 RETURNING id
         """
-            )
-        }
+        )
+    }
         .exactlyOne()
 }
 
@@ -529,8 +534,8 @@ fun Database.Transaction.updateIncomeStatement(
 ) {
     val bindings = IncomeStatementBindings.of(body)
     createUpdate {
-            sql(
-                """
+        sql(
+            """
 UPDATE income_statement SET
     modified_at = ${bind(now)},
     modified_by = ${bind(userId)},
@@ -567,8 +572,8 @@ UPDATE income_statement SET
     other_info = ${bind(bindings.otherInfo)}
 WHERE id = ${bind(incomeStatementId)}
         """
-            )
-        }
+        )
+    }
         .updateExactlyOne()
 }
 
@@ -642,7 +647,7 @@ data class IncomeStatementAwaitingHandler(
 private fun awaitingHandlerQuery(
     today: LocalDate,
     areas: List<String>,
-    unit: DaycareId?,
+    unitIds: List<DaycareId>,
     providerTypes: List<ProviderType>,
     sentStartDate: LocalDate?,
     sentEndDate: LocalDate?,
@@ -653,22 +658,22 @@ private fun awaitingHandlerQuery(
         PredicateSql.allNotNull(
             PredicateSql { where("ca.short_name = ANY(${bind(areas)})") }
                 .takeIf { areas.isNotEmpty() },
-            PredicateSql { where("d.id = ${bind(unit)}") }.takeIf { unit != null },
+            PredicateSql { where("d.id = ANY(${bind(unitIds)})") }.takeIf { unitIds.isNotEmpty() },
             PredicateSql { where("d.provider_type = ANY(${bind(providerTypes)})") }
                 .takeIf { providerTypes.isNotEmpty() },
             PredicateSql {
-                    where(
-                        "p.start_date IS NOT NULL AND p.end_date IS NOT NULL AND daterange(p.start_date, p.end_date, '[]') @> ${bind(placementValidDate)}"
-                    )
-                }
+                where(
+                    "p.start_date IS NOT NULL AND p.end_date IS NOT NULL AND daterange(p.start_date, p.end_date, '[]') @> ${bind(placementValidDate)}"
+                )
+            }
                 .takeIf { placementValidDate != null },
             PredicateSql { where("i.status = ANY(${bind(status)})") }
                 .takeIf { status.isNotEmpty() },
             PredicateSql {
-                    where(
-                        "i.status = 'SENT'::income_statement_status OR i.status = 'HANDLING'::income_statement_status"
-                    )
-                }
+                where(
+                    "i.status = 'SENT'::income_statement_status OR i.status = 'HANDLING'::income_statement_status"
+                )
+            }
                 .takeIf { status.isEmpty() },
         )
     val sentStart = sentStartDate?.let { HelsinkiDateTime.atStartOfDay(it) }
@@ -749,7 +754,7 @@ data class PagedIncomeStatementsAwaitingHandler(
 fun Database.Read.fetchIncomeStatementsAwaitingHandler(
     today: LocalDate,
     areas: List<String>,
-    unit: DaycareId?,
+    unitIds: List<DaycareId>,
     providerTypes: List<ProviderType>,
     sentStartDate: LocalDate?,
     sentEndDate: LocalDate?,
@@ -764,7 +769,7 @@ fun Database.Read.fetchIncomeStatementsAwaitingHandler(
         awaitingHandlerQuery(
             today,
             areas,
-            unit,
+            unitIds,
             providerTypes,
             sentStartDate,
             sentEndDate,
@@ -797,17 +802,16 @@ fun Database.Read.fetchIncomeStatementsAwaitingHandler(
     val primarySort = primaryColumns.joinToString(", ") { "$it ${sortDirection.name}" }
     val secondarySort = secondarySortColumns.filter { it !in primaryColumnNames }.joinToString(", ")
     val sortExpression = "$primarySort, $secondarySort"
-    val rows =
-        createQuery {
-                sql(
-                    """
+    val rows = createQuery {
+        sql(
+            """
 SELECT * FROM (${subquery(query)}) q
 ORDER BY $sortExpression, id
 LIMIT ${bind(pageSize)} OFFSET ${bind((page - 1) * pageSize)}
 """
-                )
-            }
-            .toList<IncomeStatementAwaitingHandler>()
+        )
+    }
+        .toList<IncomeStatementAwaitingHandler>()
 
     return if (rows.isEmpty()) {
         PagedIncomeStatementsAwaitingHandler(listOf(), 0, 1)
@@ -816,40 +820,37 @@ LIMIT ${bind(pageSize)} OFFSET ${bind((page - 1) * pageSize)}
     }
 }
 
-fun Database.Read.readIncomeStatementStartDates(personId: PersonId): List<LocalDate> =
-    createQuery {
-            sql("SELECT start_date FROM income_statement WHERE person_id = ${bind(personId)}")
-        }
-        .toList()
+fun Database.Read.readIncomeStatementStartDates(personId: PersonId): List<LocalDate> = createQuery {
+    sql("SELECT start_date FROM income_statement WHERE person_id = ${bind(personId)}")
+}
+    .toList()
 
 fun Database.Read.unhandledIncomeStatementExistsForStartDate(
     personId: PersonId,
     startDate: LocalDate,
-): Boolean =
-    createQuery {
-            sql(
-                """
+): Boolean = createQuery {
+    sql(
+        """
                 SELECT EXISTS (
                     SELECT FROM income_statement 
                     WHERE person_id = ${bind(personId)} AND start_date = ${bind(startDate)} AND status != 'HANDLED'
                 )
             """
-            )
-        }
-        .exactlyOne()
+    )
+}
+    .exactlyOne()
 
-fun Database.Read.citizenHasUnhandledIncomeStatements(personId: PersonId): Boolean =
-    createQuery {
-            sql(
-                """
+fun Database.Read.citizenHasUnhandledIncomeStatements(personId: PersonId): Boolean = createQuery {
+    sql(
+        """
                 SELECT EXISTS (
                     SELECT FROM income_statement
                     WHERE person_id = ${bind(personId)} AND status = ANY(${bind(listOf(IncomeStatementStatus.SENT, IncomeStatementStatus.HANDLING))})
                 )
             """
-            )
-        }
-        .exactlyOne()
+    )
+}
+    .exactlyOne()
 
 data class ChildBasicInfo(val id: ChildId, val firstName: String, val lastName: String)
 
@@ -878,10 +879,9 @@ data class PartnerIncomeStatementStatus(val name: String, val hasIncomeStatement
 fun Database.Read.getPartnerIncomeStatementStatus(
     personId: PersonId,
     today: LocalDate,
-): PartnerIncomeStatementStatus? =
-    createQuery {
-            sql(
-                """
+): PartnerIncomeStatementStatus? = createQuery {
+    sql(
+        """
     SELECT 
         partner_first_name || ' ' || partner_last_name AS name,
         (
@@ -899,6 +899,6 @@ fun Database.Read.getPartnerIncomeStatementStatus(
         AND daterange(fp.start_date, fp.end_date, '[]') @> ${bind(today)}
         AND NOT fp.conflict 
 """
-            )
-        }
-        .exactlyOneOrNull()
+    )
+}
+    .exactlyOneOrNull()

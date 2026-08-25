@@ -79,61 +79,45 @@ class NekkuService(
         clock: EvakaClock,
         job: AsyncJob.SyncNekkuCustomers,
     ) {
-        if (client == null) error("Cannot sync Nekku customers: NekkuEnv is not configured")
-        fetchAndUpdateNekkuCustomers(client, db, asyncJobRunner, clock.now())
+        runSync("customers") { fetchAndUpdateNekkuCustomers(it, db, asyncJobRunner, clock.now()) }
     }
 
-    fun planNekkuCustomersSync(db: Database.Connection, clock: EvakaClock) {
-        db.transaction { tx ->
-            tx.removeUnclaimedJobs(setOf(AsyncJobType(AsyncJob.SyncNekkuCustomers::class)))
-            asyncJobRunner.plan(
-                tx,
-                listOf(AsyncJob.SyncNekkuCustomers()),
-                runAt = clock.now(),
-                retryCount = 1,
-            )
-        }
-    }
+    fun planNekkuCustomersSync(db: Database.Connection, clock: EvakaClock) =
+        planSync(db, clock, AsyncJob.SyncNekkuCustomers())
 
     fun syncNekkuSpecialDiets(
         db: Database.Connection,
         clock: EvakaClock,
         job: AsyncJob.SyncNekkuSpecialDiets,
     ) {
-        if (client == null) error("Cannot sync Nekku special diets: NekkuEnv is not configured")
-        fetchAndUpdateNekkuSpecialDiets(client, db, asyncJobRunner, clock.now())
-    }
-
-    fun planNekkuSpecialDietsSync(db: Database.Connection, clock: EvakaClock) {
-        db.transaction { tx ->
-            tx.removeUnclaimedJobs(setOf(AsyncJobType(AsyncJob.SyncNekkuSpecialDiets::class)))
-            asyncJobRunner.plan(
-                tx,
-                listOf(AsyncJob.SyncNekkuSpecialDiets()),
-                runAt = clock.now(),
-                retryCount = 1,
-            )
+        runSync("special diets") {
+            fetchAndUpdateNekkuSpecialDiets(it, db, asyncJobRunner, clock.now())
         }
     }
+
+    fun planNekkuSpecialDietsSync(db: Database.Connection, clock: EvakaClock) =
+        planSync(db, clock, AsyncJob.SyncNekkuSpecialDiets())
 
     fun syncNekkuProducts(
         db: Database.Connection,
         clock: EvakaClock,
         job: AsyncJob.SyncNekkuProducts,
     ) {
-        if (client == null) error("Cannot sync Nekku products: NekkuEnv is not configured")
-        fetchAndUpdateNekkuProducts(client, db)
+        runSync("products") { fetchAndUpdateNekkuProducts(it, db) }
     }
 
-    fun planNekkuProductsSync(db: Database.Connection, clock: EvakaClock) {
+    fun planNekkuProductsSync(db: Database.Connection, clock: EvakaClock) =
+        planSync(db, clock, AsyncJob.SyncNekkuProducts())
+
+    private fun runSync(typeName: String, fetch: (NekkuClient) -> Unit) {
+        if (client == null) error("Cannot sync Nekku $typeName: NekkuEnv is not configured")
+        fetch(client)
+    }
+
+    private fun planSync(db: Database.Connection, clock: EvakaClock, job: AsyncJob) {
         db.transaction { tx ->
-            tx.removeUnclaimedJobs(setOf(AsyncJobType(AsyncJob.SyncNekkuProducts::class)))
-            asyncJobRunner.plan(
-                tx,
-                listOf(AsyncJob.SyncNekkuProducts()),
-                runAt = clock.now(),
-                retryCount = 1,
-            )
+            tx.removeUnclaimedJobs(setOf(AsyncJobType(job::class)))
+            asyncJobRunner.plan(tx, listOf(job), runAt = clock.now(), retryCount = 1)
         }
     }
 
@@ -351,6 +335,7 @@ fun planNekkuDailyOrderJobs(
                     else daycareOpenNextTime(today, operationDays) >= it.validFrom
                 }
         val orderedGroupIds = openGroups + openingGroupsToOrder
+        val customerWeekdays = tx.getNekkuCustomerWeekdaysByGroups(orderedGroupIds.map { it.id })
         asyncJobRunner.plan(
             tx,
             orderedGroupIds.mapNotNull { nekkuGroup ->
@@ -368,7 +353,11 @@ fun planNekkuDailyOrderJobs(
                             daycareOpenNextTime,
                         )
 
-                    if (nekkuOrders.isNotEmpty()) {
+                    val nekkuWeekday = getNekkuWeekday(daycareOpenNextTime)
+                    if (
+                        nekkuOrders.isNotEmpty() &&
+                            nekkuWeekday in (customerWeekdays[nekkuGroup.id] ?: emptySet())
+                    ) {
                         AsyncJob.SendNekkuOrder(groupId = nekkuGroup.id, date = daycareOpenNextTime)
                     } else null
                 } else null
@@ -385,29 +374,28 @@ fun planNekkuSpecifyOrderJobs(
     asyncJobRunner: AsyncJobRunner<AsyncJob>,
     now: HelsinkiDateTime,
 ) {
-    val fourDaysFromNow = now.toLocalDate().plusDays(4)
+    val deliveryDates = deliveryDatesToSpecifyOn(now.toLocalDate()) ?: return
 
     dbc.transaction { tx ->
-        val openGroups = tx.getNekkuOpenDaycareGroupDates(fourDaysFromNow)
-
+        val openGroups = tx.getNekkuOpenDaycareGroupDates(deliveryDates)
+        val customerWeekdays = tx.getNekkuCustomerWeekdaysByGroups(openGroups.map { it.id })
         asyncJobRunner.plan(
             tx,
-            openGroups.mapNotNull { nekkuGroup ->
-                val nekkuOrders =
-                    tx.getNekkuOrderReport(
-                        tx.getDaycareIdByGroup(nekkuGroup.id),
-                        nekkuGroup.id,
-                        fourDaysFromNow,
-                    )
-
-                val groupOperationDays = tx.getGroupOperationDays(nekkuGroup.id)
-                if (
-                    nekkuOrders.isNotEmpty() &&
-                        groupOperationDays != null &&
-                        isGroupOpenOnDate(fourDaysFromNow, groupOperationDays)
-                ) {
-                    AsyncJob.SendNekkuOrder(groupId = nekkuGroup.id, date = fourDaysFromNow)
-                } else null
+            openGroups.flatMap { nekkuGroup ->
+                val daycareId = tx.getDaycareIdByGroup(nekkuGroup.id)
+                val groupOperationDays =
+                    tx.getGroupOperationDays(nekkuGroup.id) ?: return@flatMap emptySequence()
+                deliveryDates.dates().mapNotNull { date ->
+                    val nekkuWeekday = getNekkuWeekday(date)
+                    if (
+                        isGroupValidOnDate(date, nekkuGroup) &&
+                            isGroupOpenOnDate(date, groupOperationDays) &&
+                            nekkuWeekday in (customerWeekdays[nekkuGroup.id] ?: emptySet()) &&
+                            tx.getNekkuOrderReport(daycareId, nekkuGroup.id, date).isNotEmpty()
+                    ) {
+                        AsyncJob.SendNekkuOrder(groupId = nekkuGroup.id, date = date)
+                    } else null
+                }
             },
             runAt = now,
             retryInterval = Duration.ofHours(1),
@@ -480,6 +468,27 @@ private fun getNekkuWeekday(date: LocalDate): NekkuCustomerWeekday {
     }
 }
 
+private const val SPECIFY_ORDER_WORKING_DAYS = 4
+
+private fun LocalDate.workingDaysAfter(): Sequence<LocalDate> =
+    generateSequence(plusDays(1)) { it.plusDays(1) }.filter { !it.isWeekendOrHoliday() }
+
+/**
+ * Returns the delivery dates whose specify deadline is today — usually one day, but several across
+ * weekends and holidays. Null when today is not a working day, and nothing is due.
+ */
+fun deliveryDatesToSpecifyOn(today: LocalDate): FiniteDateRange? {
+    // a deadline is always a working day, so a weekend or holiday run has nothing to send
+    if (today.isWeekendOrHoliday()) return null
+
+    // every delivery date strictly after the 3rd working day up to and including the 4th shares
+    // today as its deadline
+    val (thirdWorkingDay, fourthWorkingDay) =
+        today.workingDaysAfter().take(SPECIFY_ORDER_WORKING_DAYS).toList().takeLast(2)
+
+    return FiniteDateRange(thirdWorkingDay.plusDays(1), fourthWorkingDay)
+}
+
 fun createAndSendNekkuOrder(
     client: NekkuClient,
     dbc: Database.Connection,
@@ -499,8 +508,9 @@ fun createAndSendNekkuOrder(
             }
         val nekkuWeekday = getNekkuWeekday(date)
 
-        val nekkuDaycareCustomerMapping =
-            dbc.read { tx -> tx.getNekkuGroupCustomerMapping(groupId, nekkuWeekday) }
+        val nekkuDaycareCustomerMapping = dbc.read { tx ->
+            tx.getNekkuGroupCustomerMapping(groupId, nekkuWeekday)
+        }
 
         val nekkuProducts = dbc.read { tx -> tx.getNekkuProducts() }
 
@@ -659,7 +669,7 @@ fun nekkuMealReportData(
                         val sku =
                             getNekkuProductNumber(nekkuProducts, mealTime, childInfo, customerType)
                         if (sku == null) {
-                            logger.error {
+                            logger.warn {
                                 "No Nekku product found for child ${childInfo.childId} with customertype=$customerType optionsId=${childInfo.optionsId} mealtype=${childInfo.mealType} mealtime=${mealTime.name}"
                             }
                             null
@@ -697,13 +707,12 @@ private fun getNekkuProductNumber(
     customerType: String,
 ): String? {
 
-    val filteredNekkuProducts =
-        nekkuProducts.filter {
-            it.mealTime?.contains(nekkuProductMealTime) ?: false &&
-                it.mealType == nekkuChildInfo.mealType &&
-                it.optionsId == nekkuChildInfo.optionsId &&
-                it.customerTypes.contains(customerType)
-        }
+    val filteredNekkuProducts = nekkuProducts.filter {
+        it.mealTime?.contains(nekkuProductMealTime) ?: false &&
+            it.mealType == nekkuChildInfo.mealType &&
+            it.optionsId == nekkuChildInfo.optionsId &&
+            it.customerTypes.contains(customerType)
+    }
 
     if (filteredNekkuProducts.count() > 1) {
         logger.info {
@@ -844,8 +853,9 @@ fun addUnderOneYearOldDiet(
         )
     // if the child's special diet choices already contain the free text field
     // we append to it, otherwise we will create a new free text field
-    val textField =
-        nekkuSpecialDietChoices.find { it.fieldId == textFieldsPerSpecialDiet[it.dietId] }
+    val textField = nekkuSpecialDietChoices.find {
+        it.fieldId == textFieldsPerSpecialDiet[it.dietId]
+    }
     return if (textField == null) {
         nekkuSpecialDietChoices +
             NekkuSpecialDietChoices(

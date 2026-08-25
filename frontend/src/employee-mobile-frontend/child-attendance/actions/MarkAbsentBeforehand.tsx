@@ -9,15 +9,15 @@ import styled from 'styled-components'
 import FiniteDateRange from 'lib-common/finite-date-range'
 import type { AbsenceType } from 'lib-common/generated/api-types/absence'
 import type { ChildId, DaycareId } from 'lib-common/generated/api-types/shared'
+import HelsinkiDateTime from 'lib-common/helsinki-date-time'
 import LocalDate from 'lib-common/local-date'
 import { useMutationResult, useQueryResult } from 'lib-common/query'
 import { groupAbsencesByDateRange } from 'lib-common/utils/absences'
-import { mockNow } from 'lib-common/utils/helpers'
 import HorizontalLine from 'lib-components/atoms/HorizontalLine'
 import Title from 'lib-components/atoms/Title'
 import { AsyncButton } from 'lib-components/atoms/buttons/AsyncButton'
+import { Button } from 'lib-components/atoms/buttons/Button'
 import { IconOnlyButton } from 'lib-components/atoms/buttons/IconOnlyButton'
-import { LegacyButton } from 'lib-components/atoms/buttons/LegacyButton'
 import InputField from 'lib-components/atoms/form/InputField'
 import { ContentArea } from 'lib-components/layout/Container'
 import {
@@ -96,8 +96,10 @@ export default React.memo(function MarkAbsentBeforehand({
 
   const canSave = useMemo(
     () =>
-      isAfter(new Date(startDate), subDays(mockNow() ?? new Date(), 1)) &&
-      isBefore(new Date(startDate), addDays(new Date(endDate), 1)),
+      isAfter(
+        new Date(startDate),
+        subDays(HelsinkiDateTime.now().toSystemTzDate(), 1)
+      ) && isBefore(new Date(startDate), addDays(new Date(endDate), 1)),
     [endDate, startDate]
   )
 
@@ -175,7 +177,10 @@ export default React.memo(function MarkAbsentBeforehand({
                       onChange={setStartDate}
                       width="s"
                       info={
-                        isBefore(new Date(startDate), mockNow() ?? new Date())
+                        isBefore(
+                          new Date(startDate),
+                          HelsinkiDateTime.now().toSystemTzDate()
+                        )
                           ? {
                               text: i18n.absences.chooseStartDate,
                               status: 'warning'
@@ -218,7 +223,7 @@ export default React.memo(function MarkAbsentBeforehand({
               <P>{i18n.absences.fullDayHint}</P>
               <Actions>
                 <FixedSpaceRow $fullWidth>
-                  <LegacyButton text={i18n.common.cancel} onClick={goBack} />
+                  <Button text={i18n.common.cancel} onClick={goBack} />
                   {selectedAbsenceType !== undefined &&
                   selectedAbsenceType !== 'NO_ABSENCE' &&
                   canSave ? (
@@ -230,7 +235,7 @@ export default React.memo(function MarkAbsentBeforehand({
                       data-qa="mark-absent-btn"
                     />
                   ) : (
-                    <LegacyButton
+                    <Button
                       primary
                       text={i18n.common.confirm}
                       disabled={true}

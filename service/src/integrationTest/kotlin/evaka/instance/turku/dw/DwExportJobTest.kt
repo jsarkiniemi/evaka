@@ -4,7 +4,7 @@
 
 package evaka.instance.turku.dw
 
-import com.jcraft.jsch.JSch
+import com.jcraft.jsch.JSchException
 import evaka.core.BucketEnv
 import evaka.core.FullApplicationTest
 import evaka.core.Sensitive
@@ -27,18 +27,18 @@ import evaka.core.shared.dev.insert
 import evaka.core.shared.domain.FiniteDateRange
 import evaka.core.shared.domain.HelsinkiDateTime
 import evaka.core.shared.domain.MockEvakaClock
-import evaka.instance.turku.BucketProperties
+import evaka.core.shared.sftp.SftpClient
 import evaka.instance.turku.DwExportProperties
 import evaka.instance.turku.SftpProperties
 import evaka.instance.turku.TurkuEnv
-import evaka.instance.turku.invoice.service.SftpConnector
-import evaka.instance.turku.invoice.service.SftpSender
 import java.time.LocalDate
 import java.time.LocalTime
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DynamicTest
+import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestFactory
+import org.junit.jupiter.api.assertThrows
 import org.springframework.beans.factory.annotation.Autowired
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.CreateBucketRequest
@@ -50,6 +50,7 @@ class DwExportJobTest : FullApplicationTest(resetDbBeforeEach = true) {
     @Autowired private lateinit var bucketEnv: BucketEnv
     @Autowired private lateinit var s3Client: S3Client
 
+    private lateinit var turkuEnv: TurkuEnv
     private lateinit var job: DwExportJob
 
     companion object {
@@ -59,7 +60,7 @@ class DwExportJobTest : FullApplicationTest(resetDbBeforeEach = true) {
 
     @BeforeAll
     fun setup() {
-        val turkuEnv =
+        turkuEnv =
             TurkuEnv(
                 sapInvoicing =
                     SftpProperties(
@@ -77,10 +78,8 @@ class DwExportJobTest : FullApplicationTest(resetDbBeforeEach = true) {
                         username = Sensitive("user"),
                         password = Sensitive("pass"),
                     ),
-                bucket = BucketProperties(export = EXPORT_BUCKET),
                 dwExport =
                     DwExportProperties(
-                        prefix = "reports",
                         sftp =
                             SftpProperties(
                                 address = "localhost",
@@ -88,7 +87,7 @@ class DwExportJobTest : FullApplicationTest(resetDbBeforeEach = true) {
                                 path = "upload",
                                 username = Sensitive("foo"),
                                 password = Sensitive("pass"),
-                            ),
+                            )
                     ),
             )
 
@@ -97,8 +96,10 @@ class DwExportJobTest : FullApplicationTest(resetDbBeforeEach = true) {
             s3Client.createBucket(CreateBucketRequest.builder().bucket(EXPORT_BUCKET).build())
         }
 
-        val sftpSender = SftpSender(turkuEnv.dwExport.sftp, SftpConnector(JSch()))
-        val exportClient = FileDWExportClient(s3Client, sftpSender, turkuEnv)
+        val exportClient =
+            FileDWExportClient(
+                SftpClient(turkuEnv.dwExport.sftp.toSftpEnv(), turkuEnv.dwExport.sftp.path)
+            )
         job = DwExportJob(exportClient)
     }
 
@@ -112,6 +113,18 @@ class DwExportJobTest : FullApplicationTest(resetDbBeforeEach = true) {
         DwQuery.entries.map {
             DynamicTest.dynamicTest("Test '${it.queryName}' export") { sendAndAssertDwQueryCsv(it) }
         }
+
+    @Test
+    fun `a failed upload fails the job instead of being swallowed`() {
+        val badCredentials = turkuEnv.dwExport.sftp.toSftpEnv().copy(password = Sensitive("wrong"))
+        val failingJob =
+            DwExportJob(FileDWExportClient(SftpClient(badCredentials, turkuEnv.dwExport.sftp.path)))
+        val query = DwQuery.entries.first()
+
+        assertThrows<JSchException> {
+            failingJob.sendDwQuery(db, clock, query.queryName, query.query)
+        }
+    }
 
     private fun sendAndAssertDwQueryCsv(query: DwQuery) {
         job.sendDwQuery(db, clock, query.queryName, query.query)

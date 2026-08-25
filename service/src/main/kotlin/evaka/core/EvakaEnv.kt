@@ -38,6 +38,7 @@ data class EvakaEnv(
     val koskiEnabled: Boolean,
     val sfiEnabled: Boolean,
     val vtjEnabled: Boolean,
+    val vtjMockUrl: String,
     val webPushEnabled: Boolean,
     val jamixEnabled: Boolean,
     val aromiEnabled: Boolean,
@@ -60,6 +61,8 @@ data class EvakaEnv(
     val placementToolServiceNeedOptionId: ServiceNeedOptionId?,
     val newBrowserLoginEmailEnabled: Boolean,
     val staffAttendanceDriftMinutes: Duration,
+    val decisionReasoningGenericRemovalEnabled: Boolean,
+    val decisionReasoningEnabled: Boolean,
 ) {
     companion object {
         fun fromEnvironment(env: Environment): EvakaEnv {
@@ -71,10 +74,15 @@ data class EvakaEnv(
                 koskiEnabled = env.lookup("evaka.integration.koski.enabled") ?: false,
                 sfiEnabled = env.lookup("evaka.integration.sfi.enabled") ?: false,
                 vtjEnabled = env.lookup("evaka.integration.vtj.enabled") ?: false,
+                vtjMockUrl =
+                    env.lookup("evaka.integration.vtj.mock_url") ?: "http://localhost:9090",
                 webPushEnabled = env.lookup("evaka.web_push.enabled") ?: false,
                 jamixEnabled = env.lookup("evaka.integration.jamix.enabled") ?: false,
                 aromiEnabled = env.lookup("evaka.integration.aromi.enabled") ?: false,
-                archivalEnabled = env.lookup("evaka.integration.archival.enabled") ?: false,
+                archivalEnabled =
+                    env.lookup("evaka.integration.archival.enabled")
+                        ?: env.lookup("evaka.integration.sarma.enabled")
+                        ?: false,
                 nekkuEnabled = env.lookup("evaka.integration.nekku.enabled") ?: false,
                 forceUnpublishDocumentTemplateEnabled =
                     env.lookup("evaka.not_for_prod.force_unpublish_document_template_enabled")
@@ -114,6 +122,9 @@ data class EvakaEnv(
                     Duration.ofMinutes(
                         env.lookup("evaka.integration.staff_attendance_drift_minutes") ?: 5
                     ),
+                decisionReasoningGenericRemovalEnabled =
+                    env.lookup("evaka.decision_reasoning.generic_removal_enabled") ?: false,
+                decisionReasoningEnabled = env.lookup("evaka.decision_reasoning.enabled") ?: false,
             )
         }
     }
@@ -467,6 +478,8 @@ data class SfiPrintingEnv(
     val billingId: String,
     /** Billing password, if required by the printing provider */
     val billingPassword: Sensitive<String>?,
+    /** Optional costpool identifier sent to the printing provider */
+    val costPool: String? = null,
 ) {
     companion object {
         fun fromEnvironment(env: Environment) =
@@ -475,6 +488,7 @@ data class SfiPrintingEnv(
                 billingPassword =
                     env.lookup<String?>("evaka.integration.sfi.printing.billing.password")
                         ?.let(::Sensitive),
+                costPool = env.lookup("evaka.integration.sfi.printing.billing.costpool"),
             )
     }
 }
@@ -628,10 +642,14 @@ data class SftpEnv(
     val username: String,
     val password: Sensitive<String>?,
     val privateKey: Sensitive<String>?,
+    val skipHostKeyVerification: Boolean = false,
 ) {
     init {
         check(listOfNotNull(password, privateKey).size == 1) {
             "Either password or private key must be provided"
+        }
+        check(hostKeys.isNotEmpty() || skipHostKeyVerification) {
+            "Either hostKeys must be provided or skipHostKeyVerification must be true"
         }
     }
 }
@@ -710,6 +728,45 @@ data class ChildDocumentArchivalEnv(val delayDays: Int, val limit: Int) {
             ChildDocumentArchivalEnv(
                 delayDays = env.lookup("evaka.child_document_archival_delay_days") ?: 30,
                 limit = env.lookup("evaka.child_document_archival_limit") ?: 0,
+            )
+    }
+}
+
+data class DataRemovalEnv(
+    /** Maximum number of entries to delete *per data type*. */
+    val limit: Int
+) {
+    companion object {
+        fun fromEnvironment(env: Environment) =
+            DataRemovalEnv(limit = env.lookup("evaka.data_removal.limit") ?: 0)
+    }
+}
+
+data class ArchiveEnv(
+    /** URL up to the endpoint name e.g. http://10.0.0.10/archive-core/ */
+    val url: URI,
+    val useMockClient: Boolean,
+    val userId: String,
+    val userRole: String,
+    val metadataMainNamespace: String,
+    val metadataPolicyNamespace: String,
+    val masterId: String,
+    val virtualArchiveId: String,
+) {
+
+    companion object {
+        fun fromEnvironment(env: Environment) =
+            ArchiveEnv(
+                url = URI.create(env.lookup("evaka.integration.sarma.url")),
+                useMockClient = env.lookup("evaka.integration.sarma.use_mock_client") ?: false,
+                userId = env.lookup("evaka.integration.sarma.user_id"),
+                userRole = env.lookup("evaka.integration.sarma.user_role"),
+                metadataMainNamespace =
+                    env.lookup("evaka.integration.sarma.metadata_main_namespace"),
+                metadataPolicyNamespace =
+                    env.lookup("evaka.integration.sarma.metadata_policy_namespace"),
+                masterId = env.lookup("evaka.integration.sarma.master_id"),
+                virtualArchiveId = env.lookup("evaka.integration.sarma.virtual_archive_id"),
             )
     }
 }

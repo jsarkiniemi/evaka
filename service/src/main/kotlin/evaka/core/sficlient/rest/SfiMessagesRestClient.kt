@@ -31,20 +31,22 @@ class Config(env: SfiEnv) {
         )
     private val printingAndEnvelopingService =
         PrintingAndEnvelopingService(
-            PostiMessaging(
-                contactDetails =
-                    ContactDetails(
-                        email =
-                            requireNotNull(env.contactPerson.email) {
-                                "SFI contact person email must be set"
-                            }
-                    ),
-                username = env.printing.billingId,
-                password =
-                    requireNotNull(env.printing.billingPassword?.value) {
-                        "SFI printing billing password must be set"
-                    },
-            )
+            postiMessaging =
+                PostiMessaging(
+                    contactDetails =
+                        ContactDetails(
+                            email =
+                                requireNotNull(env.contactPerson.email) {
+                                    "SFI contact person email must be set"
+                                }
+                        ),
+                    username = env.printing.billingId,
+                    password =
+                        requireNotNull(env.printing.billingPassword?.value) {
+                            "SFI printing billing password must be set"
+                        },
+                ),
+            costPool = env.printing.costPool,
         )
 
     private val sender = Sender(serviceId = env.serviceIdentifier)
@@ -88,7 +90,7 @@ class Config(env: SfiEnv) {
                     ),
                 replyAllowedBy = ReplyAllowedBy.NO_ONE,
                 title = msg.messageHeader,
-                visibility = Visibility.RECIPIENT_ONLY,
+                visibility = Visibility.NORMAL,
             ),
             PaperMailPart(
                 attachments = listOf(attachment),

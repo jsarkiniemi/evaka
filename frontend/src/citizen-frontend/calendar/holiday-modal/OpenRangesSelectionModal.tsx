@@ -29,15 +29,15 @@ import { RangeSelector } from './RangesSelector'
 type FormState = OpenRangesBody['openRanges']
 
 const initializeForm = (
-  children: ReservationChild[],
+  eligibleChildIds: ChildId[],
   previousAnswers: HolidayQuestionnaireAnswer[]
 ): FormState =>
-  children.reduce(
-    (acc, child) => ({
-      ...acc,
-      [child.id]:
-        previousAnswers.find((a) => a.childId === child.id)?.openRanges ?? []
-    }),
+  eligibleChildIds.reduce(
+    (acc, childId) =>
+      Object.assign(acc, {
+        [childId]:
+          previousAnswers.find((a) => a.childId === childId)?.openRanges ?? []
+      }),
     {}
   )
 
@@ -60,7 +60,7 @@ export default React.memo(function OpenRangesSelectionModal({
   const [lang] = useLang()
 
   const [openRanges, setOpenRanges] = useState<FormState>(() =>
-    initializeForm(availableChildren, previousAnswers)
+    initializeForm(Object.keys(eligibleChildren) as ChildId[], previousAnswers)
   )
 
   const selectRanges = useCallback(

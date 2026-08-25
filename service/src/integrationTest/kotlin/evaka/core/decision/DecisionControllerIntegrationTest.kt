@@ -4,6 +4,7 @@
 
 package evaka.core.decision
 
+import evaka.core.AuditContext
 import evaka.core.FullApplicationTest
 import evaka.core.application.ApplicationStateService
 import evaka.core.application.ApplicationStatus
@@ -29,6 +30,7 @@ import evaka.core.shared.dev.DevEmployee
 import evaka.core.shared.dev.DevPerson
 import evaka.core.shared.dev.DevPersonType
 import evaka.core.shared.dev.insert
+import evaka.core.shared.dev.insertDefaultDecisionGenericReasonings
 import evaka.core.shared.dev.insertTestApplication
 import evaka.core.shared.domain.FiniteDateRange
 import evaka.core.shared.domain.Forbidden
@@ -53,8 +55,11 @@ class DecisionControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach 
 
     @BeforeEach
     fun init() {
-        db.transaction { it.insert(admin) }
-        db.transaction { it.insert(serviceWorker) }
+        db.transaction {
+            it.insertDefaultDecisionGenericReasonings()
+            it.insert(admin)
+            it.insert(serviceWorker)
+        }
     }
 
     @Test
@@ -67,10 +72,9 @@ class DecisionControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach 
 
     @Test
     fun `Legacy PDF with contact info can be downloaded by service worker`() {
-        val decisionId =
-            db.transaction { tx ->
-                createDecisionWithPeople(tx, serviceWorker.id, legacyPdfWithContactInfo = true)
-            }
+        val decisionId = db.transaction { tx ->
+            createDecisionWithPeople(tx, serviceWorker.id, legacyPdfWithContactInfo = true)
+        }
         asyncJobRunner.runPendingJobsSync(clock)
 
         downloadPdf(serviceWorker.user, decisionId)
@@ -78,10 +82,9 @@ class DecisionControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach 
 
     @Test
     fun `PDF without contact info where child has restricted details can be downloaded by service worker`() {
-        val decisionId =
-            db.transaction { tx ->
-                createDecisionWithPeople(tx, serviceWorker.id, childRestricted = true)
-            }
+        val decisionId = db.transaction { tx ->
+            createDecisionWithPeople(tx, serviceWorker.id, childRestricted = true)
+        }
         asyncJobRunner.runPendingJobsSync(clock)
 
         downloadPdf(serviceWorker.user, decisionId)
@@ -89,10 +92,9 @@ class DecisionControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach 
 
     @Test
     fun `PDF without contact info where guardian has restricted details can be downloaded by service worker`() {
-        val decisionId =
-            db.transaction { tx ->
-                createDecisionWithPeople(tx, serviceWorker.id, guardianRestricted = true)
-            }
+        val decisionId = db.transaction { tx ->
+            createDecisionWithPeople(tx, serviceWorker.id, guardianRestricted = true)
+        }
         asyncJobRunner.runPendingJobsSync(clock)
 
         downloadPdf(serviceWorker.user, decisionId)
@@ -100,15 +102,14 @@ class DecisionControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach 
 
     @Test
     fun `Legacy PDF with contact info where child has restricted details can NOT be downloaded by service worker`() {
-        val decisionId =
-            db.transaction { tx ->
-                createDecisionWithPeople(
-                    tx,
-                    serviceWorker.id,
-                    childRestricted = true,
-                    legacyPdfWithContactInfo = true,
-                )
-            }
+        val decisionId = db.transaction { tx ->
+            createDecisionWithPeople(
+                tx,
+                serviceWorker.id,
+                childRestricted = true,
+                legacyPdfWithContactInfo = true,
+            )
+        }
         asyncJobRunner.runPendingJobsSync(clock)
 
         assertThrows<Forbidden> { downloadPdf(serviceWorker.user, decisionId) }
@@ -116,15 +117,14 @@ class DecisionControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach 
 
     @Test
     fun `Legacy PDF with contact info where guardian has restricted details can NOT be downloaded by service worker`() {
-        val decisionId =
-            db.transaction { tx ->
-                createDecisionWithPeople(
-                    tx,
-                    serviceWorker.id,
-                    guardianRestricted = true,
-                    legacyPdfWithContactInfo = true,
-                )
-            }
+        val decisionId = db.transaction { tx ->
+            createDecisionWithPeople(
+                tx,
+                serviceWorker.id,
+                guardianRestricted = true,
+                legacyPdfWithContactInfo = true,
+            )
+        }
         asyncJobRunner.runPendingJobsSync(clock)
 
         assertThrows<Forbidden> { downloadPdf(serviceWorker.user, decisionId) }
@@ -132,15 +132,14 @@ class DecisionControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach 
 
     @Test
     fun `Legacy PDF with contact info where child has restricted details can be downloaded by admin`() {
-        val decisionId =
-            db.transaction { tx ->
-                createDecisionWithPeople(
-                    tx,
-                    serviceWorker.id,
-                    childRestricted = true,
-                    legacyPdfWithContactInfo = true,
-                )
-            }
+        val decisionId = db.transaction { tx ->
+            createDecisionWithPeople(
+                tx,
+                serviceWorker.id,
+                childRestricted = true,
+                legacyPdfWithContactInfo = true,
+            )
+        }
         asyncJobRunner.runPendingJobsSync(clock)
 
         downloadPdf(admin.user, decisionId)
@@ -148,15 +147,14 @@ class DecisionControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach 
 
     @Test
     fun `Legacy PDF with contact info where guardian has restricted details can be downloaded by admin`() {
-        val decisionId =
-            db.transaction { tx ->
-                createDecisionWithPeople(
-                    tx,
-                    serviceWorker.id,
-                    guardianRestricted = true,
-                    legacyPdfWithContactInfo = true,
-                )
-            }
+        val decisionId = db.transaction { tx ->
+            createDecisionWithPeople(
+                tx,
+                serviceWorker.id,
+                guardianRestricted = true,
+                legacyPdfWithContactInfo = true,
+            )
+        }
         asyncJobRunner.runPendingJobsSync(clock)
 
         downloadPdf(admin.user, decisionId)
@@ -233,6 +231,7 @@ class DecisionControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach 
             tx = tx,
             user = AuthenticatedUser.Employee(serviceWorker, setOf(UserRole.SERVICE_WORKER)),
             clock = clock,
+            audit = AuditContext(),
             applicationId = applicationId,
             confidential = false,
         )
@@ -240,6 +239,7 @@ class DecisionControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach 
             tx = tx,
             user = AuthenticatedUser.Employee(serviceWorker, setOf(UserRole.SERVICE_WORKER)),
             clock = clock,
+            AuditContext(),
             applicationId = applicationId,
             placementPlan =
                 DaycarePlacementPlan(
@@ -255,6 +255,7 @@ class DecisionControllerIntegrationTest : FullApplicationTest(resetDbBeforeEach 
             tx = tx,
             user = AuthenticatedUser.Employee(serviceWorker, setOf(UserRole.SERVICE_WORKER)),
             clock = clock,
+            audit = AuditContext(),
             applicationId = applicationId,
         )
 

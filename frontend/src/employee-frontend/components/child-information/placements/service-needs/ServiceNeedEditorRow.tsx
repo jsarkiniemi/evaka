@@ -84,12 +84,12 @@ function ServiceNeedEditorRow({
           range.overlaps(new DateRange(opt.validFrom, opt.validTo))
         )
         .map((opt) => ({
-          label: opt.nameFi,
+          label: lang === 'sv' ? opt.nameSv : opt.nameFi,
           value: opt.id,
           domValue: opt.id,
           partWeek: opt.partWeek
         })),
-    [options]
+    [options, lang]
   )
 
   const bind = useForm(
@@ -231,7 +231,7 @@ function ServiceNeedEditorRow({
     if (!formIsValid) return
 
     if (
-      placement.serviceNeeds.some(
+      (placement.serviceNeedDetail?.serviceNeeds ?? []).some(
         (sn) =>
           sn.id !== editingId &&
           new FiniteDateRange(sn.startDate, sn.endDate).overlaps(range.value())

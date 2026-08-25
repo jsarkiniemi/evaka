@@ -8,7 +8,10 @@ import evaka.core.EvakaEnv
 import evaka.core.ScheduledJobsEnv
 import evaka.core.application.ApplicationStatus
 import evaka.core.bi.BiExportClient
+import evaka.core.bi.BiExportConfig
 import evaka.core.bi.BiExportJob
+import evaka.core.bi.BiTable
+import evaka.core.decision.DecisionType
 import evaka.core.document.archival.ArchivalIntegrationClient
 import evaka.core.invoicing.domain.PaymentIntegrationClient
 import evaka.core.mealintegration.DefaultMealTypeMapper
@@ -63,10 +66,15 @@ internal val PAYMENT_SOAP_PACKAGES =
 @Configuration
 @Import(TampereAsyncJobRegistration::class)
 class TampereConfig {
+    companion object {
+        val excludedBiTables: Set<BiTable> =
+            setOf(BiTable.StaffAttendanceRealtime, BiTable.AttendanceReservationDelta)
+    }
 
     @Bean
     fun featureConfig(): FeatureConfig =
         FeatureConfig(
+            placementDecisionSwedishLanguageEnabled = false,
             valueDecisionCapacityFactorEnabled = true,
             citizenReservationThresholdHours = 6 * 24, // Tue 00:00
             freeAbsenceGivesADailyRefund = false,
@@ -80,11 +88,13 @@ class TampereConfig {
             municipalMessageAccountName = "Tampereen kaupunki",
             serviceWorkerMessageAccountName = "Varhaiskasvatuksen ja esiopetuksen asiakaspalvelu",
             financeMessageAccountName = "Tampereen varhaiskasvatuksen asiakasmaksut",
+            messageSupportEmail = "varhaiskasvatus.sovellustuki@tampere.fi",
             applyPlacementUnitFromDecision = true,
             preferredStartRelativeApplicationDueDate = true,
             fiveYearsOldDaycareEnabled = false,
             temporaryDaycarePartDayAbsenceGivesADailyRefund = false,
             archiveMetadataOrganization = "Tampereen kaupunki, varhaiskasvatus ja esiopetus",
+            metadataBusinessId = "0211675-2",
             archiveMetadataConfigs = { type, year ->
                 when (type) {
                     ArchiveProcessType.APPLICATION_DAYCARE ->
@@ -120,6 +130,11 @@ class TampereConfig {
             },
             daycarePlacementPlanEndMonthDay = MonthDay.of(8, 15),
             placementToolApplicationStatus = ApplicationStatus.WAITING_DECISION,
+            deletedMessagePlaceholderBody =
+                "Lähettäjä on poistanut viestin. Sinun ei tarvitse tehdä mitään.\n\n" +
+                    "The sender has deleted this message. No action is needed on your part.",
+            deletedMessagePlaceholderTitle = "Viesti on poistettu / Message was deleted",
+            decisionsWithoutReasonings = setOf(DecisionType.CLUB),
         )
 
     @Bean
@@ -135,7 +150,11 @@ class TampereConfig {
         AsyncJobRunner(TampereAsyncJob::class, listOf(TampereAsyncJob.pool), jdbi, tracer)
 
     @Bean
-    fun tampereBiJob(biExportClient: BiExportClient): BiExportJob = BiExportJob(biExportClient)
+    fun tampereBiJob(biExportClient: BiExportClient): BiExportJob =
+        BiExportJob(
+            biExportClient,
+            BiExportConfig(includePII = true, includeLegacyColumns = true, deltaWindowDays = 60),
+        )
 
     @Bean
     fun paymentIntegrationClient(properties: TampereProperties): PaymentIntegrationClient {
@@ -200,6 +219,7 @@ class TampereConfig {
             asyncJobRunner,
             properties,
             env,
+            biTables = BiTable.entries - excludedBiTables,
         )
 
     @Bean

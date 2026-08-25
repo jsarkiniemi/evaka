@@ -4,10 +4,12 @@
 
 package evaka.core.shared.config
 
+import evaka.core.ArchiveEnv
 import evaka.core.AromiEnv
 import evaka.core.BucketEnv
 import evaka.core.ChildDocumentArchivalEnv
 import evaka.core.CitizenCalendarEnv
+import evaka.core.DataRemovalEnv
 import evaka.core.DatabaseEnv
 import evaka.core.DvvModificationsEnv
 import evaka.core.EmailEnv
@@ -104,6 +106,13 @@ class EnvConfig {
         }
 
     @Bean
+    fun archiveEnv(evakaEnv: EvakaEnv, env: Environment): ArchiveEnv? =
+        when (evakaEnv.archivalEnabled) {
+            true -> ArchiveEnv.fromEnvironment(env)
+            false -> null
+        }
+
+    @Bean
     fun nekkuEnv(evakaEnv: EvakaEnv, env: Environment): NekkuEnv? =
         when (evakaEnv.nekkuEnabled) {
             true -> NekkuEnv.fromEnvironment(env)
@@ -113,4 +122,6 @@ class EnvConfig {
     @Bean
     fun childDocumentArchivalEnv(env: Environment): ChildDocumentArchivalEnv =
         ChildDocumentArchivalEnv.fromEnvironment(env)
+
+    @Bean fun dataRemovalEnv(env: Environment): DataRemovalEnv = DataRemovalEnv.fromEnvironment(env)
 }

@@ -59,25 +59,37 @@ class BackupPickupController(private val accessControl: AccessControl) {
         user: AuthenticatedUser.Employee,
         clock: EvakaClock,
         @PathVariable childId: ChildId,
-    ): List<ChildBackupPickup> {
-        return db.connect { dbc ->
-                dbc.read { tx ->
-                    accessControl.requirePermissionFor(
-                        tx,
-                        user,
-                        clock,
-                        Action.Child.READ_BACKUP_PICKUP,
-                        childId,
-                    )
-                    tx.getBackupPickupsForChild(childId)
+    ): ChildBackupPickupsResponse {
+        return ChildBackupPickupsResponse(
+            db.connect { dbc ->
+                    dbc.read { tx ->
+                        accessControl.requirePermissionFor(
+                            tx,
+                            user,
+                            clock,
+                            Action.Child.READ_BACKUP_PICKUP,
+                            childId,
+                        )
+                        val backupPickups = tx.getBackupPickupsForChild(childId)
+                        val permittedActions =
+                            accessControl.getPermittedActions<BackupPickupId, Action.BackupPickup>(
+                                tx,
+                                user,
+                                clock,
+                                backupPickups.map { it.id },
+                            )
+                        backupPickups.map { bp ->
+                            ChildBackupPickupResponse(bp, permittedActions[bp.id] ?: emptySet())
+                        }
+                    }
                 }
-            }
-            .also {
-                Audit.ChildBackupPickupRead.log(
-                    targetId = AuditId(childId),
-                    meta = mapOf("count" to it.size),
-                )
-            }
+                .also {
+                    Audit.ChildBackupPickupRead.log(
+                        targetId = AuditId(childId),
+                        meta = mapOf("count" to it.size),
+                    )
+                }
+        )
     }
 
     @PutMapping("/employee/backup-pickups/{id}")
@@ -117,40 +129,39 @@ class BackupPickupController(private val accessControl: AccessControl) {
 fun Database.Transaction.createBackupPickup(
     childId: ChildId,
     data: ChildBackupPickupContent,
-): BackupPickupId =
-    createQuery {
-            sql(
-                """
+): BackupPickupId = createQuery {
+    sql(
+        """
 INSERT INTO backup_pickup (child_id, name, phone)
 VALUES (${bind(childId)}, ${bind(data.name)}, ${bind(data.phone)})
 RETURNING id
 """
-            )
-        }
-        .exactlyOne()
+    )
+}
+    .exactlyOne()
 
 fun Database.Read.getBackupPickupsForChild(childId: ChildId): List<ChildBackupPickup> =
     createQuery {
-            sql(
-                "SELECT id, child_id, name, phone FROM backup_pickup WHERE child_Id = ${bind(childId)}"
-            )
-        }
-        .toList()
+        sql("SELECT id, child_id, name, phone FROM backup_pickup WHERE child_Id = ${bind(childId)}")
+    }
+    .toList()
 
 fun Database.Transaction.updateBackupPickup(id: BackupPickupId, data: ChildBackupPickupContent) =
     createUpdate {
-            sql(
-                """
+        sql(
+            """
 UPDATE backup_pickup
 SET name = ${bind(data.name)}, phone = ${bind(data.phone)}
 WHERE id  = ${bind(id)}
 """
-            )
-        }
-        .updateExactlyOne()
+        )
+    }
+    .updateExactlyOne()
 
-fun Database.Transaction.deleteBackupPickup(id: BackupPickupId) =
-    createUpdate { sql("DELETE FROM backup_pickup WHERE id = ${bind(id)}") }.updateExactlyOne()
+fun Database.Transaction.deleteBackupPickup(id: BackupPickupId) = createUpdate {
+    sql("DELETE FROM backup_pickup WHERE id = ${bind(id)}")
+}
+    .updateExactlyOne()
 
 data class ChildBackupPickupContent(val name: String, val phone: String)
 
@@ -162,3 +173,10 @@ data class ChildBackupPickup(
 )
 
 data class ChildBackupPickupCreateResponse(val id: BackupPickupId)
+
+data class ChildBackupPickupResponse(
+    val backupPickup: ChildBackupPickup,
+    val permittedActions: Set<Action.BackupPickup>,
+)
+
+data class ChildBackupPickupsResponse(val backupPickups: List<ChildBackupPickupResponse>)

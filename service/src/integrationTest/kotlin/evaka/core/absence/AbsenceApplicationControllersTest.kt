@@ -195,6 +195,7 @@ class AbsenceApplicationControllersTest : FullApplicationTest(resetDbBeforeEach 
                         category = AbsenceCategory.NONBILLABLE,
                         absenceType = AbsenceType.OTHER_ABSENCE,
                         modifiedByStaff = true,
+                        modifiedByName = unitSupervisor.evakaUser.name,
                         modifiedAt = clock.now(),
                         belongsToQuestionnaire = false,
                     )
@@ -263,7 +264,9 @@ class AbsenceApplicationControllersTest : FullApplicationTest(resetDbBeforeEach 
 
             assertEquals(
                 emptyList(),
-                db.transaction { tx -> tx.getAbsencesOfChildByRange(child.id, range.asDateRange()) },
+                db.transaction { tx ->
+                    tx.getAbsencesOfChildByRange(child.id, range.asDateRange())
+                },
             )
         }
 
@@ -315,6 +318,7 @@ class AbsenceApplicationControllersTest : FullApplicationTest(resetDbBeforeEach 
                         category = AbsenceCategory.NONBILLABLE,
                         absenceType = AbsenceType.OTHER_ABSENCE,
                         modifiedByStaff = true,
+                        modifiedByName = unitSupervisor.evakaUser.name,
                         modifiedAt = clock.now(),
                         belongsToQuestionnaire = false,
                     ),
@@ -324,6 +328,7 @@ class AbsenceApplicationControllersTest : FullApplicationTest(resetDbBeforeEach 
                         category = AbsenceCategory.NONBILLABLE,
                         absenceType = AbsenceType.OTHER_ABSENCE,
                         modifiedByStaff = true,
+                        modifiedByName = unitSupervisor.evakaUser.name,
                         modifiedAt = clock.now(),
                         belongsToQuestionnaire = false,
                     ),
@@ -385,6 +390,7 @@ class AbsenceApplicationControllersTest : FullApplicationTest(resetDbBeforeEach 
                         category = AbsenceCategory.BILLABLE,
                         absenceType = AbsenceType.PLANNED_ABSENCE,
                         modifiedByStaff = true,
+                        modifiedByName = unitSupervisor.evakaUser.name,
                         modifiedAt = clock.now(),
                         belongsToQuestionnaire = false,
                     ),
@@ -394,6 +400,7 @@ class AbsenceApplicationControllersTest : FullApplicationTest(resetDbBeforeEach 
                         category = AbsenceCategory.NONBILLABLE,
                         absenceType = AbsenceType.OTHER_ABSENCE,
                         modifiedByStaff = true,
+                        modifiedByName = unitSupervisor.evakaUser.name,
                         modifiedAt = clock.now(),
                         belongsToQuestionnaire = false,
                     ),
@@ -557,7 +564,9 @@ class AbsenceApplicationControllersTest : FullApplicationTest(resetDbBeforeEach 
                     FiniteDateRange(LocalDate.of(2022, 1, 1), LocalDate.of(2022, 12, 31)),
                     FiniteDateRange(LocalDate.of(2023, 2, 1), LocalDate.of(2023, 2, 28)),
                 ),
-                db.transaction { tx -> tx.getAbsenceApplicationDateRanges(child.id, clock.today()) },
+                db.transaction { tx ->
+                    tx.getAbsenceApplicationDateRanges(child.id, clock.today())
+                },
             )
         }
 
@@ -587,7 +596,9 @@ class AbsenceApplicationControllersTest : FullApplicationTest(resetDbBeforeEach 
 
             assertEquals(
                 setOf(),
-                db.transaction { tx -> tx.getAbsenceApplicationDateRanges(child.id, clock.today()) },
+                db.transaction { tx ->
+                    tx.getAbsenceApplicationDateRanges(child.id, clock.today())
+                },
             )
         }
 
@@ -630,7 +641,9 @@ class AbsenceApplicationControllersTest : FullApplicationTest(resetDbBeforeEach 
                     FiniteDateRange(LocalDate.of(2022, 8, 1), LocalDate.of(2022, 8, 31)),
                     FiniteDateRange(LocalDate.of(2022, 9, 1), LocalDate.of(2022, 9, 30)),
                 ),
-                db.transaction { tx -> tx.getAbsenceApplicationDateRanges(child.id, clock.today()) },
+                db.transaction { tx ->
+                    tx.getAbsenceApplicationDateRanges(child.id, clock.today())
+                },
             )
         }
 
@@ -946,43 +959,36 @@ class AbsenceApplicationControllersTest : FullApplicationTest(resetDbBeforeEach 
                     decidedBy = null,
                     rejectedReason = null,
                 )
-            val application1 =
-                db.transaction { tx ->
-                    tx.insert(
-                        base.copy(
-                            id = AbsenceApplicationId(UUID.randomUUID()),
-                            endDate = clock.today().plusWeeks(1).minusDays(1),
-                        )
+            val application1 = db.transaction { tx ->
+                tx.insert(
+                    base.copy(
+                        id = AbsenceApplicationId(UUID.randomUUID()),
+                        endDate = clock.today().plusWeeks(1).minusDays(1),
                     )
-                }
-            val application2 =
-                db.transaction { tx ->
-                    tx.insert(
-                        base.copy(
-                            id = AbsenceApplicationId(UUID.randomUUID()),
-                            endDate = clock.today().plusWeeks(1),
-                        )
+                )
+            }
+            val application2 = db.transaction { tx ->
+                tx.insert(
+                    base.copy(
+                        id = AbsenceApplicationId(UUID.randomUUID()),
+                        endDate = clock.today().plusWeeks(1),
                     )
-                }
-            val application3 =
-                db.transaction { tx ->
-                    tx.insert(
-                        base.copy(
-                            id = AbsenceApplicationId(UUID.randomUUID()),
-                            childId = child12.id,
-                        )
+                )
+            }
+            val application3 = db.transaction { tx ->
+                tx.insert(
+                    base.copy(id = AbsenceApplicationId(UUID.randomUUID()), childId = child12.id)
+                )
+            }
+            val application4 = db.transaction { tx ->
+                tx.insert(
+                    base.copy(
+                        id = AbsenceApplicationId(UUID.randomUUID()),
+                        startDate = clock.today().plusYears(1).plusDays(1),
+                        endDate = clock.today().plusYears(1).plusDays(3),
                     )
-                }
-            val application4 =
-                db.transaction { tx ->
-                    tx.insert(
-                        base.copy(
-                            id = AbsenceApplicationId(UUID.randomUUID()),
-                            startDate = clock.today().plusYears(1).plusDays(1),
-                            endDate = clock.today().plusYears(1).plusDays(3),
-                        )
-                    )
-                }
+                )
+            }
 
             // unit supervisor
             assertThrows<Forbidden> { getAbsenceApplications(unitSupervisor.user) }

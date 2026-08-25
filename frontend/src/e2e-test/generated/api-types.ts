@@ -38,12 +38,16 @@ import type { DaycareAssistanceId } from 'lib-common/generated/api-types/shared'
 import type { DaycareAssistanceLevel } from 'lib-common/generated/api-types/assistance'
 import type { DaycareDecisionCustomization } from 'lib-common/generated/api-types/daycare'
 import type { DaycareId } from 'lib-common/generated/api-types/shared'
+import type { DecisionGenericReasoningId } from 'lib-common/generated/api-types/shared'
 import type { DecisionId } from 'lib-common/generated/api-types/shared'
 import type { DecisionIncome } from 'lib-common/generated/api-types/invoicing'
+import type { DecisionIndividualReasoningId } from 'lib-common/generated/api-types/shared'
+import type { DecisionReasoningCollectionType } from 'lib-common/generated/api-types/decision'
 import type { DecisionStatus } from 'lib-common/generated/api-types/decision'
 import type { DecisionType } from 'lib-common/generated/api-types/decision'
 import type { DocumentConfidentiality } from 'lib-common/generated/api-types/caseprocess'
 import type { DocumentContent } from 'lib-common/generated/api-types/document'
+import type { DocumentDeletionBasis } from 'lib-common/generated/api-types/document'
 import type { DocumentStatus } from 'lib-common/generated/api-types/document'
 import type { DocumentTemplateContent } from 'lib-common/generated/api-types/document'
 import type { DocumentTemplateId } from 'lib-common/generated/api-types/shared'
@@ -76,8 +80,6 @@ import LocalDate from 'lib-common/local-date'
 import LocalTime from 'lib-common/local-time'
 import type { MailingAddress } from 'lib-common/generated/api-types/daycare'
 import type { MobileDeviceId } from 'lib-common/generated/api-types/shared'
-import type { Nationality } from 'lib-common/generated/api-types/vtjclient'
-import type { NativeLanguage } from 'lib-common/generated/api-types/vtjclient'
 import type { NekkuProductMealTime } from 'lib-common/generated/api-types/nekku'
 import type { NekkuProductMealType } from 'lib-common/generated/api-types/nekku'
 import type { NekkuSpecialDietType } from 'lib-common/generated/api-types/nekku'
@@ -165,7 +167,9 @@ export interface DecisionRequest {
   applicationId: ApplicationId
   employeeId: EmployeeId
   endDate: LocalDate
+  genericReasoningId: DecisionGenericReasoningId | null
   id: DecisionId
+  individualReasoningIds: DecisionIndividualReasoningId[]
   startDate: LocalDate
   status: DecisionStatus
   type: DecisionType
@@ -390,6 +394,7 @@ export interface DevChildDocument {
   processId: CaseProcessId | null
   publishedVersions: DevChildDocumentPublishedVersion[]
   status: DocumentStatus
+  statusModifiedAt: HelsinkiDateTime | null
   templateId: DocumentTemplateId
 }
 
@@ -432,6 +437,7 @@ export interface DevClubTerm {
 * Generated from evaka.core.shared.dev.DevDailyServiceTimeNotification
 */
 export interface DevDailyServiceTimeNotification {
+  createdAt: HelsinkiDateTime
   guardianId: PersonId
   id: DailyServiceTimeNotificationId
 }
@@ -495,6 +501,7 @@ export interface DevDaycare {
   partnerCode: string
   phone: string | null
   preschoolApplyPeriod: DateRange | null
+  preschoolManagerName: string
   providerId: string
   providerType: ProviderType
   serviceWorkerNote: string
@@ -558,6 +565,35 @@ export interface DevDaycareGroupPlacement {
 }
 
 /**
+* Generated from evaka.core.shared.dev.DevDecisionReasoningGeneric
+*/
+export interface DevDecisionReasoningGeneric {
+  collectionType: DecisionReasoningCollectionType
+  createdAt: HelsinkiDateTime
+  id: DecisionGenericReasoningId
+  modifiedAt: HelsinkiDateTime
+  ready: boolean
+  textFi: string
+  textSv: string
+  validFrom: LocalDate
+}
+
+/**
+* Generated from evaka.core.shared.dev.DevDecisionReasoningIndividual
+*/
+export interface DevDecisionReasoningIndividual {
+  collectionType: DecisionReasoningCollectionType
+  createdAt: HelsinkiDateTime
+  id: DecisionIndividualReasoningId
+  modifiedAt: HelsinkiDateTime
+  removedAt: HelsinkiDateTime | null
+  textFi: string
+  textSv: string
+  titleFi: string
+  titleSv: string
+}
+
+/**
 * Generated from evaka.core.shared.dev.DevDocumentTemplate
 */
 export interface DevDocumentTemplate {
@@ -565,6 +601,8 @@ export interface DevDocumentTemplate {
   archiveExternally: boolean
   confidentiality: DocumentConfidentiality | null
   content: DocumentTemplateContent
+  deletionRetentionBasis: DocumentDeletionBasis
+  deletionRetentionDays: number
   endDecisionWhenUnitChanges: boolean | null
   id: DocumentTemplateId
   language: UiLanguage
@@ -1034,30 +1072,6 @@ export interface Geometry {
 }
 
 /**
-* Generated from evaka.core.vtjclient.service.persondetails.MockVtjDataset
-*/
-export interface MockVtjDataset {
-  guardianDependants: Partial<Record<string, string[]>>
-  persons: MockVtjPerson[]
-}
-
-/**
-* Generated from evaka.core.vtjclient.service.persondetails.MockVtjPerson
-*/
-export interface MockVtjPerson {
-  address: PersonAddress | null
-  dateOfDeath: LocalDate | null
-  firstNames: string
-  lastName: string
-  municipalityOfResidence: string | null
-  nationalities: Nationality[]
-  nativeLanguage: NativeLanguage | null
-  residenceCode: string | null
-  restrictedDetails: RestrictedDetails | null
-  socialSecurityNumber: string
-}
-
-/**
 * Generated from evaka.core.nekku.NekkuCustomer
 */
 export interface NekkuCustomer {
@@ -1112,17 +1126,6 @@ export interface NekkuSpecialDietsField {
 }
 
 /**
-* Generated from evaka.core.vtjclient.dto.PersonAddress
-*/
-export interface PersonAddress {
-  postOffice: string | null
-  postOfficeSe: string | null
-  postalCode: string | null
-  streetAddress: string | null
-  streetAddressSe: string | null
-}
-
-/**
 * Generated from evaka.core.shared.dev.PlacementPlan
 */
 export interface PlacementPlan {
@@ -1149,14 +1152,6 @@ export interface ReservationInsert {
   childId: PersonId
   date: LocalDate
   range: TimeRange | null
-}
-
-/**
-* Generated from evaka.core.vtjclient.dto.RestrictedDetails
-*/
-export interface RestrictedDetails {
-  enabled: boolean
-  endDate: LocalDate | null
 }
 
 /**
@@ -1377,7 +1372,8 @@ export function deserializeJsonDevChildDocument(json: JsonOf<DevChildDocument>):
     createdAt: (json.createdAt != null) ? HelsinkiDateTime.parseIso(json.createdAt) : null,
     decision: (json.decision != null) ? deserializeJsonDevChildDocumentDecision(json.decision) : null,
     modifiedAt: HelsinkiDateTime.parseIso(json.modifiedAt),
-    publishedVersions: json.publishedVersions.map(e => deserializeJsonDevChildDocumentPublishedVersion(e))
+    publishedVersions: json.publishedVersions.map(e => deserializeJsonDevChildDocumentPublishedVersion(e)),
+    statusModifiedAt: (json.statusModifiedAt != null) ? HelsinkiDateTime.parseIso(json.statusModifiedAt) : null
   }
 }
 
@@ -1407,6 +1403,14 @@ export function deserializeJsonDevClubTerm(json: JsonOf<DevClubTerm>): DevClubTe
     applicationPeriod: FiniteDateRange.parseJson(json.applicationPeriod),
     term: FiniteDateRange.parseJson(json.term),
     termBreaks: json.termBreaks.map((x) => FiniteDateRange.parseJson(x))
+  }
+}
+
+
+export function deserializeJsonDevDailyServiceTimeNotification(json: JsonOf<DevDailyServiceTimeNotification>): DevDailyServiceTimeNotification {
+  return {
+    ...json,
+    createdAt: HelsinkiDateTime.parseIso(json.createdAt)
   }
 }
 
@@ -1480,6 +1484,26 @@ export function deserializeJsonDevDaycareGroupPlacement(json: JsonOf<DevDaycareG
     ...json,
     endDate: LocalDate.parseIso(json.endDate),
     startDate: LocalDate.parseIso(json.startDate)
+  }
+}
+
+
+export function deserializeJsonDevDecisionReasoningGeneric(json: JsonOf<DevDecisionReasoningGeneric>): DevDecisionReasoningGeneric {
+  return {
+    ...json,
+    createdAt: HelsinkiDateTime.parseIso(json.createdAt),
+    modifiedAt: HelsinkiDateTime.parseIso(json.modifiedAt),
+    validFrom: LocalDate.parseIso(json.validFrom)
+  }
+}
+
+
+export function deserializeJsonDevDecisionReasoningIndividual(json: JsonOf<DevDecisionReasoningIndividual>): DevDecisionReasoningIndividual {
+  return {
+    ...json,
+    createdAt: HelsinkiDateTime.parseIso(json.createdAt),
+    modifiedAt: HelsinkiDateTime.parseIso(json.modifiedAt),
+    removedAt: (json.removedAt != null) ? HelsinkiDateTime.parseIso(json.removedAt) : null
   }
 }
 
@@ -1695,23 +1719,6 @@ export function deserializeJsonDevTerminatePlacementRequest(json: JsonOf<DevTerm
 }
 
 
-export function deserializeJsonMockVtjDataset(json: JsonOf<MockVtjDataset>): MockVtjDataset {
-  return {
-    ...json,
-    persons: json.persons.map(e => deserializeJsonMockVtjPerson(e))
-  }
-}
-
-
-export function deserializeJsonMockVtjPerson(json: JsonOf<MockVtjPerson>): MockVtjPerson {
-  return {
-    ...json,
-    dateOfDeath: (json.dateOfDeath != null) ? LocalDate.parseIso(json.dateOfDeath) : null,
-    restrictedDetails: (json.restrictedDetails != null) ? deserializeJsonRestrictedDetails(json.restrictedDetails) : null
-  }
-}
-
-
 export function deserializeJsonPlacementPlan(json: JsonOf<PlacementPlan>): PlacementPlan {
   return {
     ...json,
@@ -1728,14 +1735,6 @@ export function deserializeJsonReservationInsert(json: JsonOf<ReservationInsert>
     ...json,
     date: LocalDate.parseIso(json.date),
     range: (json.range != null) ? TimeRange.parseJson(json.range) : null
-  }
-}
-
-
-export function deserializeJsonRestrictedDetails(json: JsonOf<RestrictedDetails>): RestrictedDetails {
-  return {
-    ...json,
-    endDate: (json.endDate != null) ? LocalDate.parseIso(json.endDate) : null
   }
 }
 

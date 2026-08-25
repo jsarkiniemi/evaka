@@ -4,6 +4,7 @@
 
 package evaka.core.shared.job
 
+import evaka.core.AuditContext
 import evaka.core.FullApplicationTest
 import evaka.core.application.ApplicationStateService
 import evaka.core.application.ApplicationStatus
@@ -49,6 +50,7 @@ import evaka.core.shared.dev.DevPlacement
 import evaka.core.shared.dev.DevReservation
 import evaka.core.shared.dev.DevServiceNeed
 import evaka.core.shared.dev.insert
+import evaka.core.shared.dev.insertDefaultDecisionGenericReasonings
 import evaka.core.shared.dev.insertTestApplication
 import evaka.core.shared.domain.FiniteDateRange
 import evaka.core.shared.domain.HelsinkiDateTime
@@ -91,6 +93,7 @@ class ScheduledJobsTest : FullApplicationTest(resetDbBeforeEach = true) {
     @BeforeEach
     fun beforeEach() {
         db.transaction { tx ->
+            tx.insertDefaultDecisionGenericReasonings()
             tx.insert(snDefaultDaycare)
             tx.insert(employee)
             tx.insert(area)
@@ -163,12 +166,11 @@ class ScheduledJobsTest : FullApplicationTest(resetDbBeforeEach = true) {
         tx: Database.Transaction,
         applicationId: ApplicationId,
         created: LocalDate,
-    ) =
-        tx.execute {
-            sql(
-                "UPDATE application SET created_at = ${bind(created)} WHERE id = ${bind(applicationId)}"
-            )
-        }
+    ) = tx.execute {
+        sql(
+            "UPDATE application SET created_at = ${bind(created)} WHERE id = ${bind(applicationId)}"
+        )
+    }
 
     @Test
     fun `a transfer application for a child without any placements is cancelled`() {
@@ -363,6 +365,7 @@ class ScheduledJobsTest : FullApplicationTest(resetDbBeforeEach = true) {
                 it,
                 serviceWorker,
                 RealEvakaClock(),
+                AuditContext(),
                 applicationId,
                 false,
             )
@@ -370,6 +373,7 @@ class ScheduledJobsTest : FullApplicationTest(resetDbBeforeEach = true) {
                 it,
                 serviceWorker,
                 RealEvakaClock(),
+                AuditContext(),
                 applicationId,
                 DaycarePlacementPlan(
                     daycare.id,
@@ -380,6 +384,7 @@ class ScheduledJobsTest : FullApplicationTest(resetDbBeforeEach = true) {
                 it,
                 serviceWorker,
                 RealEvakaClock(),
+                AuditContext(),
                 applicationId,
             )
         }
@@ -431,13 +436,12 @@ class ScheduledJobsTest : FullApplicationTest(resetDbBeforeEach = true) {
             )
         }
 
-        val validNoteId =
-            db.transaction { tx ->
-                tx.createChildStickyNote(
-                    childId = child1.id,
-                    note = ChildStickyNoteBody(note = "", expires = LocalDate.now()),
-                )
-            }
+        val validNoteId = db.transaction { tx ->
+            tx.createChildStickyNote(
+                childId = child1.id,
+                note = ChildStickyNoteBody(note = "", expires = LocalDate.now()),
+            )
+        }
 
         db.read {
             val notesBeforeCleanup = it.getChildStickyNotesForChild(child1.id)
@@ -457,28 +461,27 @@ class ScheduledJobsTest : FullApplicationTest(resetDbBeforeEach = true) {
         val now = Instant.now()
         createExpiredDailyNote(now)
 
-        val validNoteId =
-            db.transaction {
-                it.insert(
-                    DevPlacement(
-                        childId = child2.id,
-                        unitId = daycare.id,
-                        startDate = LocalDate.now().minusDays(100),
-                        endDate = LocalDate.now().plusDays(100),
-                    )
+        val validNoteId = db.transaction {
+            it.insert(
+                DevPlacement(
+                    childId = child2.id,
+                    unitId = daycare.id,
+                    startDate = LocalDate.now().minusDays(100),
+                    endDate = LocalDate.now().plusDays(100),
                 )
-                it.createChildDailyNote(
-                    child2.id,
-                    ChildDailyNoteBody(
-                        feedingNote = null,
-                        note = "",
-                        reminderNote = "",
-                        sleepingMinutes = null,
-                        reminders = emptyList(),
-                        sleepingNote = null,
-                    ),
-                )
-            }
+            )
+            it.createChildDailyNote(
+                child2.id,
+                ChildDailyNoteBody(
+                    feedingNote = null,
+                    note = "",
+                    reminderNote = "",
+                    sleepingMinutes = null,
+                    reminders = emptyList(),
+                    sleepingNote = null,
+                ),
+            )
+        }
 
         scheduledJobs.removeExpiredNotes(db, RealEvakaClock())
 
@@ -653,40 +656,39 @@ class ScheduledJobsTest : FullApplicationTest(resetDbBeforeEach = true) {
         val now = Instant.now()
         createExpiredDailyNote(now)
 
-        val validNoteId =
-            db.transaction {
-                it.insert(
-                    DevPlacement(
-                        childId = child2.id,
-                        unitId = daycare.id,
-                        startDate = LocalDate.now().minusDays(150),
-                        endDate = LocalDate.now().plusDays(150),
-                    )
+        val validNoteId = db.transaction {
+            it.insert(
+                DevPlacement(
+                    childId = child2.id,
+                    unitId = daycare.id,
+                    startDate = LocalDate.now().minusDays(150),
+                    endDate = LocalDate.now().plusDays(150),
                 )
-                it.insert(
-                    DevBackupCare(
-                        childId = child2.id,
-                        groupId = null,
-                        unitId = daycare.id,
-                        period =
-                            FiniteDateRange(
-                                LocalDate.now().minusDays(100),
-                                LocalDate.now().plusDays(100),
-                            ),
-                    )
+            )
+            it.insert(
+                DevBackupCare(
+                    childId = child2.id,
+                    groupId = null,
+                    unitId = daycare.id,
+                    period =
+                        FiniteDateRange(
+                            LocalDate.now().minusDays(100),
+                            LocalDate.now().plusDays(100),
+                        ),
                 )
-                it.createChildDailyNote(
-                    child2.id,
-                    ChildDailyNoteBody(
-                        feedingNote = null,
-                        note = "",
-                        reminderNote = "",
-                        sleepingMinutes = null,
-                        reminders = emptyList(),
-                        sleepingNote = null,
-                    ),
-                )
-            }
+            )
+            it.createChildDailyNote(
+                child2.id,
+                ChildDailyNoteBody(
+                    feedingNote = null,
+                    note = "",
+                    reminderNote = "",
+                    sleepingMinutes = null,
+                    reminders = emptyList(),
+                    sleepingNote = null,
+                ),
+            )
+        }
 
         scheduledJobs.removeExpiredNotes(db, RealEvakaClock())
 

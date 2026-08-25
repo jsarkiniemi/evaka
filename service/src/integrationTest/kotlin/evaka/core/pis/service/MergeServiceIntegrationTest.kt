@@ -23,6 +23,7 @@ import evaka.core.shared.PersonId
 import evaka.core.shared.async.AsyncJob
 import evaka.core.shared.async.AsyncJobRunner
 import evaka.core.shared.auth.AuthenticatedUser
+import evaka.core.shared.config.testFeatureConfig
 import evaka.core.shared.dev.DevCareArea
 import evaka.core.shared.dev.DevDaycare
 import evaka.core.shared.dev.DevEmployee
@@ -82,20 +83,18 @@ class MergeServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = true
         val id = ChildId(UUID.randomUUID())
         db.transaction { it.insert(DevPerson(id = id), DevPersonType.CHILD) }
 
-        val countBefore =
-            db.read {
-                it.createQuery { sql("SELECT count(*) FROM person WHERE id = ${bind(id)}") }
-                    .exactlyOne<Int>()
-            }
+        val countBefore = db.read {
+            it.createQuery { sql("SELECT count(*) FROM person WHERE id = ${bind(id)}") }
+                .exactlyOne<Int>()
+        }
         assertEquals(1, countBefore)
 
         db.transaction { mergeService.deleteEmptyPerson(it, id) }
 
-        val countAfter =
-            db.read {
-                it.createQuery { sql("SELECT count(*) FROM person WHERE id = ${bind(id)}") }
-                    .exactlyOne<Int>()
-            }
+        val countAfter = db.read {
+            it.createQuery { sql("SELECT count(*) FROM person WHERE id = ${bind(id)}") }
+                .exactlyOne<Int>()
+        }
         assertEquals(0, countAfter)
     }
 
@@ -139,26 +138,20 @@ class MergeServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = true
             )
         }
 
-        val countBefore =
-            db.read {
-                it.createQuery {
-                        sql(
-                            "SELECT count(*) FROM income WHERE person_id = ${bind(adultIdDuplicate)}"
-                        )
-                    }
-                    .exactlyOne<Int>()
-            }
+        val countBefore = db.read {
+            it.createQuery {
+                    sql("SELECT count(*) FROM income WHERE person_id = ${bind(adultIdDuplicate)}")
+                }
+                .exactlyOne<Int>()
+        }
         assertEquals(1, countBefore)
 
         db.transaction { mergeService.mergePeople(it, clock, adultId, adultIdDuplicate) }
 
-        val countAfter =
-            db.read {
-                it.createQuery {
-                        sql("SELECT count(*) FROM income WHERE person_id = ${bind(adultId)}")
-                    }
-                    .exactlyOne<Int>()
-            }
+        val countAfter = db.read {
+            it.createQuery { sql("SELECT count(*) FROM income WHERE person_id = ${bind(adultId)}") }
+                .exactlyOne<Int>()
+        }
         assertEquals(1, countAfter)
 
         verify(mergeServiceAsyncJobRunnerMock)
@@ -199,26 +192,22 @@ class MergeServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = true
             )
         }
 
-        val countBefore =
-            db.read {
-                it.createQuery {
-                        sql(
-                            "SELECT count(*) FROM placement WHERE child_id = ${bind(childIdDuplicate)}"
-                        )
-                    }
-                    .exactlyOne<Int>()
-            }
+        val countBefore = db.read {
+            it.createQuery {
+                    sql("SELECT count(*) FROM placement WHERE child_id = ${bind(childIdDuplicate)}")
+                }
+                .exactlyOne<Int>()
+        }
         assertEquals(1, countBefore)
 
         db.transaction { mergeService.mergePeople(it, clock, childId, childIdDuplicate) }
 
-        val countAfter =
-            db.read {
-                it.createQuery {
-                        sql("SELECT count(*) FROM placement WHERE child_id = ${bind(childId)}")
-                    }
-                    .exactlyOne<Int>()
-            }
+        val countAfter = db.read {
+            it.createQuery {
+                    sql("SELECT count(*) FROM placement WHERE child_id = ${bind(childId)}")
+                }
+                .exactlyOne<Int>()
+        }
         assertEquals(1, countAfter)
 
         verifyNoInteractions(mergeServiceAsyncJobRunnerMock)
@@ -227,11 +216,10 @@ class MergeServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = true
     @Test
     fun `merging a person moves sent messages`() {
         val employeeId = EmployeeId(UUID.randomUUID())
-        val recipientAccount =
-            db.transaction {
-                it.insert(DevEmployee(id = employeeId))
-                it.upsertEmployeeMessageAccount(employeeId)
-            }
+        val recipientAccount = db.transaction {
+            it.insert(DevEmployee(id = employeeId))
+            it.upsertEmployeeMessageAccount(employeeId)
+        }
         val senderId = PersonId(UUID.randomUUID())
         val senderIdDuplicate = PersonId(UUID.randomUUID())
         val (senderAccount, senderDuplicateAccount) =
@@ -262,18 +250,27 @@ class MergeServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = true
         assertEquals(listOf(1, 0), sentMessageCounts(senderAccount, senderDuplicateAccount))
     }
 
-    private fun sentMessageCounts(vararg accountIds: MessageAccountId): List<Int> =
-        db.read { tx -> accountIds.map { tx.getMessagesSentByAccount(it, 10, 1).total } }
+    private fun sentMessageCounts(vararg accountIds: MessageAccountId): List<Int> = db.read { tx ->
+        accountIds.map {
+            tx.getMessagesSentByAccount(
+                    it,
+                    10,
+                    1,
+                    deletedMessageBody = testFeatureConfig.deletedMessagePlaceholderBody,
+                    deletedMessageTitle = testFeatureConfig.deletedMessagePlaceholderTitle,
+                )
+                .total
+        }
+    }
 
     @Test
     fun `merging a person moves received messages`() {
         val now = HelsinkiDateTime.of(LocalDate.of(2022, 8, 11), LocalTime.of(13, 45))
         val employeeId = EmployeeId(UUID.randomUUID())
-        val senderAccount =
-            db.transaction {
-                it.insert(DevEmployee(id = employeeId))
-                it.upsertEmployeeMessageAccount(employeeId)
-            }
+        val senderAccount = db.transaction {
+            it.insert(DevEmployee(id = employeeId))
+            it.upsertEmployeeMessageAccount(employeeId)
+        }
 
         val recipientId = PersonId(UUID.randomUUID())
         val recipientIdDuplicate = PersonId(UUID.randomUUID())
@@ -325,6 +322,8 @@ class MergeServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = true
                         "Espoo",
                         "Espoon palveluohjaus",
                         "Espoon asiakasmaksut",
+                        deletedMessageBody = testFeatureConfig.deletedMessagePlaceholderBody,
+                        deletedMessageTitle = testFeatureConfig.deletedMessagePlaceholderTitle,
                     )
                     .total
             }
@@ -342,6 +341,8 @@ class MergeServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = true
                         "Espoon palveluohjaus",
                         "Espoon asiakasmaksut",
                         archiveFolderId,
+                        deletedMessageBody = testFeatureConfig.deletedMessagePlaceholderBody,
+                        deletedMessageTitle = testFeatureConfig.deletedMessagePlaceholderTitle,
                     )
                     .total
             }
@@ -351,11 +352,10 @@ class MergeServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = true
     fun `merging a person should move archived messages as well`() {
         val now = HelsinkiDateTime.of(LocalDate.of(2022, 8, 11), LocalTime.of(13, 45))
         val employeeId = EmployeeId(UUID.randomUUID())
-        val senderAccount =
-            db.transaction {
-                it.insert(DevEmployee(id = employeeId))
-                it.upsertEmployeeMessageAccount(employeeId)
-            }
+        val senderAccount = db.transaction {
+            it.insert(DevEmployee(id = employeeId))
+            it.upsertEmployeeMessageAccount(employeeId)
+        }
 
         val recipientId = PersonId(UUID.randomUUID())
         val recipientIdDuplicate = PersonId(UUID.randomUUID())
@@ -386,6 +386,8 @@ class MergeServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = true
                         "Espoo",
                         "Espoon palveluohjaus",
                         "Espoon asiakasmaksut",
+                        deletedMessageBody = testFeatureConfig.deletedMessagePlaceholderBody,
+                        deletedMessageTitle = testFeatureConfig.deletedMessagePlaceholderTitle,
                     )
                     .data
                     .first()
@@ -569,13 +571,12 @@ class MergeServiceIntegrationTest : FullApplicationTest(resetDbBeforeEach = true
             "image/jpeg",
         )
 
-    private fun childImageCount(childId: ChildId): Int =
-        db.read {
-            it.createQuery {
-                    sql("SELECT COUNT(*) FROM child_images WHERE child_id = ${bind(childId)}")
-                }
-                .exactlyOne()
-        }
+    private fun childImageCount(childId: ChildId): Int = db.read {
+        it.createQuery {
+                sql("SELECT COUNT(*) FROM child_images WHERE child_id = ${bind(childId)}")
+            }
+            .exactlyOne()
+    }
 
     private val imageName = "test1.jpg"
     private val imageData =

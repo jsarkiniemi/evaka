@@ -293,49 +293,61 @@ const customizations: CitizenCustomizations = {
                 'Lisää tähän molemmilta huoltajilta todistus vuorotyöstä tai todistus opiskelusta iltaisin/viikonloppuisin'
             },
             preparatory:
-              'Lapsi tarvitsee tukea suomen kielen oppimisessa ja lapselle on suositeltu valmistavaa esiopetusta nykyisestä päiväkodista. Haen myös perusopetukseen valmistavaan opetukseen. Ei koske ruotsinkielistä esiopetusta.',
+              'Lapsi ja hänen vanhempansa tai ainoa tiedossa oleva vanhempi ovat syntyneet Suomen ulkopuolella. Lapsi tarvitsee tukea suomen kielen oppimiseen. Nykyinen päiväkoti suosittelee lapselle valmistavaa esiopetusta. Haen lapselle paikkaa perusopetukseen valmistavaan opetukseen. Hakemus ei koske ruotsinkielistä esiopetusta.',
             preparatoryInfo: null,
             preparatoryExtraInstructions: (
-              <>
-                <P>
-                  Esiopetuksessa toteutettavaan perusopetukseen valmistavaan
-                  opetukseen voivat hakeutua lapset, joilla ei ole vielä suomen
-                  kielen taitoa tai jotka osaavat jo jonkin verran suomea.
-                  Esiopetusikäisten perusopetukseen valmistavaa opetusta
-                  järjestetään kunnallisissa suomenkielisissä esiopetusryhmissä.
-                </P>
-                <P>
-                  Pidennetyn oppivelvollisuuden piirissä olevilla lapsilla ei
-                  ole oikeutta perusopetukseen valmistavaan opetukseen. Mikäli
-                  lapsella on tai hänelle myöhemmin myönnetään pidennetyn
-                  oppivelvollisuuden päätös, lapsen sijoitus muutetaan
-                  esiopetussijoitukseksi
-                </P>
-              </>
+              <P>
+                Perusopetukseen valmistava opetus on tarkoitettu lapsille,
+                joiden suomen kielen taito on vielä heikko tai kehittymässä.
+                Esiopetusikäisten valmistavaa opetusta järjestetään vain
+                kunnallisissa suomenkielisissä esiopetusryhmissä.
+              </P>
             ),
             assistanceNeeded: {
               DAYCARE:
                 'Lapsella on kehitykseen tai oppimiseen liittyvä tuen tarve',
               PRESCHOOL:
-                'Valitse tämä kohta, jos lapsi tarvitsee kehitykselleen, oppimiselleen ja/tai hyvinvoinnille tukea.',
+                'Valitse tämä kohta, jos lapsellasi on kehitykseen ja/tai oppimiseen liittyvä tuen tarve tai voimassa oleva tukea koskeva päätös varhaiskasvatuksessa. Tarvittaessa varhaiserityiskasvatuksen koordinaattori ottaa hakijaan yhteyttä.',
               CLUB: 'Lapsella on kehitykseen tai oppimiseen liittyvä tuen tarve'
             },
             assistanceNeedInstructions: {
-              DAYCARE:
-                'Valitse tämä kohta, jos lapsesi tarvitsee tukea kehitykseen, oppimiseen tai hyvinvointiin. Tukea annetaan lapsen arjessa osana varhaiskasvatusta. Jos lapsella on oppimisen ja/tai esiopetukseen osallistumisen tuen tarvetta, varhaiskasvatuksen erityisopettaja ottaa hakijaan yhteyttä. Näin voimme huomioida lapsen tarpeet ja osoittaa hänelle sopivan varhaiskasvatuspaikan.',
+              DAYCARE: (
+                <>
+                  <P $fitted>
+                    Valitse tämä kohta, jos lapsellasi on kehitykseen ja/tai
+                    oppimiseen liittyvä tuen tarve tai voimassa oleva tukea
+                    koskeva päätös varhaiskasvatuksessa. Tarvittaessa
+                    varhaiserityiskasvatuksen koordinaattori ottaa hakijaan
+                    yhteyttä.
+                  </P>
+                  <P>
+                    Tätä kohtaa ei tule täyttää, mikäli lapsesi vasta opettelee
+                    suomen kieltä.
+                  </P>
+                </>
+              ),
+              CLUB: (
+                <>
+                  <P $fitted>
+                    Valitse tämä kohta, jos lapsellasi on kehitykseen ja/tai
+                    oppimiseen liittyvä tuen tarve tai voimassa oleva tukea
+                    koskeva päätös varhaiskasvatuksessa. Tarvittaessa
+                    varhaiserityiskasvatuksen koordinaattori ottaa hakijaan
+                    yhteyttä.
+                  </P>
+                  <P>
+                    Tätä kohtaa ei tule täyttää, mikäli lapsesi vasta opettelee
+                    suomen kieltä.
+                  </P>
+                </>
+              ),
               PRESCHOOL: null
             },
             assistanceNeedExtraInstructions: {
               PRESCHOOL: (
                 <P>
-                  Tukea annetaan lapsen arjessa osana esiopetusta ja
-                  varhaiskasvatusta. Valitse tämä kohta myös, jos lapsella on
-                  muu erityinen syy, jolla on suoranaista vaikutusta
-                  esiopetuksen järjestämiseen ja siihen, missä yksikössä lapsen
-                  esiopetus tulee järjestää. Jos lapsella on oppimisen ja/tai
-                  esiopetukseen osallistumisen tuen tarvetta, varhaiskasvatuksen
-                  erityisopettaja ottaa hakijaan yhteyttä. Näin voimme huomioida
-                  lapsen tarpeet ja osoittaa hänelle sopivan esiopetuspaikan.
+                  Tätä kohtaa ei tule täyttää, mikäli lapsesi vasta opettelee
+                  suomen kieltä.
                 </P>
               )
             }
@@ -826,53 +838,61 @@ const customizations: CitizenCustomizations = {
             assistanceNeeded: {
               DAYCARE: 'Barnet behöver stöd för utvecklingen eller lärandet',
               PRESCHOOL:
-                'Välj detta alternativ om barnet behöver stöd för sin utveckling, sitt lärande och/eller sitt välbefinnande under',
+                'Välj detta alternativ om ditt barn har ett stödbehov som anknyter till utveckling och/eller lärande, eller ett gällande beslut om stöd inom småbarnspedagogiken. Vid behov kontaktar koordinatorn inom den särskilda småbarnspedagogiken den sökande.',
               CLUB: 'Barnet behöver stöd för utvecklingen eller lärandet'
             },
             assistanceNeedInstructions: {
-              DAYCARE:
-                'Kryssa för denna punkt om ditt barn behöver stöd för sin utveckling, sitt lärande eller sitt välbefinnande. Stöd ges i barnets vardag som en del av småbarnspedagogiken. Om barnet har stödbehov, kontaktar specialläraren inom småbarnspedagogiken den sökande. På så sätt kan vi ta hänsyn till barnets behov och anvisa barnet en lämplig plats inom småbarnspedagogiken.',
+              DAYCARE: (
+                <>
+                  <P $fitted>
+                    Kryssa för denna punkt om ditt barn har ett stödbehov som
+                    anknyter till utveckling och/eller lärande, eller ett
+                    gällande beslut om stöd inom småbarnspedagogiken. Vid behov
+                    kontaktar koordinatorn inom den särskilda
+                    småbarnspedagogiken den sökande.
+                  </P>
+                  <P>
+                    Denna punkt ska inte fyllas i om ditt barn ännu håller på
+                    att lära sig finska.
+                  </P>
+                </>
+              ),
+              CLUB: (
+                <>
+                  <P $fitted>
+                    Kryssa för denna punkt om ditt barn har ett stödbehov som
+                    anknyter till utveckling och/eller lärande, eller ett
+                    gällande beslut om stöd inom småbarnspedagogiken. Vid behov
+                    kontaktar koordinatorn inom den särskilda
+                    småbarnspedagogiken den sökande.
+                  </P>
+                  <P>
+                    Denna punkt ska inte fyllas i om ditt barn ännu håller på
+                    att lära sig finska.
+                  </P>
+                </>
+              ),
               PRESCHOOL: null
             },
             assistanceNeedExtraInstructions: {
               PRESCHOOL: (
                 <P>
-                  Kryssa för denna punkt om barnet behöver stöd för sin uppväxt
-                  och/eller sitt lärande under förskoleåret. Stöd ges i barnets
-                  vardag som en del av förskoleundervisningen och
-                  småbarnspedagogiken. Kryssa för denna punkt också om det finns
-                  någon annan särskild anledning som direkt påverkar ordnandet
-                  av förskoleundervisningen och vid vilken enhet
-                  förskoleundervisningen bör ordnas för barnet. Om barnet har
-                  behov av stöd för lärande och/eller deltagande i
-                  förskoleundervisningen, kommer specialläraren inom
-                  småbarnspedagogik att. På så sätt kan vi ta hänsyn till
-                  barnets behov och anvisa barnet en lämplig plats inom
-                  förskoleundervisningen.
+                  Denna punkt ska inte fyllas i om ditt barn ännu håller på att
+                  lära sig finska.
                 </P>
               )
             },
             preparatory:
-              'Barnet behöver stöd med att lära sig finska och ja barnets nuvarande daghem har rekommenderat att barnet deltar i undervisning som förbereder för grundläggande utbildning. Jag ansöker också till undervisning som förbereder för grundläggande utbildning. Gäller inte svenskspråkig förskoleundervisning.',
+              'Barnet och barnets föräldrar eller den enda kända föräldern är födda utanför Finland. Barnet behöver stöd i att lära sig finska. Barnets nuvarande daghem rekommenderar förberedande undervisning för barnet. Jag ansöker om en plats för barnet i undervisning som förbereder för den grundläggande utbildningen. OBS: Ansökan gäller inte svenskspråkig förskoleundervisning.',
             preparatoryInfo: null,
             preparatoryExtraInstructions: (
-              <>
-                <P>
-                  Plats inom undervisning som förbereder för grundläggande
-                  utbildning och som genomförs inom förskoleundervisningen kan
-                  sökas för barn som ännu inte kan finska eller som kan lite
-                  finska. Undervisning som förbereder för grundläggande
-                  utbildning för barn i förskoleåldern ordnas i kommunala,
-                  finskspråkiga förskolegrupper.
-                </P>
-                <P>
-                  Barn med förlängd läroplikt har inte rätt att delta i
-                  undervisning som förbereder för grundläggande utbildning. Om
-                  barnet har ett beslut om förlängd läroplikt eller får ett
-                  sådant beslut senare ändras barnets placering till en
-                  placering inom förskoleundervisning.
-                </P>
-              </>
+              <P>
+                Undervisning som förbereder för den grundläggande utbildningen
+                är avsedd för barn vars kunskaper i finska fortfarande är svaga
+                eller under utveckling. Förberedande undervisning för barn i
+                förskoleåldern ordnas endast i kommunala finskspråkiga
+                förskolegrupper.
+              </P>
             )
           },
           unitPreference: {
@@ -1407,52 +1427,61 @@ const customizations: CitizenCustomizations = {
             assistanceNeeded: {
               DAYCARE: 'My child needs support for development or learning',
               PRESCHOOL:
-                'Select this option if the child needs support for their development, learning and/or wellbeing during the pre-primary education year',
+                'Select this option if your child has a support need related to development and/or learning, or a valid decision concerning support in early childhood education. If necessary, the special early childhood education coordinator will contact you.',
               CLUB: 'My child needs support for development or learning'
             },
             assistanceNeedInstructions: {
-              DAYCARE:
-                'Tick this box if your child needs support for their development, learning or wellbeing. Support is provided as part of early childhood education. If your child needs support, a special needs teacher will contact you. This will ensure that your child’s needs are taken into account and your child is given a place in a suitable early childhood education unit.',
+              DAYCARE: (
+                <>
+                  <P $fitted>
+                    Tick this box if your child has a support need related to
+                    development and/or learning, or a valid decision concerning
+                    support in early childhood education. If necessary, the
+                    special early childhood education coordinator will contact
+                    you.
+                  </P>
+                  <P>
+                    Do not fill in this box if your child is only just learning
+                    Finnish.
+                  </P>
+                </>
+              ),
+              CLUB: (
+                <>
+                  <P $fitted>
+                    Tick this box if your child has a support need related to
+                    development and/or learning, or a valid decision concerning
+                    support in early childhood education. If necessary, the
+                    special early childhood education coordinator will contact
+                    you.
+                  </P>
+                  <P>
+                    Do not fill in this box if your child is only just learning
+                    Finnish.
+                  </P>
+                </>
+              ),
               PRESCHOOL: null
             },
             assistanceNeedExtraInstructions: {
               PRESCHOOL: (
                 <P>
-                  Tick this box if your child needs support for their
-                  development and/or learning during the pre-primary education
-                  year. Support is provided as part of pre-primary education and
-                  early childhood education. Also tick this box if your child
-                  has another special reason that directly affects the provision
-                  of pre-primary education or the unit in which their
-                  pre-primary education should be provided. If a child needs
-                  support for learning and/or participation in pre-primary
-                  education, the early childhood special education teacher will
-                  contact you. This will ensure that your child’s needs are
-                  taken into account and your child is given a placein a
-                  suitable pre-primary education unit.
+                  Do not fill in this box if your child is only just learning
+                  Finnish.
                 </P>
               )
             },
             preparatory:
-              'My child needs support in learning Finnish and the child’s current day care centre has recommended that the child attend preparatory pre-primary education. I am also applying for preparatory education. This does not apply to Swedish pre-primary education.',
+              'The child and the child’s parents, or the child’s only known parent, were born outside Finland. The child needs support in learning Finnish. The child’s current early childhood education provider recommends preparatory instruction. I am applying for a place for the child in preparatory education for basic education. This application does not concern Swedish-language pre-primary education.',
             preparatoryInfo: null,
             preparatoryExtraInstructions: (
-              <>
-                <P>
-                  Preparatory education is offered in connection with
-                  pre-primary education to children who do not yet have Finnish
-                  language skills or who know some Finnish. Preparatory
-                  education is offered to children of pre-primary education age
-                  in Finnish-speaking municipal pre-primary education groups.
-                </P>
-                <P>
-                  Children attending extended compulsory education are not
-                  entitled to preparatory education. If the child has received
-                  or later receives a decision on extended compulsory education,
-                  the child’s placement will be changed to a pre-primary
-                  education placement.
-                </P>
-              </>
+              <P>
+                Preparatory education for basic education is intended for
+                children whose Finnish language skills are limited or still
+                developing. For children of pre-primary education age,
+                preparatory education is provided only in municipal
+                Finnish-language pre-primary education groups.
+              </P>
             )
           },
           unitPreference: {

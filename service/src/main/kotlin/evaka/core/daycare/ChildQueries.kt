@@ -7,12 +7,12 @@ package evaka.core.daycare
 import evaka.core.daycare.controllers.Child
 import evaka.core.shared.ChildId
 import evaka.core.shared.db.Database
+import evaka.core.shared.domain.HelsinkiDateTime
 
 fun Database.Read.getChild(id: ChildId): Child? {
-    val child =
-        createQuery {
-                sql(
-                    """
+    val child = createQuery {
+        sql(
+            """
 SELECT child.*, person.preferred_name, special_diet.id as special_diet_id, special_diet.abbreviation as special_diet_abbreviation, meal_texture.name AS meal_texture_name, (
   SELECT jsonb_agg(jsonb_build_object('dietId', diet_id, 'fieldId', field_id, 'value', value))
   FROM nekku_special_diet_choices
@@ -21,13 +21,13 @@ SELECT child.*, person.preferred_name, special_diet.id as special_diet_id, speci
 FROM child JOIN person ON child.id = person.id LEFT JOIN special_diet on child.diet_id = special_diet.id LEFT JOIN meal_texture on child.meal_texture_id = meal_texture.id
 WHERE child.id = ${bind(id)}
 """
-                )
-            }
-            .exactlyOneOrNull<Child>()
+        )
+    }
+        .exactlyOneOrNull<Child>()
     return child
 }
 
-fun Database.Transaction.createChild(child: Child) {
+fun Database.Transaction.createChild(child: Child, now: HelsinkiDateTime) {
     execute {
         sql(
             """
@@ -47,7 +47,7 @@ INSERT INTO child (id, allergies, diet, additionalinfo, medication, language_at_
 """
         )
     }
-    resetNekkuSpecialDietChoices(child)
+    resetNekkuSpecialDietChoices(child, now)
 }
 
 fun Database.Transaction.upsertChild(child: Child) {
@@ -61,7 +61,7 @@ ON CONFLICT (id) DO UPDATE SET allergies = ${bind(child.additionalInformation.al
     }
 }
 
-fun Database.Transaction.updateChild(child: Child) {
+fun Database.Transaction.updateChild(child: Child, now: HelsinkiDateTime) {
     execute {
         sql(
             """
@@ -80,10 +80,10 @@ WHERE id = ${bind(child.id)}
 """
         )
     }
-    resetNekkuSpecialDietChoices(child)
+    resetNekkuSpecialDietChoices(child, now)
 }
 
-fun Database.Transaction.resetNekkuSpecialDietChoices(child: Child) {
+fun Database.Transaction.resetNekkuSpecialDietChoices(child: Child, now: HelsinkiDateTime) {
     execute {
         sql(
             """
@@ -94,12 +94,13 @@ fun Database.Transaction.resetNekkuSpecialDietChoices(child: Child) {
     executeBatch(child.additionalInformation.nekkuSpecialDietChoices) {
         sql(
             """
-                INSERT INTO nekku_special_diet_choices (child_id, diet_id, field_id, value)
+                INSERT INTO nekku_special_diet_choices (child_id, diet_id, field_id, value, created_at)
                 VALUES (
                     ${bind(child.id)},
-                    ${bind{it.dietId}},
-                    ${bind{it.fieldId}},
-                    ${bind{it.value}}
+                    ${bind { it.dietId }},
+                    ${bind { it.fieldId }},
+                    ${bind { it.value }},
+                    ${bind(now)}
                 )
             """
         )

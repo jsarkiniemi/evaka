@@ -16,7 +16,6 @@ import evaka.core.serviceneed.ShiftCareType
 import evaka.core.shared.ChildId
 import evaka.core.shared.HolidayQuestionnaireId
 import evaka.core.shared.ServiceNeedOptionId
-import evaka.core.shared.auth.AuthenticatedUser
 import evaka.core.shared.auth.CitizenAuthLevel
 import evaka.core.shared.db.Database
 import evaka.core.shared.dev.DevCareArea
@@ -27,7 +26,6 @@ import evaka.core.shared.dev.DevPlacement
 import evaka.core.shared.dev.DevServiceNeed
 import evaka.core.shared.dev.insert
 import evaka.core.shared.dev.insertServiceNeedOption
-import evaka.core.shared.dev.insertServiceNeedOptions
 import evaka.core.shared.domain.BadRequest
 import evaka.core.shared.domain.FiniteDateRange
 import evaka.core.shared.domain.HelsinkiDateTime
@@ -41,6 +39,7 @@ import evaka.core.shared.security.AccessControl
 import evaka.core.shared.security.AccessControlTest.TestActionRuleMapping
 import evaka.core.shared.security.Action
 import evaka.core.shared.security.actionrule.IsCitizen
+import evaka.core.snDefaultDaycare
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.LocalTime
@@ -89,19 +88,19 @@ class HolidayPeriodControllerCitizenIntegrationTest :
         )
     private val mockToday: LocalDate = freePeriodQuestionnaire.active.end.minusWeeks(1)
 
-    final val area = DevCareArea()
-    val daycare = DevDaycare(areaId = area.id)
-    val voucherDaycare =
+    private val area = DevCareArea()
+    private val daycare = DevDaycare(areaId = area.id)
+    private val voucherDaycare =
         DevDaycare(areaId = area.id, providerType = ProviderType.PRIVATE_SERVICE_VOUCHER)
-    val child1 = DevPerson(id = ChildId(UUID.randomUUID()))
-    val child2 = DevPerson(id = ChildId(UUID.randomUUID()))
-    val child3 = DevPerson(id = ChildId(UUID.randomUUID()))
-    val child4 = DevPerson(id = ChildId(UUID.randomUUID()))
+    private val child1 = DevPerson()
+    private val child2 = DevPerson()
+    private val child3 = DevPerson()
+    private val child4 = DevPerson()
     private val parent = DevPerson()
-    private val authenticatedParent = AuthenticatedUser.Citizen(parent.id, CitizenAuthLevel.STRONG)
+    private val authenticatedParent = parent.user(CitizenAuthLevel.STRONG)
 
     @BeforeEach
-    fun setUp() {
+    fun beforeEach() {
         db.transaction { tx ->
             tx.insert(area)
             tx.insert(daycare)
@@ -118,18 +117,13 @@ class HolidayPeriodControllerCitizenIntegrationTest :
                     endDate = mockToday.plusYears(1),
                 )
             tx.insert(placement)
-            tx.insertServiceNeedOptions()
+            tx.insertServiceNeedOption(snDefaultDaycare)
             tx.insert(
                 DevServiceNeed(
                     placementId = placement.id,
                     startDate = placement.startDate,
                     endDate = placement.endDate,
-                    optionId =
-                        ServiceNeedOptionId(
-                            UUID.fromString(
-                                "7406df92-e715-11ec-9ec2-9b7ff580dcb4"
-                            ) // full time daycare
-                        ),
+                    optionId = snDefaultDaycare.id,
                     confirmedBy = authenticatedParent.evakaUserId,
                 )
             )
@@ -235,6 +229,100 @@ class HolidayPeriodControllerCitizenIntegrationTest :
     }
 
     @Test
+    fun `active questionnaire is eligible for a child whose placement in a private voucher value unit has ended`() {
+        db.transaction { tx ->
+            tx.insertGuardian(parent.id, child4.id)
+            tx.insert(voucherDaycare)
+            tx.insert(
+                DevPlacement(
+                    childId = child4.id,
+                    unitId = voucherDaycare.id,
+                    startDate = mockToday.minusYears(2),
+                    endDate = mockToday.minusDays(1),
+                )
+            )
+            tx.insert(
+                DevPlacement(
+                    childId = child4.id,
+                    unitId = daycare.id,
+                    startDate = mockToday,
+                    endDate = mockToday.plusYears(1),
+                )
+            )
+        }
+
+        createFixedPeriodQuestionnaire(freePeriodQuestionnaire)
+
+        val response = getActiveQuestionnaires(mockToday)
+
+        assertEquals(1, response.size)
+        assertThat(response[0].eligibleChildren)
+            .containsExactlyInAnyOrderEntriesOf(
+                mapOf(
+                    child1.id to freePeriodQuestionnaire.periodOptions,
+                    child4.id to freePeriodQuestionnaire.periodOptions,
+                )
+            )
+    }
+
+    @Test
+    fun `active questionnaire is eligible for a child with a future placement when the calendar is already open`() {
+        db.transaction { tx ->
+            tx.insertGuardian(parent.id, child2.id)
+            tx.insert(
+                DevPlacement(
+                    childId = child2.id,
+                    unitId = daycare.id,
+                    startDate =
+                        mockToday.plusDays(
+                            citizenCalendarEnv.calendarOpenBeforePlacementDays.toLong()
+                        ),
+                    endDate = mockToday.plusYears(1),
+                )
+            )
+        }
+        createFixedPeriodQuestionnaire(freePeriodQuestionnaire)
+
+        val response = getActiveQuestionnaires(mockToday)
+
+        assertEquals(1, response.size)
+        assertThat(response[0].eligibleChildren)
+            .containsExactlyInAnyOrderEntriesOf(
+                mapOf(
+                    child1.id to freePeriodQuestionnaire.periodOptions,
+                    child2.id to freePeriodQuestionnaire.periodOptions,
+                )
+            )
+    }
+
+    @Test
+    fun `active questionnaire is not eligible for a child with a future placement when the calendar is not yet open`() {
+        db.transaction { tx ->
+            tx.insertGuardian(parent.id, child2.id)
+            tx.insert(
+                DevPlacement(
+                    childId = child2.id,
+                    unitId = daycare.id,
+                    startDate =
+                        mockToday.plusDays(
+                            citizenCalendarEnv.calendarOpenBeforePlacementDays.toLong() + 1
+                        ),
+                    endDate = mockToday.plusYears(1),
+                )
+            )
+        }
+        createFixedPeriodQuestionnaire(freePeriodQuestionnaire)
+
+        val response = getActiveQuestionnaires(mockToday)
+
+        assertEquals(1, response.size)
+        assertThat(response[0].eligibleChildren)
+            .containsExactlyInAnyOrderEntriesOf(
+                mapOf(child1.id to freePeriodQuestionnaire.periodOptions)
+            )
+    }
+
+    @Test
     fun `questionnaire answer is saved and returned with active questionnaire`() {
         val id = createFixedPeriodQuestionnaire(freePeriodQuestionnaire.copy())
 
@@ -323,6 +411,64 @@ class HolidayPeriodControllerCitizenIntegrationTest :
                 .toList(),
             db.read { it.getAllAbsences().filter { absence -> absence.childId == child1.id } },
         )
+        assertEquals(
+            firstOption.dates().map { Absence(child2.id, it, AbsenceType.FREE_ABSENCE) }.toList(),
+            db.read { it.getAllAbsences().filter { absence -> absence.childId == child2.id } },
+        )
+    }
+
+    @Test
+    fun `free absences are saved on weekends for a shift care child that has an earlier non-shift-care service need on the same placement`() {
+        val id = createFixedPeriodQuestionnaire(freePeriodQuestionnaire)
+        val firstOption = freePeriodQuestionnaire.periodOptions[0]
+
+        val fullDay = TimeRange(LocalTime.parse("00:00"), LocalTime.parse("23:59"))
+        db.transaction { tx ->
+            val daycareId =
+                tx.insert(
+                    DevDaycare(
+                        areaId = area.id,
+                        operationTimes =
+                            listOf(fullDay, fullDay, fullDay, fullDay, fullDay, null, null),
+                        shiftCareOperationTimes =
+                            listOf(fullDay, fullDay, fullDay, fullDay, fullDay, fullDay, fullDay),
+                        shiftCareOpenOnHolidays = true,
+                    )
+                )
+            tx.insertGuardian(parent.id, child2.id)
+
+            val placement =
+                DevPlacement(
+                    childId = child2.id,
+                    unitId = daycareId,
+                    startDate = mockToday.minusYears(2),
+                    endDate = mockToday.plusYears(1),
+                )
+            tx.insert(placement)
+            tx.insert(
+                DevServiceNeed(
+                    placementId = placement.id,
+                    startDate = placement.startDate,
+                    endDate = firstOption.start.minusDays(1),
+                    optionId = snDefaultDaycare.id,
+                    shiftCare = ShiftCareType.NONE,
+                    confirmedBy = authenticatedParent.evakaUserId,
+                )
+            )
+            tx.insert(
+                DevServiceNeed(
+                    placementId = placement.id,
+                    startDate = firstOption.start,
+                    endDate = placement.endDate,
+                    optionId = snDefaultDaycare.id,
+                    shiftCare = ShiftCareType.FULL,
+                    confirmedBy = authenticatedParent.evakaUserId,
+                )
+            )
+        }
+
+        reportFreePeriods(id, FixedPeriodsBody(mapOf(child2.id to firstOption)))
+
         assertEquals(
             firstOption.dates().map { Absence(child2.id, it, AbsenceType.FREE_ABSENCE) }.toList(),
             db.read { it.getAllAbsences().filter { absence -> absence.childId == child2.id } },
@@ -517,35 +663,100 @@ class HolidayPeriodControllerCitizenIntegrationTest :
             OpenRangesBody(mapOf(child2.id to listOf(shortRange))),
         )
 
-        val absences =
-            db.read { tx ->
-                tx.createQuery {
-                        sql(
-                            "SELECT child_id, date, absence_type, category FROM absence ORDER BY date"
-                        )
-                    }
-                    .toList<BillableAbsence>()
-            }
-        val billableAbsences =
-            absences.filter {
-                it.childId == child2.id &&
-                    it.category == AbsenceCategory.BILLABLE &&
-                    !it.date.isWeekend()
-            }
+        val absences = db.read { tx ->
+            tx.createQuery {
+                    sql("SELECT child_id, date, absence_type, category FROM absence ORDER BY date")
+                }
+                .toList<BillableAbsence>()
+        }
+        val billableAbsences = absences.filter {
+            it.childId == child2.id &&
+                it.category == AbsenceCategory.BILLABLE &&
+                !it.date.isWeekend()
+        }
         assertThat(billableAbsences).isNotEmpty
         billableAbsences.forEach { absence ->
             assertEquals(AbsenceType.PLANNED_ABSENCE, absence.absenceType)
         }
-        val nonbillableAbsences =
-            absences.filter {
-                it.childId == child2.id &&
-                    it.category == AbsenceCategory.NONBILLABLE &&
-                    !it.date.isWeekend()
-            }
+        val nonbillableAbsences = absences.filter {
+            it.childId == child2.id &&
+                it.category == AbsenceCategory.NONBILLABLE &&
+                !it.date.isWeekend()
+        }
         assertThat(nonbillableAbsences).isNotEmpty
         nonbillableAbsences.forEach { absence ->
             assertEquals(AbsenceType.OTHER_ABSENCE, absence.absenceType)
         }
+    }
+
+    @Test
+    fun `open ranges submission ignores ineligible children with empty range list`() {
+        db.transaction { tx ->
+            tx.insertGuardian(parent.id, child2.id)
+            tx.insert(
+                DevPlacement(
+                    childId = child2.id,
+                    unitId = daycare.id,
+                    type = PlacementType.CLUB,
+                    startDate = mockToday.minusYears(1),
+                    endDate = mockToday.plusYears(1),
+                )
+            )
+        }
+
+        val id = createOpenRangesQuestionnaire(freeRangesQuestionnaire)
+        val range =
+            FiniteDateRange(
+                freeRangesQuestionnaire.period.start,
+                freeRangesQuestionnaire.period.start.plusDays(40),
+            )
+
+        reportFreeRanges(
+            id,
+            OpenRangesBody(mapOf(child1.id to listOf(range), child2.id to emptyList())),
+        )
+
+        val absences = db.read { it.getAllAbsences() }
+        assertThat(absences.map { it.childId }.toSet()).containsExactly(child1.id)
+    }
+
+    @Test
+    fun `open ranges submission is rejected for a child with a future placement when the calendar is not yet open`() {
+        db.transaction { tx ->
+            tx.insertGuardian(parent.id, child2.id)
+            tx.insert(
+                DevPlacement(
+                    childId = child2.id,
+                    unitId = daycare.id,
+                    startDate =
+                        mockToday.plusDays(
+                            citizenCalendarEnv.calendarOpenBeforePlacementDays.toLong() + 1
+                        ),
+                    endDate = mockToday.plusYears(1),
+                )
+            )
+        }
+
+        val id = createOpenRangesQuestionnaire(freeRangesQuestionnaire)
+        val range =
+            FiniteDateRange(
+                freeRangesQuestionnaire.period.start,
+                freeRangesQuestionnaire.period.start.plusDays(40),
+            )
+
+        assertThrows<BadRequest> {
+            reportFreeRanges(id, OpenRangesBody(mapOf(child2.id to listOf(range))))
+        }
+    }
+
+    @Test
+    fun `open ranges submission with empty list for eligible child is a no-op`() {
+        val id = createOpenRangesQuestionnaire(freeRangesQuestionnaire)
+
+        reportFreeRanges(id, OpenRangesBody(mapOf(child1.id to emptyList())))
+
+        val absences = db.read { it.getAllAbsences() }
+        assertThat(absences).isEmpty()
     }
 
     @Test
@@ -636,12 +847,7 @@ class HolidayPeriodControllerCitizenIntegrationTest :
                     placementId = placement.id,
                     startDate = placement.startDate,
                     endDate = placement.endDate,
-                    optionId =
-                        ServiceNeedOptionId(
-                            UUID.fromString(
-                                "7406df92-e715-11ec-9ec2-9b7ff580dcb4"
-                            ) // full time daycare
-                        ),
+                    optionId = snDefaultDaycare.id,
                     shiftCare = ShiftCareType.FULL,
                     confirmedBy = authenticatedParent.evakaUserId,
                 )
@@ -674,7 +880,9 @@ class HolidayPeriodControllerCitizenIntegrationTest :
         OpenRangesBody(mapOf(child1.id to ranges))
 
     private fun createOpenRangesQuestionnaire(body: QuestionnaireBody.OpenRangesQuestionnaireBody) =
-        db.transaction { it.createOpenRangesQuestionnaire(body) }
+        db.transaction {
+            it.createOpenRangesQuestionnaire(body)
+        }
 
     private data class Absence(val childId: ChildId, val date: LocalDate, val type: AbsenceType)
 
@@ -685,11 +893,8 @@ class HolidayPeriodControllerCitizenIntegrationTest :
         val category: AbsenceCategory,
     )
 
-    private fun Database.Read.getAllAbsences(): List<Absence> =
-        createQuery {
-                sql(
-                    "SELECT a.child_id, a.date, a.absence_type as type FROM absence a ORDER BY date"
-                )
-            }
-            .toList<Absence>()
+    private fun Database.Read.getAllAbsences(): List<Absence> = createQuery {
+        sql("SELECT a.child_id, a.date, a.absence_type as type FROM absence a ORDER BY date")
+    }
+        .toList<Absence>()
 }

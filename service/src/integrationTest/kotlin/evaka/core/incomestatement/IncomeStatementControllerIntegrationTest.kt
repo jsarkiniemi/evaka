@@ -130,6 +130,7 @@ class IncomeStatementControllerIntegrationTest : FullApplicationTest(resetDbBefo
                 createdAt = incomeStatement.createdAt,
                 modifiedAt = incomeStatement.modifiedAt,
                 sentAt = incomeStatement.sentAt,
+                citizenModifiedAt = incomeStatement.sentAt,
                 status = IncomeStatementStatus.SENT,
                 handledAt = null,
                 handlerNote = "",
@@ -157,6 +158,7 @@ class IncomeStatementControllerIntegrationTest : FullApplicationTest(resetDbBefo
                 createdAt = incomeStatement.createdAt,
                 modifiedAt = incomeStatement2.modifiedAt,
                 sentAt = incomeStatement.sentAt,
+                citizenModifiedAt = incomeStatement.sentAt,
                 status = IncomeStatementStatus.HANDLING,
                 handledAt = null,
                 handlerNote = "",
@@ -184,6 +186,7 @@ class IncomeStatementControllerIntegrationTest : FullApplicationTest(resetDbBefo
                 createdAt = incomeStatement3.createdAt,
                 modifiedAt = incomeStatement3.modifiedAt,
                 sentAt = incomeStatement3.sentAt,
+                citizenModifiedAt = incomeStatement3.sentAt,
                 status = IncomeStatementStatus.HANDLED,
                 handledAt = now,
                 handlerNote = "is cool",
@@ -211,6 +214,7 @@ class IncomeStatementControllerIntegrationTest : FullApplicationTest(resetDbBefo
                 createdAt = incomeStatement3.createdAt,
                 modifiedAt = incomeStatement3.modifiedAt,
                 sentAt = incomeStatement3.sentAt,
+                citizenModifiedAt = incomeStatement3.sentAt,
                 status = IncomeStatementStatus.HANDLING,
                 handledAt = null,
                 handlerNote = "is not cool",
@@ -339,6 +343,7 @@ class IncomeStatementControllerIntegrationTest : FullApplicationTest(resetDbBefo
                 createdAt = incomeStatement.createdAt,
                 modifiedAt = incomeStatement.modifiedAt,
                 sentAt = now,
+                citizenModifiedAt = now,
                 status = IncomeStatementStatus.SENT,
                 handledAt = null,
                 handlerNote = "",
@@ -789,8 +794,166 @@ class IncomeStatementControllerIntegrationTest : FullApplicationTest(resetDbBefo
                 1,
                 1,
             ),
-            getIncomeStatementsAwaitingHandler(SearchIncomeStatementsRequest(unit = daycare2.id)),
+            getIncomeStatementsAwaitingHandler(
+                SearchIncomeStatementsRequest(unitIds = listOf(daycare2.id))
+            ),
         )
+    }
+
+    @Test
+    fun `list income statements awaiting handler - multiple units filter`() {
+        val placementStart = today.minusDays(30)
+        val placementEnd = today.plusDays(30)
+        db.transaction { tx ->
+            tx.insert(
+                DevParentship(
+                    childId = child1.id,
+                    headOfChildId = adult1.id,
+                    startDate = placementStart,
+                    endDate = placementEnd,
+                )
+            )
+            tx.insert(
+                DevPlacement(
+                    type = PlacementType.PRESCHOOL_DAYCARE,
+                    childId = child1.id,
+                    unitId = daycare1.id,
+                    startDate = placementStart,
+                    endDate = placementEnd,
+                )
+            )
+
+            tx.insert(
+                DevParentship(
+                    childId = child2.id,
+                    headOfChildId = adult2.id,
+                    startDate = placementStart,
+                    endDate = placementEnd,
+                )
+            )
+            tx.insert(
+                DevPlacement(
+                    type = PlacementType.PRESCHOOL_DAYCARE,
+                    childId = child2.id,
+                    unitId = daycare2.id,
+                    startDate = placementStart,
+                    endDate = placementEnd,
+                )
+            )
+
+            tx.insert(
+                DevParentship(
+                    childId = child3.id,
+                    headOfChildId = adult3.id,
+                    startDate = placementStart,
+                    endDate = placementEnd,
+                )
+            )
+            tx.insert(
+                DevPlacement(
+                    type = PlacementType.PRESCHOOL_DAYCARE,
+                    childId = child3.id,
+                    unitId = daycarePurchased.id,
+                    startDate = placementStart,
+                    endDate = placementEnd,
+                )
+            )
+        }
+
+        val incomeStatement1 = createTestIncomeStatement(adult1.id)
+        val incomeStatement2 = createTestIncomeStatement(adult2.id)
+        createTestIncomeStatement(adult3.id)
+
+        assertEquals(
+            PagedIncomeStatementsAwaitingHandler(
+                listOf(
+                    IncomeStatementAwaitingHandler(
+                        id = incomeStatement2.id,
+                        sentAt = incomeStatement2.sentAt!!,
+                        citizenModifiedAt = incomeStatement2.sentAt!!,
+                        startDate = incomeStatement2.startDate,
+                        incomeEndDate = null,
+                        handlerNote = "",
+                        type = IncomeStatementType.HIGHEST_FEE,
+                        personId = adult2.id,
+                        personLastName = "Doe",
+                        personFirstName = "Joan",
+                        primaryCareArea = area2.name,
+                    ),
+                    IncomeStatementAwaitingHandler(
+                        id = incomeStatement1.id,
+                        sentAt = incomeStatement1.sentAt!!,
+                        citizenModifiedAt = incomeStatement1.sentAt!!,
+                        startDate = incomeStatement1.startDate,
+                        incomeEndDate = null,
+                        handlerNote = "",
+                        type = IncomeStatementType.HIGHEST_FEE,
+                        personId = adult1.id,
+                        personLastName = "Doe",
+                        personFirstName = "John",
+                        primaryCareArea = area1.name,
+                    ),
+                ),
+                2,
+                1,
+            ),
+            getIncomeStatementsAwaitingHandler(
+                SearchIncomeStatementsRequest(unitIds = listOf(daycare1.id, daycare2.id))
+            ),
+        )
+    }
+
+    @Test
+    fun `list income statements awaiting handler - empty units list returns unfiltered`() {
+        val placementStart = today.minusDays(30)
+        val placementEnd = today.plusDays(30)
+        db.transaction { tx ->
+            tx.insert(
+                DevParentship(
+                    childId = child1.id,
+                    headOfChildId = adult1.id,
+                    startDate = placementStart,
+                    endDate = placementEnd,
+                )
+            )
+            tx.insert(
+                DevPlacement(
+                    type = PlacementType.PRESCHOOL_DAYCARE,
+                    childId = child1.id,
+                    unitId = daycare1.id,
+                    startDate = placementStart,
+                    endDate = placementEnd,
+                )
+            )
+
+            tx.insert(
+                DevParentship(
+                    childId = child2.id,
+                    headOfChildId = adult2.id,
+                    startDate = placementStart,
+                    endDate = placementEnd,
+                )
+            )
+            tx.insert(
+                DevPlacement(
+                    type = PlacementType.PRESCHOOL_DAYCARE,
+                    childId = child2.id,
+                    unitId = daycare2.id,
+                    startDate = placementStart,
+                    endDate = placementEnd,
+                )
+            )
+        }
+
+        createTestIncomeStatement(adult1.id)
+        createTestIncomeStatement(adult2.id)
+
+        val unfiltered = getIncomeStatementsAwaitingHandler(SearchIncomeStatementsRequest())
+        val emptyUnits =
+            getIncomeStatementsAwaitingHandler(SearchIncomeStatementsRequest(unitIds = emptyList()))
+
+        assertEquals(2, unfiltered.total)
+        assertEquals(unfiltered, emptyUnits)
     }
 
     @Test
@@ -967,7 +1130,9 @@ class IncomeStatementControllerIntegrationTest : FullApplicationTest(resetDbBefo
                 1,
                 1,
             ),
-            getIncomeStatementsAwaitingHandler(SearchIncomeStatementsRequest(sentStartDate = today)),
+            getIncomeStatementsAwaitingHandler(
+                SearchIncomeStatementsRequest(sentStartDate = today)
+            ),
         )
     }
 
@@ -1916,26 +2081,12 @@ class IncomeStatementControllerIntegrationTest : FullApplicationTest(resetDbBefo
         val userId2 = adult2.id.raw.let(::EvakaUserId)
 
         val sentAt = HelsinkiDateTime.of(today.minusDays(2), LocalTime.of(12, 0))
-        val id1 =
-            db.transaction { tx ->
-                tx.insertIncomeStatement(
-                    userId1,
-                    sentAt.minusHours(1),
-                    adult1.id,
-                    body,
-                    draft = true,
-                )
-            }
-        val id2 =
-            db.transaction { tx ->
-                tx.insertIncomeStatement(
-                    userId2,
-                    sentAt.minusHours(1),
-                    adult2.id,
-                    body,
-                    draft = true,
-                )
-            }
+        val id1 = db.transaction { tx ->
+            tx.insertIncomeStatement(userId1, sentAt.minusHours(1), adult1.id, body, draft = true)
+        }
+        val id2 = db.transaction { tx ->
+            tx.insertIncomeStatement(userId2, sentAt.minusHours(1), adult2.id, body, draft = true)
+        }
 
         db.transaction { tx ->
             tx.updateIncomeStatement(userId1, sentAt, id1, body, draft = false)

@@ -121,7 +121,7 @@ const customizations: EmployeeCustomizations = {
             'Käytetään kuluvan päivän poissaolossa. Edellisenä päivänä tai sitä aiemmin ilmoitetut poissaolot tulee muuttaa sopimuspoissaoloiksi.',
           SICKLEAVE: 'Merkitään kun lapsi on sairaana.',
           UNKNOWN_ABSENCE:
-            'Käytetään silloin, kun huoltaja ei ole ilmoittanut poissaolosta, vaikuttaa heinäkuussa myös laskutukseen. Koodi muutetaan vain, jos kyseessä on sairauspoissaolo, jonka jatkumisesta huoltaja ilmoittaa seuraavana päivänä.',
+            'Käytetään silloin, kun huoltaja ei ole ilmoittanut poissaolosta, vaikuttaa kesä-elokuussa myös laskutukseen. Koodi muutetaan vain, jos kyseessä on sairauspoissaolo, jonka jatkumisesta huoltaja ilmoittaa seuraavana päivänä.',
           PLANNED_ABSENCE:
             'Ennalta ilmoitetut poissaolot. Kaikki edeltävänä päivänä tai sitä aiemmin ilmoitetut poissaolot ovat sopimuspoissaoloja.',
           TEMPORARY_RELOCATION:
@@ -169,10 +169,6 @@ const customizations: EmployeeCustomizations = {
                 'Erityinen tuki ja pidennetty oppivelvollisuus - muu kuin vaikeimmin kehitysvammainen (Koskeen)',
               SPECIAL_SUPPORT_WITH_DECISION_LEVEL_2:
                 'Erityinen tuki ja pidennetty oppivelvollisuus - vaikeimmin kehitysvammainen (Koskeen)'
-            },
-            otherAssistanceMeasureType: {
-              TRANSPORT_BENEFIT: 'Kuljetusetu (esioppilailla Koski-tieto)',
-              ACCULTURATION_SUPPORT: 'Lapsen kotoutumisen tuki (ELY)'
             }
           }
         },
@@ -207,7 +203,7 @@ const customizations: EmployeeCustomizations = {
         }
       },
       login: {
-        loginAD: 'Kirjaudu edu.turku.fi-tunnuksella'
+        loginAD: 'Kirjaudu sähköpostitunnuksella'
       },
       placement: {
         type: {
@@ -244,9 +240,20 @@ const customizations: EmployeeCustomizations = {
       },
       welcomePage: {
         text: 'Olet kirjautunut eVaka-Turku palveluun. Käyttäjätunnuksellesi ei ole vielä annettu oikeuksia, jotka mahdollistavat palvelun käytön. Päiväkodin henkilökunnan käyttäjäoikeudet saat yksikön lähijohtajalta. Muut käyttöoikeudet saa eVakan pääkäyttäjältä ilmoittamalla kirjautumisesta varkas.tietojarjestelmat@turku.fi'
+      },
+      components: {
+        metadata: {
+          organizationName: 'Turun kaupungin varhaiskasvatus'
+        }
       }
     },
-    sv: {}
+    sv: {
+      components: {
+        metadata: {
+          organizationName: 'Åbo stads småbarnspedagogik'
+        }
+      }
+    }
   },
   cityLogo: {
     src: TurkuLogo,
@@ -271,6 +278,11 @@ const customizations: EmployeeCustomizations = {
     'FORCE_MAJEURE',
     'PARENTLEAVE',
     'FREE_ABSENCE'
+  ],
+  absenceTypesNotSelectableInWeekCalendar: [
+    'FREE_ABSENCE',
+    'PARENTLEAVE',
+    'FORCE_MAJEURE'
   ],
   voucherValueDecisionTypes: [
     'NORMAL',

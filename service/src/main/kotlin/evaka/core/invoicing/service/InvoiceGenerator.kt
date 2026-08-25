@@ -166,31 +166,36 @@ class InvoiceGenerator(
 
         val invoicesWithCorrections =
             tracer.withSpan("applyCorrections") {
-                applyCorrectionsForMonth(tx, month, invoices, invoiceCalculationData.areaIds)
+                applyCorrectionsForMonth(
+                    tx,
+                    month,
+                    invoices,
+                    invoiceCalculationData.areaIds,
+                    headOfFamilyId,
+                )
             }
         val headsOfFamilyWithInvoices = invoicesWithCorrections.map { it.headOfFamily }.toSet()
         val sentInvoices =
             tx.getSentInvoicesOfMonth(month, headOfFamilyId).associateBy { it.headOfFamily.id }
 
-        val newOrReplacedInvoices =
-            invoicesWithCorrections.mapNotNull { invoice ->
-                val sentInvoice = sentInvoices[invoice.headOfFamily]
-                if (sentInvoice == null) {
-                    // No corresponding sent invoice -> add a new replacement draft. Revision number
-                    // starts from 1 to distinguish replacement invoices (manual processing) from
-                    // normal invoices (sent through invoice integration).
-                    invoice.copy(revisionNumber = 1)
-                } else if (invoice.totalPrice != sentInvoice.totalPrice) {
-                    // The corresponding sent invoice has a different price -> replace it
-                    invoice.copy(
-                        replacedInvoiceId = sentInvoice.id,
-                        revisionNumber = sentInvoice.revisionNumber + 1,
-                    )
-                } else {
-                    // Price didn't change, no need to replace
-                    null
-                }
+        val newOrReplacedInvoices = invoicesWithCorrections.mapNotNull { invoice ->
+            val sentInvoice = sentInvoices[invoice.headOfFamily]
+            if (sentInvoice == null) {
+                // No corresponding sent invoice -> add a new replacement draft. Revision number
+                // starts from 1 to distinguish replacement invoices (manual processing) from
+                // normal invoices (sent through invoice integration).
+                invoice.copy(revisionNumber = 1)
+            } else if (invoice.totalPrice != sentInvoice.totalPrice) {
+                // The corresponding sent invoice has a different price -> replace it
+                invoice.copy(
+                    replacedInvoiceId = sentInvoice.id,
+                    revisionNumber = sentInvoice.revisionNumber + 1,
+                )
+            } else {
+                // Price didn't change, no need to replace
+                null
             }
+        }
         val zeroInvoices =
             // Sent non-zero invoices that don't have a corresponding draft invoice -> add a
             // zero-priced replacement draft
@@ -375,18 +380,17 @@ class InvoiceGenerator(
                 val partnerAsHead = childrenByHead[partnerId] ?: emptyMap()
                 if (partnerAsGuardian.isEmpty() && partnerAsHead.isEmpty()) return@mapNotNull null
 
-                val hasCommonChildrenOnAllDecisions =
-                    decisions.all { decision ->
-                        decision.children.any {
-                            if (partnerAsGuardian.contains(it.child.id)) {
-                                true
-                            } else {
-                                val partnerAsHeadRange = partnerAsHead[it.child.id]
-                                partnerAsHeadRange != null &&
-                                    partnerAsHeadRange.overlaps(decision.validDuring)
-                            }
+                val hasCommonChildrenOnAllDecisions = decisions.all { decision ->
+                    decision.children.any {
+                        if (partnerAsGuardian.contains(it.child.id)) {
+                            true
+                        } else {
+                            val partnerAsHeadRange = partnerAsHead[it.child.id]
+                            partnerAsHeadRange != null &&
+                                partnerAsHeadRange.overlaps(decision.validDuring)
                         }
                     }
+                }
 
                 if (hasCommonChildrenOnAllDecisions) {
                     headOfFamilyId to partnerId
@@ -412,9 +416,12 @@ class InvoiceGenerator(
         targetMonth: YearMonth,
         invoices: List<DraftInvoice>,
         areaIds: Map<DaycareId, AreaId>,
+        headOfFamilyId: PersonId?,
     ): List<DraftInvoice> {
         val correctionsForMonth =
-            tx.getInvoiceCorrectionsForMonth(targetMonth).groupBy { it.headOfFamilyId }
+            tx.getInvoiceCorrectionsForMonth(targetMonth, headOfFamilyId).groupBy {
+                it.headOfFamilyId
+            }
         return applyCorrections(targetMonth, invoices, correctionsForMonth, areaIds)
     }
 
@@ -485,10 +492,9 @@ class InvoiceGenerator(
                 }
                 .filter { it.rows.isNotEmpty() }
 
-        val invoicesWithoutCorrections =
-            invoices.filterNot { invoice ->
-                invoicesWithCorrections.any { it.headOfFamily == invoice.headOfFamily }
-            }
+        val invoicesWithoutCorrections = invoices.filterNot { invoice ->
+            invoicesWithCorrections.any { it.headOfFamily == invoice.headOfFamily }
+        }
 
         return invoicesWithCorrections + invoicesWithoutCorrections
     }
@@ -523,10 +529,10 @@ fun Database.Read.getInvoiceableFeeDecisions(
 fun Database.Read.getInvoicedHeadsOfFamily(period: FiniteDateRange): Set<PersonId> {
     val sent = listOf(InvoiceStatus.SENT, InvoiceStatus.WAITING_FOR_SENDING)
     return createQuery {
-            sql(
-                "SELECT DISTINCT head_of_family FROM invoice WHERE period_start = ${bind(period.start)} AND period_end = ${bind(period.end)} AND status = ANY(${bind(sent)}::invoice_status[])"
-            )
-        }
+        sql(
+            "SELECT DISTINCT head_of_family FROM invoice WHERE period_start = ${bind(period.start)} AND period_end = ${bind(period.end)} AND status = ANY(${bind(sent)}::invoice_status[])"
+        )
+    }
         .toSet<PersonId>()
 }
 
@@ -535,8 +541,8 @@ fun Database.Read.getBillableAbsencesInRange(
     range: FiniteDateRange,
 ): Map<ChildId, List<Pair<AbsenceType, DateSet>>> {
     return createQuery {
-            sql(
-                """
+        sql(
+            """
 SELECT child_id, absence_type, range_agg(daterange(date, date, '[]')) AS dates
 FROM absence
 WHERE
@@ -545,8 +551,8 @@ WHERE
     category = 'BILLABLE'
 GROUP BY child_id, absence_type
 """
-            )
-        }
+        )
+    }
         .map {
             Triple(
                 column<ChildId>("child_id"),
@@ -572,8 +578,8 @@ private fun Database.Read.getInvoiceablePlacements(
         if (childIds != null) Predicate { where("$it.child_id = ANY(${bind(childIds)})") }
         else Predicate.alwaysTrue()
     return createQuery {
-            sql(
-                """
+        sql(
+            """
 SELECT p.child_id, c.date_of_birth AS child_date_of_birth, u.id AS unit, daterange(p.start_date, p.end_date, '[]') AS date_range, p.unit_id, p.type
 FROM placement p
 JOIN person c ON p.child_id = c.id
@@ -583,8 +589,8 @@ WHERE
     p.type = ANY(${bind(placementTypes)}::placement_type[]) AND
     ${predicate(childFilter.forTable("p"))}
 """
-            )
-        }
+        )
+    }
         .toList { column<FiniteDateRange>("date_range") to row<PlacementStub>() }
         .groupBy { it.second.child.id }
 }
@@ -603,12 +609,11 @@ private fun Database.Read.getInvoiceableTemporaryPlacements(
 
     return familyCompositions
         .map { (headOfFamily, families) ->
-            val relevantPlacements =
-                families.flatMap { (period, children) ->
-                    children.flatMap { child ->
-                        (placements[child.id] ?: listOf()).filter { it.first.overlaps(period) }
-                    }
+            val relevantPlacements = families.flatMap { (period, children) ->
+                children.flatMap { child ->
+                    (placements[child.id] ?: listOf()).filter { it.first.overlaps(period) }
                 }
+            }
 
             val allPeriods =
                 families.map { (period, _) -> period } + relevantPlacements.map { it.first }
@@ -666,8 +671,8 @@ fun Database.Read.getChildrenWithHeadOfFamilies(
     if (childIds.isEmpty()) return listOf()
 
     return createQuery {
-            sql(
-                """
+        sql(
+            """
 SELECT
     fridge_child.head_of_child,
     child.id AS child_id,
@@ -680,8 +685,8 @@ WHERE fridge_child.child_id = ANY(${bind(childIds)})
     AND daterange(fridge_child.start_date, fridge_child.end_date, '[]') && ${bind(dateRange)}
     AND conflict = false
 """
-            )
-        }
+        )
+    }
         .toList {
             Triple(
                 FiniteDateRange(column("start_date"), column("end_date")),
@@ -694,45 +699,42 @@ WHERE fridge_child.child_id = ANY(${bind(childIds)})
         }
 }
 
-fun Database.Read.getAreaIds(): Map<DaycareId, AreaId> =
-    createQuery {
-            sql(
-                """
+fun Database.Read.getAreaIds(): Map<DaycareId, AreaId> = createQuery {
+    sql(
+        """
 SELECT daycare.id AS unit_id, daycare.care_area_id AS area_id
 FROM daycare
 """
-            )
-        }
-        .toMap { columnPair("unit_id", "area_id") }
+    )
+}
+    .toMap { columnPair("unit_id", "area_id") }
 
 fun Database.Read.getFreeJulyChildren(
     year: Int,
     childIds: Set<ChildId>?,
     freeJulyStartOnSeptember: Boolean,
-): Set<ChildId> =
-    createQuery {
-            val where =
-                Predicate.allNotNull(
-                    Predicate { where("$it.id = ANY(${bind(childIds)})") }
-                        .takeIf { childIds != null },
-                    placementOn(year - 1, 8).takeUnless { freeJulyStartOnSeptember },
-                    placementOn(year - 1, 9),
-                    placementOn(year - 1, 10),
-                    placementOn(year - 1, 11),
-                    placementOn(year - 1, 12),
-                    placementOn(year, 1),
-                    placementOn(year, 2),
-                    placementOn(year, 3),
-                    placementOn(year, 4).takeIf { year != 2020 },
-                    placementOn(year, 5).takeIf { year != 2020 },
-                    placementOn(year, 6),
-                )
-            sql(
-                """
+): Set<ChildId> = createQuery {
+    val where =
+        Predicate.allNotNull(
+            Predicate { where("$it.id = ANY(${bind(childIds)})") }.takeIf { childIds != null },
+            placementOn(year - 1, 8).takeUnless { freeJulyStartOnSeptember },
+            placementOn(year - 1, 9),
+            placementOn(year - 1, 10),
+            placementOn(year - 1, 11),
+            placementOn(year - 1, 12),
+            placementOn(year, 1),
+            placementOn(year, 2),
+            placementOn(year, 3),
+            placementOn(year, 4).takeIf { year != 2020 },
+            placementOn(year, 5).takeIf { year != 2020 },
+            placementOn(year, 6),
+        )
+    sql(
+        """
                 SELECT id FROM child c WHERE ${predicate(where.forTable("c"))}"""
-            )
-        }
-        .toSet<ChildId>()
+    )
+}
+    .toSet<ChildId>()
 
 private fun placementOn(year: Int, month: Int) = Predicate {
     where(

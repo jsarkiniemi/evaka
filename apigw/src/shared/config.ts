@@ -253,19 +253,12 @@ const envVariables = {
 
   // ----- Suomi.fi SAML authentication -----
   /**
-   * @deprecated use SFI_MODE=mock instead
-   */
-  SFI_MOCK: unset<boolean>(),
-  /**
    * Chooses the SFI authentication mode and environment.
    *
    * prod = use SAML and Suomi.fi production environment
    * test = use SAML and Suomi.fi test environment
-   * mock = use a mock implementation intended for local development only
-   *
-   * **Do not use "mock" in production**
    */
-  SFI_MODE: unset<'test' | 'prod' | 'mock'>(),
+  SFI_MODE: unset<'test' | 'prod'>(),
   /**
    * SAML service provider callback URL for SFI authentication.
    *
@@ -374,7 +367,7 @@ function createLocalDevelopmentOverrides(): Partial<EnvVariables> {
         EVAKA_SERVICE_URL: 'http://localhost:8888',
 
         AD_MOCK: true,
-        SFI_MODE: isLocal ? 'test' : 'mock',
+        SFI_MODE: 'test',
         SFI_SAML_CALLBACK_URL:
           'http://localhost:9099/api/application/auth/saml/login/callback',
         SFI_SAML_ENTRYPOINT: 'http://localhost:9090/idp/sso',
@@ -399,7 +392,7 @@ export interface Config {
         userIdKey: string
         saml: EvakaSamlConfig
       }
-  sfi: { type: 'mock' | 'disabled' } | { type: 'saml'; saml: EvakaSamlConfig }
+  sfi: { type: 'saml'; saml: EvakaSamlConfig }
   redis: {
     host: string
     port: number | undefined
@@ -522,13 +515,11 @@ const required = <K extends keyof EnvVariables>(
 
 export type SfiMode = NonNullable<EnvVariables['SFI_MODE']>
 
-function sfiDefaultsForMode(mode: SfiMode):
-  | {
-      entryPoint: string
-      logoutUrl: string
-      publicCert: TrustedCertificates[]
-    }
-  | undefined {
+function sfiDefaultsForMode(mode: SfiMode): {
+  entryPoint: string
+  logoutUrl: string
+  publicCert: TrustedCertificates[]
+} {
   switch (mode) {
     case 'prod':
       return {
@@ -546,8 +537,6 @@ function sfiDefaultsForMode(mode: SfiMode):
           'https://testi.apro.tunnistus.fi/idp/profile/SAML2/Redirect/SLO',
         publicCert: ['saml-signing-testi.apro.tunnistus.fi.2024.pem']
       }
-    case 'mock':
-      return undefined
   }
 }
 
@@ -555,8 +544,8 @@ export function configFromEnv(): Config {
   const adMock =
     optional('DEV_LOGIN', parseBoolean) ?? required('AD_MOCK', parseBoolean)
   const adType = adMock ? 'mock' : 'saml'
-  const ad: Config['ad'] = {
-    ...(adType !== 'saml'
+  const ad: Config['ad'] =
+    adType !== 'saml'
       ? { type: adType }
       : {
           type: adType,
@@ -574,47 +563,35 @@ export function configFromEnv(): Config {
             acceptedClockSkewMs: 0,
             nameIdFormat: required('AD_NAME_ID_FORMAT', unchanged)
           }
-        })
-  }
+        }
 
-  const sfiMock = optional('SFI_MOCK', parseBoolean)
-  const sfiMode = optional(
-    'SFI_MODE',
-    parseEnum(['test', 'prod', 'mock'] as const)
-  )
-  const sfiType = sfiMode === 'mock' || sfiMock ? 'mock' : 'saml'
+  const sfiMode = optional('SFI_MODE', parseEnum(['test', 'prod'] as const))
   const sfiDefaults = sfiMode ? sfiDefaultsForMode(sfiMode) : undefined
 
-  const sfi: Config['sfi'] =
-    sfiType !== 'saml'
-      ? { type: sfiType }
-      : {
-          type: sfiType,
-          saml: {
-            callbackUrl: required('SFI_SAML_CALLBACK_URL', unchanged),
-            entryPoint: nonNullable(
-              optional('SFI_SAML_ENTRYPOINT', unchanged) ??
-                sfiDefaults?.entryPoint,
-              'Either SFI_MODE or SFI_SAML_ENTRYPOINT must be set'
-            ),
-            logoutUrl: nonNullable(
-              optional('SFI_SAML_LOGOUT_URL', unchanged) ??
-                sfiDefaults?.logoutUrl,
-              'Either SFI_MODE or SFI_SAML_LOGOUT_URL must be set'
-            ),
-            issuer: required('SFI_SAML_ISSUER', unchanged),
-            publicCert: nonNullable(
-              optional('SFI_SAML_PUBLIC_CERT', parseArray(unchanged)) ??
-                sfiDefaults?.publicCert,
-              'Either SFI_MODE or SFI_SAML_PUBLIC_CERT must be set'
-            ),
-            privateCert: required('SFI_SAML_PRIVATE_CERT', unchanged),
-            validateInResponseTo: ValidateInResponseTo.always,
-            decryptAssertions: true,
-            // Allow some clock skew for dummy-idp
-            acceptedClockSkewMs: sfiMode === 'test' ? 1000 : 0
-          }
-        }
+  const sfi: Config['sfi'] = {
+    type: 'saml',
+    saml: {
+      callbackUrl: required('SFI_SAML_CALLBACK_URL', unchanged),
+      entryPoint: nonNullable(
+        optional('SFI_SAML_ENTRYPOINT', unchanged) ?? sfiDefaults?.entryPoint,
+        'Either SFI_MODE or SFI_SAML_ENTRYPOINT must be set'
+      ),
+      logoutUrl: nonNullable(
+        optional('SFI_SAML_LOGOUT_URL', unchanged) ?? sfiDefaults?.logoutUrl,
+        'Either SFI_MODE or SFI_SAML_LOGOUT_URL must be set'
+      ),
+      issuer: required('SFI_SAML_ISSUER', unchanged),
+      publicCert: nonNullable(
+        optional('SFI_SAML_PUBLIC_CERT', parseArray(unchanged)) ??
+          sfiDefaults?.publicCert,
+        'Either SFI_MODE or SFI_SAML_PUBLIC_CERT must be set'
+      ),
+      privateCert: required('SFI_SAML_PRIVATE_CERT', unchanged),
+      validateInResponseTo: ValidateInResponseTo.always,
+      decryptAssertions: true,
+      acceptedClockSkewMs: sfiMode === 'test' ? 1000 : 0
+    }
+  }
 
   const legacyCookieSecret = optional('COOKIE_SECRET', unchanged)
   const useSecureCookies = required('USE_SECURE_COOKIES', parseBoolean)

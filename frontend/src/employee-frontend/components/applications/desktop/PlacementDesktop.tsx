@@ -162,11 +162,11 @@ const PlacementDesktopValidated = React.memo(
 
         setDaycareRefs((prev) =>
           units.reduce(
-            (acc, daycare) => ({
-              ...acc,
-              [daycare.id]:
-                prev[daycare.id] ?? React.createRef<HTMLDivElement>()
-            }),
+            (acc, daycare) =>
+              Object.assign(acc, {
+                [daycare.id]:
+                  prev[daycare.id] ?? React.createRef<HTMLDivElement>()
+              }),
             {}
           )
         )
@@ -185,10 +185,10 @@ const PlacementDesktopValidated = React.memo(
     useEffect(() => {
       setPlacementDraftCache(
         applications.reduce(
-          (acc, application) => ({
-            ...acc,
-            [application.id]: application.placementDraft
-          }),
+          (acc, application) =>
+            Object.assign(acc, {
+              [application.id]: application.placementDraft
+            }),
           {}
         )
       )
@@ -390,7 +390,7 @@ const PrefetchedDaycares = React.memo(function PrefetchedDaycares({
       unitIds: shownDaycares.map((d) => d.id),
       occupancyStart: occupancyPeriodStart
     }),
-    [occupancyPeriodStart, applications] // eslint-disable-line react-hooks/exhaustive-deps
+    [occupancyPeriodStart, applications] // oxlint-disable-line react-hooks/exhaustive-deps
   )
 
   const initialData = useQueryResult(getPlacementDesktopDaycaresQuery(queryArg))

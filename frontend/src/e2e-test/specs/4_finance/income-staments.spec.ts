@@ -3,21 +3,20 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 import HelsinkiDateTime from 'lib-common/helsinki-date-time'
-import { randomId } from 'lib-common/id-type'
 
 import config from '../../config'
 import {
-  createDaycarePlacementFixture,
   testDaycare,
+  testDaycare2,
   testChild,
+  testChild2,
   testAdult,
+  testAdult2,
   Fixture,
-  testCareArea
+  testCareArea,
+  testCareArea2
 } from '../../dev-api/fixtures'
-import {
-  createDaycarePlacements,
-  resetServiceState
-} from '../../generated/api-clients'
+import { resetServiceState } from '../../generated/api-clients'
 import EmployeeNav from '../../pages/employee/employee-nav'
 import {
   FinancePage,
@@ -55,6 +54,55 @@ test.describe('Income statements', () => {
     await nav.openTab('finance')
     await new FinancePage(page).selectIncomeStatementsTab()
     return new IncomeStatementsPage(page)
+  }
+
+  async function setupTwoUnitsWithIncomeStatements() {
+    await testCareArea2.save()
+    await testDaycare2.save()
+    await Fixture.family({
+      guardian: testAdult2,
+      children: [testChild2]
+    }).save()
+
+    await Fixture.fridgeChild({
+      headOfChild: testAdult.id,
+      childId: testChild.id,
+      startDate: today.addYears(-1),
+      endDate: today.addYears(1)
+    }).save()
+    await Fixture.fridgeChild({
+      headOfChild: testAdult2.id,
+      childId: testChild2.id,
+      startDate: today.addYears(-1),
+      endDate: today.addYears(1)
+    }).save()
+
+    const startDate = today.addYears(-1)
+    const endDate = today
+
+    await Fixture.placement({
+      childId: testChild.id,
+      unitId: testDaycare.id,
+      startDate,
+      endDate
+    }).save()
+    await Fixture.placement({
+      childId: testChild2.id,
+      unitId: testDaycare2.id,
+      startDate,
+      endDate
+    }).save()
+
+    await Fixture.incomeStatement({
+      personId: testAdult.id,
+      data: { type: 'HIGHEST_FEE', startDate, endDate }
+    }).save()
+    await Fixture.incomeStatement({
+      personId: testAdult2.id,
+      data: { type: 'HIGHEST_FEE', startDate, endDate }
+    }).save()
+
+    await page.reload()
   }
 
   test('Income statement can be set handled', async () => {
@@ -106,16 +154,19 @@ test.describe('Income statements', () => {
     await navigateToIncomeStatements()
     await incomeStatementsPage.searchButton.click()
     await expect(incomeStatementsPage.incomeStatementRows).toHaveCount(1)
-    await incomeStatementsPage.openNthIncomeStatementForGuardian(0)
+    const reopenedProfilePage =
+      await incomeStatementsPage.openNthIncomeStatementForGuardian(0)
+    const reopenedIncomesSection =
+      await reopenedProfilePage.openCollapsible('incomes')
 
-    await incomesSection
+    await reopenedIncomesSection
       .incomeStatementHandledCheckbox(0)
       .waitUntilChecked(true)
-    await incomesSection
+    await reopenedIncomesSection
       .incomeStatementHandledCheckbox(1)
       .waitUntilChecked(false)
 
-    await incomesSection
+    await reopenedIncomesSection
       .incomeStatementRow(0)
       .assertText((t) => t.includes('this is a note'))
 
@@ -135,17 +186,12 @@ test.describe('Income statements', () => {
     const startDate = today.addYears(-1)
     const endDate = today
 
-    await createDaycarePlacements({
-      body: [
-        createDaycarePlacementFixture(
-          randomId(),
-          testChild.id,
-          testDaycare.id,
-          startDate,
-          endDate
-        )
-      ]
-    })
+    await Fixture.placement({
+      childId: testChild.id,
+      unitId: testDaycare.id,
+      startDate,
+      endDate
+    }).save()
 
     await Fixture.incomeStatement({
       personId: testAdult.id,
@@ -175,6 +221,78 @@ test.describe('Income statements', () => {
     await incomeStatementsPage.searchButton.click()
     await incomeStatementsPage.waitUntilLoaded()
     await expect(incomeStatementsPage.incomeStatementRows).toHaveCount(0)
+  })
+
+  test('Income statement can be filtered by child placement unit', async () => {
+    await setupTwoUnitsWithIncomeStatements()
+
+    const incomeStatementsPage = await navigateToIncomeStatements()
+    await incomeStatementsPage.searchButton.click()
+    await incomeStatementsPage.waitUntilLoaded()
+
+    await expect(incomeStatementsPage.incomeStatementRows).toHaveCount(2)
+
+    await incomeStatementsPage.toggleUnit(testDaycare.name)
+    await incomeStatementsPage.searchButton.click()
+    await incomeStatementsPage.waitUntilLoaded()
+    await expect(incomeStatementsPage.incomeStatementRows).toHaveCount(1)
+    await expect(incomeStatementsPage.incomeStatementRows).toContainText([
+      testAdult.lastName
+    ])
+
+    await incomeStatementsPage.toggleUnit(testDaycare2.name)
+    await incomeStatementsPage.searchButton.click()
+    await incomeStatementsPage.waitUntilLoaded()
+    await expect(incomeStatementsPage.incomeStatementRows).toHaveCount(2)
+
+    await incomeStatementsPage.toggleUnit(testDaycare.name)
+    await incomeStatementsPage.searchButton.click()
+    await incomeStatementsPage.waitUntilLoaded()
+    await expect(incomeStatementsPage.incomeStatementRows).toHaveCount(1)
+    await expect(incomeStatementsPage.incomeStatementRows).toContainText([
+      testAdult2.lastName
+    ])
+
+    await incomeStatementsPage.toggleUnit(testDaycare2.name)
+    await incomeStatementsPage.searchButton.click()
+    await incomeStatementsPage.waitUntilLoaded()
+    await expect(incomeStatementsPage.incomeStatementRows).toHaveCount(2)
+  })
+
+  test('Income statement can be filtered by child placement unit area', async () => {
+    await setupTwoUnitsWithIncomeStatements()
+
+    const incomeStatementsPage = await navigateToIncomeStatements()
+    await incomeStatementsPage.searchButton.click()
+    await incomeStatementsPage.waitUntilLoaded()
+
+    await expect(incomeStatementsPage.incomeStatementRows).toHaveCount(2)
+
+    await incomeStatementsPage.selectArea(testCareArea.shortName)
+    await incomeStatementsPage.searchButton.click()
+    await incomeStatementsPage.waitUntilLoaded()
+    await expect(incomeStatementsPage.incomeStatementRows).toHaveCount(1)
+    await expect(incomeStatementsPage.incomeStatementRows).toContainText([
+      testAdult.lastName
+    ])
+
+    await incomeStatementsPage.selectArea(testCareArea2.shortName)
+    await incomeStatementsPage.searchButton.click()
+    await incomeStatementsPage.waitUntilLoaded()
+    await expect(incomeStatementsPage.incomeStatementRows).toHaveCount(2)
+
+    await incomeStatementsPage.unSelectArea(testCareArea.shortName)
+    await incomeStatementsPage.searchButton.click()
+    await incomeStatementsPage.waitUntilLoaded()
+    await expect(incomeStatementsPage.incomeStatementRows).toHaveCount(1)
+    await expect(incomeStatementsPage.incomeStatementRows).toContainText([
+      testAdult2.lastName
+    ])
+
+    await incomeStatementsPage.unSelectArea(testCareArea2.shortName)
+    await incomeStatementsPage.searchButton.click()
+    await incomeStatementsPage.waitUntilLoaded()
+    await expect(incomeStatementsPage.incomeStatementRows).toHaveCount(2)
   })
 
   test('Income statement can be filtered by status', async () => {

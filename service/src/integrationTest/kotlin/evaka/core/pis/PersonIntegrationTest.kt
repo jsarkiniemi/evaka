@@ -18,31 +18,30 @@ import org.junit.jupiter.api.Test
 class PersonIntegrationTest : PureJdbiTest(resetDbBeforeEach = true) {
     @Test
     fun `creating a person creates a message account`() {
-        val person =
-            db.transaction {
-                createPersonFromVtj(
-                    it,
-                    PersonDTO(
-                        id = PersonId(UUID.randomUUID()),
-                        duplicateOf = null,
-                        identity = ExternalIdentifier.SSN.getInstance("080512A918W"),
-                        ssnAddingDisabled = false,
-                        dateOfBirth = LocalDate.of(2012, 5, 8),
-                        firstName = "Matti",
-                        lastName = "Meikäläinen",
-                        preferredName = "",
-                        email = "matti.meikalainen@example.com",
-                        phone = "1234567890",
-                        backupPhone = "",
-                        language = "fi",
-                        streetAddress = "",
-                        postalCode = "",
-                        postOffice = "",
-                        residenceCode = "",
-                        municipalityOfResidence = "",
-                    ),
-                )
-            }
+        val person = db.transaction {
+            createPersonFromVtj(
+                it,
+                PersonDTO(
+                    id = PersonId(UUID.randomUUID()),
+                    duplicateOf = null,
+                    identity = ExternalIdentifier.SSN.getInstance("080512A918W"),
+                    ssnAddingDisabled = false,
+                    dateOfBirth = LocalDate.of(2012, 5, 8),
+                    firstName = "Matti",
+                    lastName = "Meikäläinen",
+                    preferredName = "",
+                    email = "matti.meikalainen@example.com",
+                    phone = "1234567890",
+                    backupPhone = "",
+                    language = "fi",
+                    streetAddress = "",
+                    postalCode = "",
+                    postOffice = "",
+                    residenceCode = "",
+                    municipalityOfResidence = "",
+                ),
+            )
+        }
 
         assertTrue(personHasMessageAccount(person.id))
     }
@@ -89,10 +88,6 @@ class PersonIntegrationTest : PureJdbiTest(resetDbBeforeEach = true) {
                 PersonReference("application_other_guardian", "guardian_id"),
                 PersonReference("assistance_action", "child_id"),
                 PersonReference("assistance_factor", "child_id"),
-                PersonReference("assistance_need_decision", "child_id"),
-                PersonReference("assistance_need_decision_guardian", "person_id"),
-                PersonReference("assistance_need_preschool_decision", "child_id"),
-                PersonReference("assistance_need_preschool_decision_guardian", "person_id"),
                 PersonReference("assistance_need_voucher_coefficient", "child_id"),
                 PersonReference("attendance_reservation", "child_id"),
                 PersonReference("backup_care", "child_id"),
@@ -122,6 +117,7 @@ class PersonIntegrationTest : PureJdbiTest(resetDbBeforeEach = true) {
                 PersonReference("fridge_partner", "person_id"),
                 PersonReference("holiday_questionnaire_answer", "child_id"),
                 PersonReference("income", "person_id"),
+                PersonReference("income_notification", "receiver_id"),
                 PersonReference("income_statement", "person_id"),
                 PersonReference("invoice", "codebtor"),
                 PersonReference("invoice", "head_of_family"),

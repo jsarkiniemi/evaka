@@ -169,6 +169,7 @@ class AssistanceNeedsAndActionsReportController(
         val childLastName: String,
         val childFirstName: String,
         val childAge: Int,
+        val childYearOfBirth: Int,
         @Json val actions: Set<AssistanceActionOptionValue>,
         val otherAction: String,
         @Json val daycareAssistanceCounts: Map<DaycareAssistanceLevel, Int>,
@@ -189,10 +190,9 @@ private fun Database.Read.getReportRows(
     otherAssistanceMeasureTypes: List<OtherAssistanceMeasureType>,
     placementPredicate: Predicate,
     includeDecisions: Boolean,
-) =
-    createQuery {
-            sql(
-                """
+) = createQuery {
+    sql(
+        """
 WITH action_counts AS (
     SELECT
         daycare_group_id,
@@ -352,10 +352,10 @@ LEFT JOIN document_decision_counts ddc ON g.id = ddc.daycare_group_id"""
 WHERE ${predicate(unitFilter.forTable("u"))}
 ORDER BY ca.name, u.name, g.name
         """
-                    .trimIndent()
-            )
-        }
-        .toList<AssistanceNeedsAndActionsReportController.AssistanceNeedsAndActionsReportRow>()
+            .trimIndent()
+    )
+}
+    .toList<AssistanceNeedsAndActionsReportController.AssistanceNeedsAndActionsReportRow>()
 
 private fun Database.Read.getReportRowsByChild(
     date: LocalDate,
@@ -365,10 +365,9 @@ private fun Database.Read.getReportRowsByChild(
     otherAssistanceMeasureTypes: List<OtherAssistanceMeasureType>,
     placementPredicate: Predicate,
     includeDecisions: Boolean,
-) =
-    createQuery {
-            sql(
-                """
+) = createQuery {
+    sql(
+        """
 WITH actions AS (
     SELECT
         gpl.daycare_group_id,
@@ -506,6 +505,7 @@ SELECT
     child.last_name AS child_last_name,
     child.first_name AS child_first_name,
     extract(year from age(${bind(date)}, child.date_of_birth)) AS child_age,
+    extract(year from child.date_of_birth) AS child_year_of_birth,
     coalesce(actions.actions, '[]') AS actions,
     coalesce(actions.other_action, '') AS other_action,
     coalesce(daycare_assistance_counts, '{}') AS daycare_assistance_counts,
@@ -538,9 +538,7 @@ WHERE ${predicate(unitFilter.forTable("u"))}
 AND ${predicate(placementPredicate.forTable("p"))}
 ORDER BY ca.name, u.name, g.name, child.last_name, child.first_name
         """
-                    .trimIndent()
-            )
-        }
-        .toList<
-            AssistanceNeedsAndActionsReportController.AssistanceNeedsAndActionsReportRowByChild
-        >()
+            .trimIndent()
+    )
+}
+    .toList<AssistanceNeedsAndActionsReportController.AssistanceNeedsAndActionsReportRowByChild>()

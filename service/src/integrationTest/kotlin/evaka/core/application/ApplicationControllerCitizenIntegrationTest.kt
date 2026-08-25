@@ -4,6 +4,7 @@
 
 package evaka.core.application
 
+import evaka.core.AuditContext
 import evaka.core.FullApplicationTest
 import evaka.core.application.persistence.daycare.Adult
 import evaka.core.application.persistence.daycare.Apply
@@ -51,7 +52,12 @@ class ApplicationControllerCitizenIntegrationTest : FullApplicationTest(resetDbB
     private val clock = MockEvakaClock(2020, 1, 1, 12, 0)
 
     private val area = DevCareArea()
-    private val daycare = DevDaycare(areaId = area.id)
+    private val daycare =
+        DevDaycare(
+            areaId = area.id,
+            daycareApplyPeriod = DateRange(LocalDate.of(2020, 3, 1), null),
+            preschoolApplyPeriod = DateRange(LocalDate.of(2020, 3, 1), null),
+        )
     private val adult = DevPerson(ssn = "010180-1232")
     private val child = DevPerson(ssn = "010617A123U")
     private val decisionMaker = DevEmployee()
@@ -72,16 +78,15 @@ class ApplicationControllerCitizenIntegrationTest : FullApplicationTest(resetDbB
 
     @Test
     fun `user can delete a draft application`() {
-        val applicationId =
-            db.transaction { tx ->
-                tx.insertTestApplication(
-                    guardianId = adult.id,
-                    childId = child.id,
-                    status = ApplicationStatus.CREATED,
-                    type = ApplicationType.DAYCARE,
-                    document = daycareApplicationDocument(),
-                )
-            }
+        val applicationId = db.transaction { tx ->
+            tx.insertTestApplication(
+                guardianId = adult.id,
+                childId = child.id,
+                status = ApplicationStatus.CREATED,
+                type = ApplicationType.DAYCARE,
+                document = daycareApplicationDocument(),
+            )
+        }
 
         applicationControllerCitizen.deleteOrCancelUnprocessedApplication(
             db = dbInstance(),
@@ -95,24 +100,24 @@ class ApplicationControllerCitizenIntegrationTest : FullApplicationTest(resetDbB
 
     @Test
     fun `user can cancel a sent unprocessed application`() {
-        val applicationId =
-            db.transaction { tx ->
-                tx.insertTestApplication(
-                        guardianId = adult.id,
-                        childId = child.id,
-                        status = ApplicationStatus.CREATED,
-                        type = ApplicationType.DAYCARE,
-                        document = daycareApplicationDocument(),
+        val applicationId = db.transaction { tx ->
+            tx.insertTestApplication(
+                    guardianId = adult.id,
+                    childId = child.id,
+                    status = ApplicationStatus.CREATED,
+                    type = ApplicationType.DAYCARE,
+                    document = daycareApplicationDocument(),
+                )
+                .also {
+                    stateService.sendApplication(
+                        tx = tx,
+                        user = AuthenticatedUser.Citizen(adult.id, CitizenAuthLevel.STRONG),
+                        clock = clock,
+                        audit = AuditContext(),
+                        applicationId = it,
                     )
-                    .also {
-                        stateService.sendApplication(
-                            tx = tx,
-                            user = AuthenticatedUser.Citizen(adult.id, CitizenAuthLevel.STRONG),
-                            clock = clock,
-                            applicationId = it,
-                        )
-                    }
-            }
+                }
+        }
 
         applicationControllerCitizen.deleteOrCancelUnprocessedApplication(
             db = dbInstance(),
@@ -128,34 +133,35 @@ class ApplicationControllerCitizenIntegrationTest : FullApplicationTest(resetDbB
 
     @Test
     fun `user can not cancel a processed application`() {
-        val applicationId =
-            db.transaction { tx ->
-                tx.insertTestApplication(
-                        guardianId = adult.id,
-                        childId = child.id,
-                        status = ApplicationStatus.CREATED,
-                        type = ApplicationType.DAYCARE,
-                        document = daycareApplicationDocument(),
+        val applicationId = db.transaction { tx ->
+            tx.insertTestApplication(
+                    guardianId = adult.id,
+                    childId = child.id,
+                    status = ApplicationStatus.CREATED,
+                    type = ApplicationType.DAYCARE,
+                    document = daycareApplicationDocument(),
+                )
+                .also {
+                    stateService.sendApplication(
+                        tx = tx,
+                        user = AuthenticatedUser.Citizen(adult.id, CitizenAuthLevel.STRONG),
+                        clock = clock,
+                        audit = AuditContext(),
+                        applicationId = it,
                     )
-                    .also {
-                        stateService.sendApplication(
-                            tx = tx,
-                            user = AuthenticatedUser.Citizen(adult.id, CitizenAuthLevel.STRONG),
-                            clock = clock,
-                            applicationId = it,
-                        )
-                        stateService.moveToWaitingPlacement(
-                            tx = tx,
-                            user =
-                                AuthenticatedUser.Employee(
-                                    decisionMaker.id,
-                                    setOf(UserRole.SERVICE_WORKER),
-                                ),
-                            clock = clock,
-                            applicationId = it,
-                        )
-                    }
-            }
+                    stateService.moveToWaitingPlacement(
+                        tx = tx,
+                        user =
+                            AuthenticatedUser.Employee(
+                                decisionMaker.id,
+                                setOf(UserRole.SERVICE_WORKER),
+                            ),
+                        clock = clock,
+                        audit = AuditContext(),
+                        applicationId = it,
+                    )
+                }
+        }
 
         assertThrows<BadRequest> {
             applicationControllerCitizen.deleteOrCancelUnprocessedApplication(

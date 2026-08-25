@@ -17,6 +17,8 @@ import type {
 import type { NekkuUnitNumber } from 'lib-common/generated/api-types/nekku'
 import type { OccupancyResponse } from 'lib-common/generated/api-types/occupancy'
 import type { DaycarePlacementWithDetails } from 'lib-common/generated/api-types/placement'
+import type { GroupId } from 'lib-common/generated/api-types/shared'
+import type LocalDate from 'lib-common/local-date'
 import { useQueryResult } from 'lib-common/query'
 import type { UUID } from 'lib-common/types'
 import AddButton from 'lib-components/atoms/buttons/AddButton'
@@ -29,14 +31,12 @@ import { faAngleDown, faAngleUp } from 'lib-icons'
 
 import { useTranslation } from '../../../state/i18n'
 import { UIContext } from '../../../state/ui'
-import { UserContext } from '../../../state/user'
 import type {
   DaycareGroupPlacementDetailed,
   UnitChildrenCapacityFactors
 } from '../../../types/unit'
 import { flatMapGroupPlacements } from '../../../types/unit'
 import type { UnitFilters } from '../../../utils/UnitFilters'
-import { requireRole } from '../../../utils/roles'
 import { permittedReportsQuery } from '../../reports/queries'
 import UnitDataFilters from '../UnitDataFilters'
 
@@ -49,6 +49,7 @@ function renderGroups(
   unit: Daycare,
   filters: UnitFilters,
   groups: DaycareGroup[],
+  groupLastPlacementDates: Partial<Record<GroupId, LocalDate>>,
   groupPermittedActions: Record<UUID, Action.Group[] | undefined>,
   placements: DaycarePlacementWithDetails[],
   permittedBackupCareActions: Partial<Record<UUID, Action.BackupCare[]>>,
@@ -72,6 +73,7 @@ function renderGroups(
     placements: flatMapGroupPlacements(placements).filter(
       (it) => it.groupId === group.id
     ),
+    lastPlacementDate: groupLastPlacementDates[group.id] ?? null,
     backupCares: backupCares.filter((it) => it.group?.id === group.id)
   }))
   const sortedGroups = sortBy(groupsWithPlacements, [
@@ -114,6 +116,7 @@ type Props = {
   filters: UnitFilters
   setFilters: (filters: UnitFilters) => void
   groups: DaycareGroup[]
+  groupLastPlacementDates: Partial<Record<GroupId, LocalDate>>
   placements: DaycarePlacementWithDetails[]
   backupCares: UnitBackupCare[]
   groupPermittedActions: Record<UUID, Action.Group[] | undefined>
@@ -134,6 +137,7 @@ export default React.memo(function Groups({
   filters,
   setFilters,
   groups,
+  groupLastPlacementDates,
   placements,
   backupCares,
   groupPermittedActions,
@@ -149,7 +153,6 @@ export default React.memo(function Groups({
 }: Props) {
   const { i18n } = useTranslation()
   const { uiMode, toggleUiMode } = useContext(UIContext)
-  const { roles } = useContext(UserContext)
   const [transferredPlacement, setTransferredPlacement] = useState<
     DaycareGroupPlacementDetailed | UnitBackupCare | null
   >(null)
@@ -209,18 +212,7 @@ export default React.memo(function Groups({
       <Gap $size="s" />
       <FixedSpaceRow $alignItems="center">
         <Label>{i18n.unit.filters.title}</Label>
-        <UnitDataFilters
-          canEdit={requireRole(
-            roles,
-            'ADMIN',
-            'SERVICE_WORKER',
-            'UNIT_SUPERVISOR',
-            'FINANCE_ADMIN',
-            'EARLY_CHILDHOOD_EDUCATION_SECRETARY'
-          )}
-          filters={filters}
-          setFilters={setFilters}
-        />
+        <UnitDataFilters filters={filters} setFilters={setFilters} />
       </FixedSpaceRow>
       <Gap $size="s" />
       {uiMode === 'create-new-daycare-group' && <GroupModal unitId={unit.id} />}
@@ -245,6 +237,7 @@ export default React.memo(function Groups({
         unit,
         filters,
         groups,
+        groupLastPlacementDates,
         groupPermittedActions,
         placements,
         permittedBackupCareActions,

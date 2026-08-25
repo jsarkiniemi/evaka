@@ -6,6 +6,7 @@ package evaka.core.reservations
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo
 import com.fasterxml.jackson.annotation.JsonTypeName
+import evaka.core.AuditContext
 import evaka.core.absence.AbsenceCategory
 import evaka.core.absence.AbsenceType
 import evaka.core.absence.AbsenceUpsert
@@ -26,9 +27,7 @@ import evaka.core.holidayperiod.getHolidayPeriodsInRange
 import evaka.core.placement.PlacementType
 import evaka.core.placement.ScheduleType
 import evaka.core.serviceneed.ShiftCareType
-import evaka.core.shared.AbsenceId
 import evaka.core.shared.AttendanceReservationId
-import evaka.core.shared.ChildAttendanceId
 import evaka.core.shared.ChildId
 import evaka.core.shared.DaycareId
 import evaka.core.shared.EvakaUserId
@@ -113,7 +112,12 @@ sealed class Reservation : Comparable<Reservation> {
     }
 }
 
-data class AbsenceTypeResponse(val absenceType: AbsenceType, val staffCreated: Boolean)
+data class AbsenceTypeResponse(
+    val absenceType: AbsenceType,
+    val staffCreated: Boolean,
+    val modifiedByName: String,
+    val modifiedAt: HelsinkiDateTime,
+)
 
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type")
 sealed class ReservationResponse : Comparable<ReservationResponse> {
@@ -187,22 +191,17 @@ data class ReservationRow(
     val modifiedBy: EvakaUser,
 )
 
-data class CreateReservationsResult(
-    val deletedAbsences: List<AbsenceId>,
-    val deletedReservations: List<AttendanceReservationId>,
-    val upsertedAbsences: List<AbsenceId>,
-    val upsertedReservations: List<AttendanceReservationId>,
-)
-
 fun createReservationsAndAbsences(
     tx: Database.Transaction,
     now: HelsinkiDateTime,
     user: AuthenticatedUser,
+    audit: AuditContext,
     requests: List<DailyReservationRequest>,
     citizenReservationThresholdHours: Long,
+    calendarOpenBeforePlacementDays: Int,
     plannedAbsenceEnabledForHourBasedServiceNeeds: Boolean = false,
-): CreateReservationsResult? {
-    if (requests.isEmpty()) return null
+) {
+    if (requests.isEmpty()) return
 
     val (userId, isCitizen) =
         when (user) {
@@ -248,7 +247,11 @@ fun createReservationsAndAbsences(
         val reservationEnabledPlacementRanges =
             reservationEnabledPlacementRangesByChild[req.childId]
         if (holidayPeriod != null && reservationEnabledPlacementRanges != null) {
-            holidayPeriod.effect(today, reservationEnabledPlacementRanges)
+            holidayPeriod.effect(
+                today,
+                reservationEnabledPlacementRanges,
+                calendarOpenBeforePlacementDays,
+            )
         } else {
             null
         }
@@ -433,12 +436,11 @@ fun createReservationsAndAbsences(
             emptyList()
         }
 
-    return CreateReservationsResult(
-        deletedAbsences,
-        deletedReservations,
-        upsertedFullDayAbsences + upsertedFixedScheduleAbsences,
-        upsertedReservations,
-    )
+    audit
+        .add(deletedAbsences)
+        .add(upsertedFullDayAbsences + upsertedFixedScheduleAbsences)
+        .add(deletedReservations)
+        .add(upsertedReservations)
 }
 
 data class ChildDatePresence(
@@ -451,21 +453,13 @@ data class ChildDatePresence(
     val absenceNonbillable: AbsenceType?,
 )
 
-data class UpsertChildDatePresenceResult(
-    val insertedReservations: List<AttendanceReservationId>,
-    val deletedReservations: List<AttendanceReservationId>,
-    val insertedAttendances: List<ChildAttendanceId>,
-    val deletedAttendances: List<ChildAttendanceId>,
-    val insertedAbsences: List<AbsenceId>,
-    val deletedAbsences: List<AbsenceId>,
-)
-
 fun upsertChildDatePresence(
     tx: Database.Transaction,
     userId: EvakaUserId,
     now: HelsinkiDateTime,
     input: ChildDatePresence,
-): UpsertChildDatePresenceResult {
+    audit: AuditContext,
+) {
     val placementType =
         tx.getChildPlacementTypes(setOf(input.childId), input.date)[input.childId]
             ?: throw BadRequest("No placement")
@@ -531,14 +525,13 @@ fun upsertChildDatePresence(
             ),
         )
 
-    return UpsertChildDatePresenceResult(
-        insertedReservations = insertedReservations,
-        deletedReservations = deletedReservations,
-        insertedAttendances = insertedAttendances,
-        deletedAttendances = deletedAttendances,
-        insertedAbsences = insertedAbsences,
-        deletedAbsences = deletedAbsences,
-    )
+    audit
+        .add(insertedReservations)
+        .add(deletedReservations)
+        .add(insertedAttendances)
+        .add(deletedAttendances)
+        .add(insertedAbsences)
+        .add(deletedAbsences)
 }
 
 private fun ChildDatePresence.validate(now: HelsinkiDateTime, placementType: PlacementType) {
@@ -583,14 +576,14 @@ private fun Database.Transaction.deleteReservations(
     skip: List<AttendanceReservationId>,
 ): List<AttendanceReservationId> {
     return createQuery {
-            sql(
-                """
+        sql(
+            """
         DELETE FROM attendance_reservation
         WHERE date = ${bind(date)} AND child_id = ${bind(childId)} AND NOT (id = ANY (${bind(skip)}))
         RETURNING id
     """
-            )
-        }
+        )
+    }
         .toList<AttendanceReservationId>()
 }
 
@@ -602,14 +595,14 @@ private fun Database.Transaction.insertReservation(
     reservation: Reservation,
 ): AttendanceReservationId {
     return createQuery {
-            sql(
-                """
+        sql(
+            """
         INSERT INTO attendance_reservation (child_id, created_at, created_by, date, start_time, end_time) 
         VALUES (${bind(childId)}, ${bind(now)}, ${bind(userId)}, ${bind(date)}, ${bind(reservation.asTimeRange()?.start)}, ${bind(reservation.asTimeRange()?.end)})
         RETURNING id
     """
-            )
-        }
+        )
+    }
         .exactlyOne<AttendanceReservationId>()
 }
 

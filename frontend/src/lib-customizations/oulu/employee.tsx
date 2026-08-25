@@ -249,9 +249,60 @@ const customizations: EmployeeCustomizations = {
           amountWithoutAddress: 'Osoitteettomia',
           amountWithZeroPrice: 'Nollalaskuja'
         }
+      },
+      messages: {
+        deletion: {
+          afterDeletion: {
+            banner: () => (
+              <span>
+                Viesti on poistettu. Ota välittömästi yhteyttä eVaka-tukeen
+                osoitteessa{' '}
+                <a
+                  href="https://palvelupyynto.siku.ouka.fi/customerui/"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  https://palvelupyynto.siku.ouka.fi/customerui/
+                </a>
+                .
+              </span>
+            )
+          }
+        }
+      },
+      components: {
+        metadata: {
+          organizationName: 'Oulun kaupungin varhaiskasvatus'
+        }
       }
     },
-    sv: {}
+    sv: {
+      messages: {
+        deletion: {
+          afterDeletion: {
+            banner: () => (
+              <span>
+                Meddelandet har raderats. Kontakta omedelbart eVaka-stödet på
+                adressen{' '}
+                <a
+                  href="https://palvelupyynto.siku.ouka.fi/customerui/"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  https://palvelupyynto.siku.ouka.fi/customerui/
+                </a>
+                .
+              </span>
+            )
+          }
+        }
+      },
+      components: {
+        metadata: {
+          organizationName: 'Oulun kaupungin varhaiskasvatus'
+        }
+      }
+    }
   },
   cityLogo: {
     src: OuluLogo,
@@ -277,6 +328,11 @@ const customizations: EmployeeCustomizations = {
     'PARENTLEAVE',
     'FORCE_MAJEURE',
     'FREE_ABSENCE'
+  ],
+  absenceTypesNotSelectableInWeekCalendar: [
+    'FREE_ABSENCE',
+    'PARENTLEAVE',
+    'FORCE_MAJEURE'
   ],
   voucherValueDecisionTypes: [
     'NORMAL',

@@ -4,6 +4,7 @@
 
 package evaka.core.document.childdocument
 
+import evaka.core.caseprocess.deleteCaseProcesses
 import evaka.core.document.ChildDocumentType
 import evaka.core.pis.Employee
 import evaka.core.shared.CaseProcessId
@@ -16,6 +17,7 @@ import evaka.core.shared.EmployeeId
 import evaka.core.shared.EvakaUserId
 import evaka.core.shared.GroupId
 import evaka.core.shared.PersonId
+import evaka.core.shared.SfiMessageId
 import evaka.core.shared.auth.AuthenticatedUser
 import evaka.core.shared.auth.UserRole
 import evaka.core.shared.db.Database
@@ -36,19 +38,20 @@ fun Database.Transaction.insertChildDocument(
     userId: EvakaUserId,
     processId: CaseProcessId?,
 ): ChildDocumentId {
-    val type =
-        createQuery { sql("SELECT type FROM document_template WHERE id = ${bind(templateId)}") }
-            .exactlyOne<ChildDocumentType>()
+    val type = createQuery {
+        sql("SELECT type FROM document_template WHERE id = ${bind(templateId)}")
+    }
+        .exactlyOne<ChildDocumentType>()
 
     return createQuery {
-            sql(
-                """
-INSERT INTO child_document(child_id, template_id, type, status, content, modified_at, modified_by, content_locked_at, content_locked_by, created_by, process_id, decision_maker)
-VALUES (${bind(childId)}, ${bind(templateId)}, ${bind(type)}, 'DRAFT', ${bind(DocumentContent(answers = emptyList()))}, ${bind(now)}, ${bind(userId)}, ${bind(now)}, ${bind(userId)}, ${bind(userId)}, ${bind(processId)}, NULL)
+        sql(
+            """
+INSERT INTO child_document(child_id, template_id, type, status, content, modified_at, modified_by, status_modified_at, content_locked_at, content_locked_by, created_by, process_id, decision_maker)
+VALUES (${bind(childId)}, ${bind(templateId)}, ${bind(type)}, 'DRAFT', ${bind(DocumentContent(answers = emptyList()))}, ${bind(now)}, ${bind(userId)}, ${bind(now)}, ${bind(now)}, ${bind(userId)}, ${bind(userId)}, ${bind(processId)}, NULL)
 RETURNING id
 """
-            )
-        }
+        )
+    }
         .exactlyOne<ChildDocumentId>()
 }
 
@@ -81,8 +84,8 @@ fun Database.Read.getChildDocuments(
     }
 
     return createQuery {
-            sql(
-                """
+        sql(
+            """
 SELECT
     cd.id, 
     cd.status,
@@ -120,8 +123,8 @@ LEFT JOIN child_document_decision cdd ON cdd.id = cd.decision_id
 LEFT JOIN daycare d ON d.id = cdd.daycare_id
 WHERE ${predicate(combinedPredicate)}
 """
-            )
-        }
+        )
+    }
         .toList<ChildDocumentSummary>()
 }
 
@@ -175,8 +178,8 @@ EXISTS (SELECT
 
 fun Database.Read.getChildDocument(id: ChildDocumentId): ChildDocumentDetails? {
     return createQuery {
-            sql(
-                """
+        sql(
+            """
 SELECT 
     cd.id,
     cd.status,
@@ -203,6 +206,9 @@ SELECT
     dt.process_definition_number as template_process_definition_number,
     dt.archive_duration_months as template_archive_duration_months,
     dt.archive_externally as template_archive_externally,
+    dt.end_decision_when_unit_changes as template_end_decision_when_unit_changes,
+    dt.deletion_retention_days as template_deletion_retention_days,
+    dt.deletion_retention_basis as template_deletion_retention_basis,
     cd.decision_maker,
     cdd.id AS decision_id,
     cdd.status AS decision_status,
@@ -219,8 +225,8 @@ LEFT JOIN child_document_decision cdd ON cdd.id = cd.decision_id
 LEFT JOIN daycare d ON d.id = cdd.daycare_id
 WHERE cd.id = ${bind(id)}
 """
-            )
-        }
+        )
+    }
         .exactlyOneOrNull<ChildDocumentDetails>()
 }
 
@@ -229,10 +235,9 @@ fun Database.Transaction.insertChildDocumentPublishedVersion(
     createdAt: HelsinkiDateTime,
     createdBy: EvakaUserId,
     publishedContent: DocumentContent,
-): Int =
-    createQuery {
-            sql(
-                """
+): Int = createQuery {
+    sql(
+        """
             INSERT INTO child_document_published_version
                 (child_document_id, version_number, created_at, created_by, published_content)
             VALUES (
@@ -249,9 +254,9 @@ fun Database.Transaction.insertChildDocumentPublishedVersion(
             )
             RETURNING version_number
         """
-            )
-        }
-        .exactlyOne<Int>()
+    )
+}
+    .exactlyOne<Int>()
 
 fun Database.Transaction.updateChildDocumentPublishedVersionKey(
     documentId: ChildDocumentId,
@@ -259,41 +264,39 @@ fun Database.Transaction.updateChildDocumentPublishedVersionKey(
     documentKey: String,
 ) {
     createUpdate {
-            sql(
-                """
+        sql(
+            """
             UPDATE child_document_published_version
             SET document_key = ${bind(documentKey)}
             WHERE child_document_id = ${bind(documentId)}
                 AND version_number = ${bind(versionNumber)}
                 AND document_key IS NULL
         """
-            )
-        }
+        )
+    }
         .updateExactlyOne()
 }
 
 fun Database.Read.getChildDocumentPublishedVersions(
     documentId: ChildDocumentId
-): List<PublishedVersion> =
-    createQuery {
-            sql(
-                """
+): List<PublishedVersion> = createQuery {
+    sql(
+        """
             SELECT version_number, document_key, created_at
             FROM child_document_published_version
             WHERE child_document_id = ${bind(documentId)}
             ORDER BY version_number DESC
         """
-            )
-        }
-        .toList()
+    )
+}
+    .toList()
 
 fun Database.Read.getChildDocumentPublishedVersion(
     documentId: ChildDocumentId,
     versionNumber: Int? = null,
-): PublishedVersion? =
-    createQuery {
-            sql(
-                """
+): PublishedVersion? = createQuery {
+    sql(
+        """
             SELECT version_number, document_key, created_at
             FROM child_document_published_version
             WHERE child_document_id = ${bind(documentId)}
@@ -301,9 +304,9 @@ fun Database.Read.getChildDocumentPublishedVersion(
             ORDER BY version_number DESC
             LIMIT 1
         """
-            )
-        }
-        .exactlyOneOrNull<PublishedVersion>()
+    )
+}
+    .exactlyOneOrNull<PublishedVersion>()
 
 data class PublishedVersion(
     val versionNumber: Int,
@@ -314,18 +317,17 @@ data class PublishedVersion(
 fun Database.Read.getChildDocumentPublishedVersionContent(
     documentId: ChildDocumentId,
     versionNumber: Int,
-): DocumentContent? =
-    createQuery {
-            sql(
-                """
+): DocumentContent? = createQuery {
+    sql(
+        """
             SELECT published_content
             FROM child_document_published_version
             WHERE child_document_id = ${bind(documentId)}
                 AND version_number = ${bind(versionNumber)}
             """
-            )
-        }
-        .exactlyOneOrNull<DocumentContent>()
+    )
+}
+    .exactlyOneOrNull<DocumentContent>()
 
 data class DocumentWriteLock(
     val lockedBy: EvakaUserId,
@@ -336,10 +338,9 @@ data class DocumentWriteLock(
 fun Database.Read.getCurrentWriteLock(
     id: ChildDocumentId,
     now: HelsinkiDateTime,
-): DocumentWriteLock? =
-    createQuery {
-            sql(
-                """
+): DocumentWriteLock? = createQuery {
+    sql(
+        """
     SELECT 
         content_locked_by AS locked_by,
         (
@@ -352,18 +353,17 @@ fun Database.Read.getCurrentWriteLock(
         content_locked_by IS NOT NULL AND 
         content_locked_at >= ${bind(now.minusMinutes(lockMinutes.toLong()))}
 """
-            )
-        }
-        .exactlyOneOrNull()
+    )
+}
+    .exactlyOneOrNull()
 
 fun Database.Transaction.tryTakeWriteLock(
     id: ChildDocumentId,
     now: HelsinkiDateTime,
     userId: EvakaUserId,
-): Boolean =
-    createUpdate {
-            sql(
-                """
+): Boolean = createUpdate {
+    sql(
+        """
         UPDATE child_document SET content_locked_at = ${bind(now)}, content_locked_by = ${bind(userId)}
         WHERE id = ${bind(id)} AND (
             content_locked_by IS NULL OR
@@ -371,10 +371,10 @@ fun Database.Transaction.tryTakeWriteLock(
             content_locked_at < ${bind(now.minusMinutes(lockMinutes.toLong()))}
         )
     """
-            )
-        }
-        .execute()
-        .let { it > 0 }
+    )
+}
+    .execute()
+    .let { it > 0 }
 
 fun Database.Transaction.updateChildDocumentContent(
     id: ChildDocumentId,
@@ -384,8 +384,8 @@ fun Database.Transaction.updateChildDocumentContent(
     userId: EvakaUserId,
 ) {
     createUpdate {
-            sql(
-                """
+        sql(
+            """
                 UPDATE child_document
                 SET 
                     content = ${bind(content)},
@@ -399,8 +399,8 @@ fun Database.Transaction.updateChildDocumentContent(
                     content_locked_at < ${bind(now.minusMinutes(lockMinutes.toLong()))}
                 )
                 """
-            )
-        }
+        )
+    }
         .updateExactlyOne()
 }
 
@@ -412,22 +412,23 @@ fun Database.Transaction.updateChildDocument(
     userId: EvakaUserId,
 ) {
     createUpdate {
-            sql(
-                """
+        sql(
+            """
                 UPDATE child_document
                 SET
                     status = ${bind(statusTransition.newStatus)},
                     content = ${bind(content)},
                     modified_at = ${bind(now)},
                     modified_by = ${bind(userId)},
+                    status_modified_at = CASE WHEN status = ${bind(statusTransition.newStatus)} THEN status_modified_at ELSE ${bind(now)} END,
                     content_locked_at = ${bind(now)},
                     content_locked_by = ${bind(userId)},
                     answered_at = ${bind(now)},
                     answered_by = ${bind(userId)}
                 WHERE id = ${bind(id)} AND status = ${bind(statusTransition.currentStatus)}
                 """
-            )
-        }
+        )
+    }
         .updateExactlyOne()
 }
 
@@ -444,8 +445,8 @@ fun Database.Transaction.createPublishedVersionIfNeeded(
 
     val result =
         createQuery {
-                sql(
-                    """
+            sql(
+                """
             SELECT 
                 cd.content,
                 (lv.published_content IS NOT NULL AND cd.content = lv.published_content) AS up_to_date
@@ -459,8 +460,8 @@ fun Database.Transaction.createPublishedVersionIfNeeded(
             ) lv ON true
             WHERE cd.id = ${bind(id)}
             """
-                )
-            }
+            )
+        }
             .exactlyOneOrNull<Result>() ?: throw NotFound("Document $id not found")
 
     if (result.upToDate) return null
@@ -483,17 +484,18 @@ fun Database.Transaction.updateChildDocumentStatus(
     userId: EvakaUserId,
 ) {
     createUpdate {
-            sql(
-                """
+        sql(
+            """
                 UPDATE child_document
                 SET status = ${bind(statusTransition.newStatus)},
                     modified_at = ${bind(now)},
-                    modified_by = ${bind(userId)}
+                    modified_by = ${bind(userId)},
+                    status_modified_at = CASE WHEN status = ${bind(statusTransition.newStatus)} THEN status_modified_at ELSE ${bind(now)} END
                     ${if (answeredBy != null) ", answered_at = ${bind(now)}, answered_by = ${bind(answeredBy)}" else ""}
                 WHERE id = ${bind(id)} AND status = ${bind(statusTransition.currentStatus)}
                 """
-            )
-        }
+        )
+    }
         .updateExactlyOne()
 }
 
@@ -505,22 +507,23 @@ fun Database.Transaction.markCompletedAndPublish(
 
     // Always update status for all documents
     createUpdate {
-            sql(
-                """
+        sql(
+            """
                 UPDATE child_document
                 SET status = 'COMPLETED',
                     modified_at = ${bind(now)},
-                    modified_by = ${bind(userId)}
+                    modified_by = ${bind(userId)},
+                    status_modified_at = CASE WHEN status = 'COMPLETED' THEN status_modified_at ELSE ${bind(now)} END
                 WHERE id = ANY(${bind(ids)})
                 """
-            )
-        }
+        )
+    }
         .execute()
 
     // Batch insert into version table using CTE, filtering for changed content in SQL
     return createQuery {
-            sql(
-                """
+        sql(
+            """
             WITH documents_to_publish AS (
                 SELECT cd.id, cd.content
                 FROM child_document cd
@@ -552,8 +555,8 @@ fun Database.Transaction.markCompletedAndPublish(
             )
             SELECT child_document_id, version_number FROM inserted
                 """
-            )
-        }
+        )
+    }
         .toMap { column<ChildDocumentId>("child_document_id") to column<Int>("version_number") }
 }
 
@@ -562,10 +565,8 @@ fun Database.Transaction.deleteChildDocumentDraft(id: ChildDocumentId) {
     deleteChildDocumentReadMarkers(id)
 
     createUpdate {
-            sql(
-                "DELETE FROM child_document_published_version WHERE child_document_id = ${bind(id)}"
-            )
-        }
+        sql("DELETE FROM child_document_published_version WHERE child_document_id = ${bind(id)}")
+    }
         .execute()
 
     createUpdate { sql("DELETE FROM child_document WHERE id = ${bind(id)} AND status = 'DRAFT'") }
@@ -574,21 +575,21 @@ fun Database.Transaction.deleteChildDocumentDraft(id: ChildDocumentId) {
 
 fun Database.Transaction.markDocumentAsArchived(id: ChildDocumentId, now: HelsinkiDateTime) {
     createUpdate {
-            sql(
-                """
+        sql(
+            """
             UPDATE child_document
             SET archived_at = ${bind(now)}
             WHERE id = ${bind(id)}
             """
-            )
-        }
+        )
+    }
         .updateExactlyOne()
 }
 
 fun Database.Read.getChildDocumentDecisionMakers(documentId: ChildDocumentId): List<Employee> =
     createQuery {
-            sql(
-                """
+        sql(
+            """
 SELECT id, first_name, last_name, email, external_id, created, updated, active, (social_security_number IS NOT NULL) AS has_ssn, last_login
 FROM employee e
 WHERE e.roles && ${bind(listOf(UserRole.ADMIN, UserRole.DIRECTOR))} OR EXISTS(
@@ -602,24 +603,23 @@ WHERE e.roles && ${bind(listOf(UserRole.ADMIN, UserRole.DIRECTOR))} OR EXISTS(
     WHERE cd.id = ${bind(documentId)} AND cd.decision_maker = e.id
 )
 """
-            )
-        }
-        .toList()
+        )
+    }
+    .toList()
 
 fun Database.Transaction.setChildDocumentDecisionMaker(
     id: ChildDocumentId,
     decisionMaker: EmployeeId?,
-) =
-    createUpdate {
-            sql(
-                """
+) = createUpdate {
+    sql(
+        """
             UPDATE child_document 
             SET decision_maker = ${bind(decisionMaker)}
             WHERE id = ${bind(id)}
         """
-            )
-        }
-        .updateExactlyOne()
+    )
+}
+    .updateExactlyOne()
 
 fun Database.Transaction.insertChildDocumentDecision(
     status: ChildDocumentDecisionStatus,
@@ -629,14 +629,14 @@ fun Database.Transaction.insertChildDocumentDecision(
     annulmentReason: String = "",
 ): ChildDocumentDecisionId {
     return createUpdate {
-            sql(
-                """
+        sql(
+            """
                 INSERT INTO child_document_decision (created_by, modified_by, status, valid_from, valid_to, daycare_id, annulment_reason) 
                 VALUES (${bind(userId)}, ${bind(userId)}, ${bind(status)}, ${bind(validity?.start)}, ${bind(validity?.end)}, ${bind(daycareId)}, ${bind(annulmentReason)})
                 RETURNING id
             """
-            )
-        }
+        )
+    }
         .executeAndReturnGeneratedKeys()
         .exactlyOne()
 }
@@ -648,14 +648,14 @@ fun Database.Transaction.annulChildDocumentDecision(
     now: HelsinkiDateTime,
 ): ChildDocumentDecisionId {
     return createUpdate {
-            sql(
-                """
+        sql(
+            """
             UPDATE child_document_decision
             SET status = 'ANNULLED', modified_by = ${bind(userId)}, modified_at = ${bind(now)}, annulment_reason = ${bind(annulmentReason)}
             WHERE id = ${bind(decisionId)} AND status = 'ACCEPTED'
         """
-            )
-        }
+        )
+    }
         .executeAndReturnGeneratedKeys()
         .exactlyOne()
 }
@@ -667,17 +667,18 @@ fun Database.Transaction.setChildDocumentDecisionAndComplete(
     userId: EvakaUserId,
 ) {
     createUpdate {
-            sql(
-                """
+        sql(
+            """
                 UPDATE child_document
-                SET decision_id = ${bind(decisionId)}, 
-                    status = 'COMPLETED', 
+                SET decision_id = ${bind(decisionId)},
+                    status = 'COMPLETED',
                     modified_at = ${bind(now)},
-                    modified_by = ${bind(userId)}
+                    modified_by = ${bind(userId)},
+                    status_modified_at = ${bind(now)}
                 WHERE id = ${bind(documentId)} AND status = 'DECISION_PROPOSAL'
                 """
-            )
-        }
+        )
+    }
         .updateExactlyOne()
 }
 
@@ -686,8 +687,8 @@ fun Database.Transaction.endExpiredChildDocumentDecisions(
 ): List<ChildDocumentDecisionId> {
     val yesterday = today.minusDays(1)
     return createQuery {
-            sql(
-                """
+        sql(
+            """
         WITH expired AS (
             SELECT cdd.id
             FROM child_document_decision cdd
@@ -714,8 +715,8 @@ fun Database.Transaction.endExpiredChildDocumentDecisions(
         WHERE cdd.id = exp.id
         RETURNING cdd.id
     """
-            )
-        }
+        )
+    }
         .toList<ChildDocumentDecisionId>()
 }
 
@@ -723,8 +724,8 @@ fun Database.Read.getAcceptedChildDocumentDecisions(
     documentId: ChildDocumentId
 ): List<AcceptedChildDecisions> {
     return createQuery {
-            sql(
-                """
+        sql(
+            """
 SELECT
     accepted_document.decision_id AS id,
     accepted_document.template_id,
@@ -736,8 +737,8 @@ FROM child_document new_document
          JOIN document_template dt ON accepted_document.template_id = dt.id
 WHERE new_document.id = ${bind(documentId)} AND cdd.status = 'ACCEPTED'
 """
-            )
-        }
+        )
+    }
         .toList<AcceptedChildDecisions>()
 }
 
@@ -747,8 +748,8 @@ fun Database.Read.endChildDocumentDecisionsWithSubstitutiveDecision(
     endDate: LocalDate,
 ): List<ChildDocumentDecisionId> {
     return createQuery {
-            sql(
-                """
+        sql(
+            """
 UPDATE child_document_decision cdd
 SET valid_to = ${bind(endDate)}
 FROM child_document cd
@@ -759,8 +760,8 @@ WHERE cdd.id = ANY(${bind(endingDecisionIds)})
     AND cd.child_id = ${bind(childId)}
 RETURNING cdd.id
 """
-            )
-        }
+        )
+    }
         .toList<ChildDocumentDecisionId>()
 }
 
@@ -769,24 +770,23 @@ fun Database.Transaction.setChildDocumentDecisionValidity(
     validity: DateRange,
 ) {
     return createUpdate {
-            sql(
-                """
+        sql(
+            """
             UPDATE child_document_decision
             SET valid_from = ${bind(validity.start)}, valid_to = ${bind(validity.end)}
             WHERE id = ${bind(decisionId)} AND status = 'ACCEPTED'
             RETURNING id
         """
-            )
-        }
+        )
+    }
         .updateExactlyOne()
 }
 
 fun Database.Read.getChildDocumentsEligibleForArchival(
     eligibleDate: LocalDate
-): List<ChildDocumentId> =
-    createQuery {
-            sql(
-                """
+): List<ChildDocumentId> = createQuery {
+    sql(
+        """
                 SELECT cd.id
                 FROM child_document cd
                 JOIN document_template dt ON cd.template_id = dt.id
@@ -795,6 +795,97 @@ fun Database.Read.getChildDocumentsEligibleForArchival(
                   AND cd.archived_at IS NULL
                 ORDER BY cd.created_at
                 """
+    )
+}
+    .toList<ChildDocumentId>()
+
+data class DeletedChildDocument(
+    val documentId: ChildDocumentId,
+    val decisionId: ChildDocumentDecisionId?,
+    val processId: CaseProcessId?,
+    val documentKeys: List<String>,
+    val sfiMessageIds: List<SfiMessageId>,
+)
+
+fun Database.Transaction.deleteExpiredChildDocuments(
+    now: HelsinkiDateTime,
+    limit: Int? = null,
+): List<DeletedChildDocument> {
+    val today = now.toLocalDate()
+
+    val deletableRows = createQuery {
+        sql(
+            """
+WITH del_batch AS (
+    SELECT cd.id
+    FROM child_document cd
+    JOIN document_template dt ON dt.id = cd.template_id
+    WHERE (NOT dt.archive_externally OR cd.archived_at IS NOT NULL)
+      AND CASE dt.deletion_retention_basis
+        WHEN 'STATUS_TRANSITION' THEN
+            cd.status_modified_at + make_interval(days => dt.deletion_retention_days) <= ${bind(now)}
+        WHEN 'PLACEMENT_END' THEN
+            (SELECT MAX(p.end_date) FROM placement p WHERE p.child_id = cd.child_id)
+                + make_interval(days => dt.deletion_retention_days) <= ${bind(today)}
+      END
+    FOR UPDATE OF cd
+    ${if (limit != null) "LIMIT ${bind(limit)}" else ""}
+)
+SELECT
+    cd.id AS document_id,
+    cd.decision_id,
+    cd.process_id,
+    COALESCE(
+        array_agg(DISTINCT v.document_key) FILTER (WHERE v.document_key IS NOT NULL),
+        '{}'
+    ) AS document_keys,
+    COALESCE(
+        array_agg(DISTINCT sm.id) FILTER (WHERE sm.id IS NOT NULL),
+        '{}'
+    ) AS sfi_message_ids
+FROM del_batch
+JOIN child_document cd ON cd.id = del_batch.id
+LEFT JOIN child_document_published_version v ON v.child_document_id = cd.id
+LEFT JOIN sfi_message sm ON sm.document_id = cd.id
+GROUP BY cd.id
+"""
+        )
+    }
+        .toList<DeletedChildDocument>()
+
+    val deletableIds = deletableRows.map { it.documentId }
+    val deletableDecisionIds = deletableRows.mapNotNull { it.decisionId }
+    val deletableProcessIds = deletableRows.mapNotNull { it.processId }
+    val deletableSfiMessageIds = deletableRows.flatMap { it.sfiMessageIds }
+
+    if (deletableIds.isNotEmpty()) {
+        execute {
+            sql("DELETE FROM child_document_read WHERE document_id = ANY(${bind(deletableIds)})")
+        }
+        execute {
+            sql(
+                "DELETE FROM child_document_published_version WHERE child_document_id = ANY(${bind(deletableIds)})"
             )
         }
-        .toList<ChildDocumentId>()
+        if (deletableSfiMessageIds.isNotEmpty()) {
+            execute {
+                sql(
+                    "DELETE FROM sfi_message_event WHERE message_id = ANY(${bind(deletableSfiMessageIds)})"
+                )
+            }
+            execute {
+                sql("DELETE FROM sfi_message WHERE id = ANY(${bind(deletableSfiMessageIds)})")
+            }
+        }
+        execute { sql("DELETE FROM child_document WHERE id = ANY(${bind(deletableIds)})") }
+        deleteChildDocumentDecisions(deletableDecisionIds)
+        deleteCaseProcesses(deletableProcessIds)
+    }
+
+    return deletableRows
+}
+
+fun Database.Transaction.deleteChildDocumentDecisions(decisionIds: List<ChildDocumentDecisionId>) {
+    if (decisionIds.isEmpty()) return
+    execute { sql("DELETE FROM child_document_decision WHERE id = ANY(${bind(decisionIds)})") }
+}

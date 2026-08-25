@@ -10,6 +10,7 @@ import sortBy from 'lodash/sortBy'
 import uniq from 'lodash/uniq'
 import uniqBy from 'lodash/uniqBy'
 import React, { useMemo, useState, useCallback } from 'react'
+import type { JSX } from 'react'
 import styled from 'styled-components'
 
 import DateRange from 'lib-common/date-range'
@@ -46,11 +47,12 @@ import AddButton from 'lib-components/atoms/buttons/AddButton'
 import { IconOnlyButton } from 'lib-components/atoms/buttons/IconOnlyButton'
 import { Table, Tbody } from 'lib-components/layout/Table'
 import { FixedSpaceRow } from 'lib-components/layout/flex-helpers'
+import { AlertBox } from 'lib-components/molecules/MessageBoxes'
 import { fontWeights, Italic, P } from 'lib-components/typography'
 import type { BaseProps } from 'lib-components/utils'
 import { defaultMargins } from 'lib-components/white-space'
 import { colors } from 'lib-customizations/common'
-import { faCircleEllipsis } from 'lib-icons'
+import { faCircleEllipsisVertical, fasExclamationTriangle } from 'lib-icons'
 
 import { useTranslation } from '../../../state/i18n'
 import {
@@ -138,6 +140,16 @@ export default React.memo(function StaffAttendanceTable({
     [staffRows, externalRowsGroupedByName, groupFilter]
   )
 
+  const automaticDepartureCount = useMemo(
+    () =>
+      countAutomaticDepartures(
+        staffRows,
+        externalRowsGroupedByName,
+        groupFilter
+      ),
+    [staffRows, externalRowsGroupedByName, groupFilter]
+  )
+
   const modalData = useMemo(
     () =>
       detailsModalConfig
@@ -152,6 +164,16 @@ export default React.memo(function StaffAttendanceTable({
 
   return (
     <>
+      {automaticDepartureCount > 0 && (
+        <AlertBox
+          message={i18n.unit.staffAttendance.departedAutomaticallyBanner(
+            automaticDepartureCount
+          )}
+          data-qa="automatic-departures-banner"
+          thin
+          noMargin
+        />
+      )}
       <Table data-qa="staff-attendances-table">
         <AttendanceTableHeader
           operationalDays={operationalDays}
@@ -175,12 +197,19 @@ export default React.memo(function StaffAttendanceTable({
                 setDetailsModalConfig({
                   date,
                   name: row.name,
-                  attendances: row.attendances
-                    .filter((a) => a.type !== null)
-                    .map((a) => ({
-                      ...a,
-                      type: a.type!
-                    })),
+                  attendances: row.attendances.flatMap((a) =>
+                    a.type !== null
+                      ? ({
+                          id: a.id,
+                          groupId: a.groupId,
+                          type: a.type,
+                          arrived: a.arrived,
+                          departed: a.departed,
+                          departedAutomatically: a.departedAutomatically,
+                          occupancyCoefficient: a.occupancyCoefficient
+                        } satisfies ModalAttendance)
+                      : []
+                  ),
                   plannedAttendances: row.plannedAttendances,
                   target: {
                     type: 'employee',
@@ -380,22 +409,20 @@ function getStaffRows(
 ): StaffRow[] {
   return sortBy(
     staffAttendances
-      .map(
-        (entry): StaffRow => ({
-          employeeId: entry.employeeId,
-          name: formatPersonName(entry, 'Last FirstFirst'),
-          attendances: sortBy(
-            entry.attendances.filter(
-              (a) => !groupFilter || (a.groupId && groupFilter([a.groupId]))
-            ),
-            ({ departed }) => departed?.timestamp ?? Infinity
+      .map((entry): StaffRow => ({
+        employeeId: entry.employeeId,
+        name: formatPersonName(entry, 'Last FirstFirst'),
+        attendances: sortBy(
+          entry.attendances.filter(
+            (a) => !groupFilter || (a.groupId && groupFilter([a.groupId]))
           ),
-          plannedAttendances: entry.plannedAttendances,
-          employeeGroups: entry.groups,
-          currentOccupancyCoefficient: entry.currentOccupancyCoefficient,
-          allowedToEdit: entry.allowedToEdit
-        })
-      )
+          ({ departed }) => departed?.timestamp ?? Infinity
+        ),
+        plannedAttendances: entry.plannedAttendances,
+        employeeGroups: entry.groups,
+        currentOccupancyCoefficient: entry.currentOccupancyCoefficient,
+        allowedToEdit: entry.allowedToEdit
+      }))
       .filter(
         (row) =>
           !groupFilter ||
@@ -418,16 +445,14 @@ function getExternalRows(
 ): ExternalRow[] {
   return sortBy(
     Object.entries(groupBy(externalAttendances, (a) => a.name))
-      .map(
-        ([name, attendances]): ExternalRow => ({
-          name,
-          attendances: sortBy(
-            attendances.filter((a) => !groupFilter || groupFilter([a.groupId])),
-            ({ departed }) => departed?.timestamp ?? Infinity
-          ),
-          allowedToEdit: true
-        })
-      )
+      .map(([name, attendances]): ExternalRow => ({
+        name,
+        attendances: sortBy(
+          attendances.filter((a) => !groupFilter || groupFilter([a.groupId])),
+          ({ departed }) => departed?.timestamp ?? Infinity
+        ),
+        allowedToEdit: true
+      }))
       .filter((row) => row.attendances.length > 0),
     (attendance) => attendance.name
   )
@@ -459,6 +484,34 @@ function computePersonCountSums(
     groupBy(employeeAttendanceDates, ({ date }) => date.toString()),
     (rows) => uniqBy(rows, ({ employeeKey }) => employeeKey).length
   )
+}
+
+function countAutomaticDepartures(
+  staffRows: StaffRow[],
+  externalRows: ExternalRow[],
+  groupFilter: GroupFilter | null
+): number {
+  const countFromAttendances = (
+    attendances: readonly {
+      departedAutomatically: boolean
+      type: StaffAttendanceType | null
+    }[]
+  ) =>
+    attendances.filter(
+      (a) =>
+        a.departedAutomatically &&
+        (!groupFilter || (a.type !== null && presentInGroup(a.type)))
+    ).length
+
+  const staffCount = staffRows.reduce(
+    (sum, row) => sum + countFromAttendances(row.attendances),
+    0
+  )
+  const externalCount = externalRows.reduce(
+    (sum, row) => sum + countFromAttendances(row.attendances),
+    0
+  )
+  return staffCount + externalCount
 }
 
 function getUniqueAttendanceDates(
@@ -536,6 +589,9 @@ const AttendanceRow = React.memo(function AttendanceRow({
 }: AttendanceRowProps) {
   const { i18n } = useTranslation()
   const today = LocalDate.todayInHelsinkiTz()
+  const [hovered, setHovered] = useState<LocalDate | null>(null)
+  const isHovered = (date: LocalDate) =>
+    hovered !== null && hovered.isEqual(date)
 
   const timeTooltipText = ({
     addedAt,
@@ -626,8 +682,11 @@ const AttendanceRow = React.memo(function AttendanceRow({
       </NameTd>
       {operationalDays
         .map(({ date }) => {
-          const { matchingAttendances, hasHiddenAttendances } =
-            getAttendancesForGroupAndDate(attendances, groupFilter, date)
+          const matchingAttendances = getAttendancesForGroupAndDate(
+            attendances,
+            groupFilter,
+            date
+          )
           const plannedAttendancesForToday = getPlannedAttendancesForDate(
             plannedAttendances ?? [],
             date
@@ -636,7 +695,9 @@ const AttendanceRow = React.memo(function AttendanceRow({
             date,
             plannedAttendancesForToday,
             attendancesForToday: matchingAttendances,
-            hasHiddenAttendances,
+            someAttendanceDepartedAutomatically: matchingAttendances.some(
+              (a) => a.departedAutomatically
+            ),
             allowDetailsModal: date.isEqualOrBefore(today) && allowedToEdit
           }
         })
@@ -644,8 +705,8 @@ const AttendanceRow = React.memo(function AttendanceRow({
           ({
             date,
             attendancesForToday,
-            hasHiddenAttendances,
             plannedAttendancesForToday,
+            someAttendanceDepartedAutomatically,
             allowDetailsModal
           }) => (
             <DayTd
@@ -653,6 +714,8 @@ const AttendanceRow = React.memo(function AttendanceRow({
               className={classNames({ 'is-today': date.isToday() })}
               $partialRow={false}
               $rowIndex={rowIndex}
+              onMouseEnter={() => setHovered(date)}
+              onMouseLeave={() => setHovered(null)}
               data-qa={`day-cell-${employeeId ?? ''}-${date.formatIso()}`}
             >
               <DayCell data-qa={`attendance-${date.formatIso()}-${rowIndex}`}>
@@ -666,24 +729,26 @@ const AttendanceRow = React.memo(function AttendanceRow({
                         <AttendanceTime data-qa="planned-attendance-end">
                           {renderTime(plannedAttendance.end, date)}
                         </AttendanceTime>
+                        <DetailsCell />
                       </AttendanceCell>
                     ))
                   ) : (
                     <AttendanceCell>
-                      <AttendanceTime data-qa="planned-arrival-time">
-                        {renderTime(null, date)}
-                      </AttendanceTime>
-                      <AttendanceTime data-qa="planned-departure-time">
-                        {renderTime(null, date)}
-                      </AttendanceTime>
+                      <AttendanceTime>{renderTime(null, date)}</AttendanceTime>
+                      <AttendanceTime>{renderTime(null, date)}</AttendanceTime>
+                      <DetailsCell />
                     </AttendanceCell>
                   )}
                 </PlannedAttendanceTimes>
                 <AttendanceTimes data-qa="attendance-day">
                   {attendancesForToday.length > 0 ? (
                     attendancesForToday.map((attendance, i) => {
+                      const isLast = i === attendancesForToday.length - 1
                       return (
-                        <AttendanceCell key={i}>
+                        <AttendanceCell
+                          key={i}
+                          $automaticDeparture={attendance.departedAutomatically}
+                        >
                           <AttendanceTime data-qa="arrival-time">
                             <Tooltip
                               tooltip={timeTooltipText({
@@ -702,10 +767,25 @@ const AttendanceRow = React.memo(function AttendanceRow({
                               tooltip={departureTooltipText(attendance)}
                               data-qa="departure-time-tooltip"
                             >
-                              {renderTime(attendance.departed, date)}
-                              {attendance.departedAutomatically ? `*` : ''}
+                              {renderTime(
+                                attendance.departed,
+                                date,
+                                attendance.departedAutomatically
+                              )}
                             </Tooltip>
                           </AttendanceTime>
+                          {isLast ? (
+                            <DetailsToggle
+                              onOpen={() => openDetails(date)}
+                              hovered={isHovered(date)}
+                              allowDetailsModal={allowDetailsModal}
+                              departedAutomatically={
+                                someAttendanceDepartedAutomatically
+                              }
+                            />
+                          ) : (
+                            <DetailsCell />
+                          )}
                         </AttendanceCell>
                       )
                     })
@@ -713,19 +793,15 @@ const AttendanceRow = React.memo(function AttendanceRow({
                     <AttendanceCell>
                       <AttendanceTime>{renderTime(null, date)}</AttendanceTime>
                       <AttendanceTime>{renderTime(null, date)}</AttendanceTime>
+                      <DetailsToggle
+                        onOpen={() => openDetails(date)}
+                        hovered={isHovered(date)}
+                        allowDetailsModal={allowDetailsModal}
+                        departedAutomatically={false}
+                      />
                     </AttendanceCell>
                   )}
                 </AttendanceTimes>
-                {allowDetailsModal && (
-                  <DetailsToggle $showAlways={hasHiddenAttendances}>
-                    <IconOnlyButton
-                      icon={faCircleEllipsis}
-                      onClick={() => openDetails(date)}
-                      data-qa="open-details"
-                      aria-label={i18n.common.open}
-                    />
-                  </DetailsToggle>
-                )}
               </DayCell>
             </DayTd>
           )
@@ -734,36 +810,81 @@ const AttendanceRow = React.memo(function AttendanceRow({
   )
 })
 
+interface DetailsToggleProps {
+  onOpen: () => void
+  hovered: boolean
+  allowDetailsModal: boolean
+  departedAutomatically: boolean
+  className?: string
+}
+
+const DetailsToggle = React.memo(function DetailsToggle({
+  onOpen,
+  hovered,
+  allowDetailsModal,
+  departedAutomatically
+}: DetailsToggleProps) {
+  const { i18n } = useTranslation()
+  const showWarning = departedAutomatically && !hovered
+
+  return (
+    <DetailsCell
+      data-qa={
+        departedAutomatically ? 'departed-automatically-icon' : undefined
+      }
+    >
+      {allowDetailsModal || showWarning ? (
+        <OpenDetailsButton
+          $dimmed={!hovered && !departedAutomatically}
+          icon={showWarning ? fasExclamationTriangle : faCircleEllipsisVertical}
+          color={showWarning ? 'warning' : 'default'}
+          bubble={departedAutomatically && hovered ? 'warning' : undefined}
+          onClick={allowDetailsModal ? onOpen : undefined}
+          data-qa="open-details"
+          aria-label={i18n.common.open}
+        />
+      ) : null}
+    </DetailsCell>
+  )
+})
+
+const DetailsCell = styled.div`
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: ${defaultMargins.xxs};
+`
+
+const OpenDetailsButton = styled(IconOnlyButton)<{ $dimmed: boolean }>`
+  opacity: ${(p) => (p.$dimmed ? 0 : 1)};
+`
+
 function getAttendancesForGroupAndDate(
   attendances: AttendanceRowAttendance[],
   groupFilter: GroupFilter | null,
   date: LocalDate
-): {
-  matchingAttendances: AttendanceRowAttendance[]
-  hasHiddenAttendances: boolean
-} {
-  const attendancesForDate = attendances.filter(
-    (a) =>
-      a.arrived.toLocalDate().isEqual(date) ||
-      (a.departed &&
-        new DateRange(
-          a.arrived.toLocalDate(),
-          a.departed.toLocalDate()
-        ).includes(date))
-  )
-
-  const presentAttendances = attendancesForDate.filter(
-    ({ groupId, type }) =>
-      !groupFilter ||
-      (groupId &&
-        groupFilter([groupId]) &&
-        type !== null &&
-        presentInGroup(type))
-  )
-  return {
-    matchingAttendances: presentAttendances,
-    hasHiddenAttendances: presentAttendances.length < attendancesForDate.length
-  }
+): AttendanceRowAttendance[] {
+  return attendances
+    .filter(
+      (a) =>
+        a.arrived.toLocalDate().isEqual(date) ||
+        (a.departed &&
+          new DateRange(
+            a.arrived.toLocalDate(),
+            a.departed.toLocalDate()
+          ).includes(date))
+    )
+    .filter(
+      ({ groupId, type }) =>
+        !groupFilter ||
+        (groupId &&
+          groupFilter([groupId]) &&
+          type !== null &&
+          presentInGroup(type))
+    )
 }
 
 function getPlannedAttendancesForDate(
@@ -779,12 +900,22 @@ function getPlannedAttendancesForDate(
 
 function renderTime(
   timestamp: HelsinkiDateTime | null,
-  today: LocalDate
-): string {
+  today: LocalDate,
+  automaticDeparture = false
+): JSX.Element | string {
   if (timestamp && !timestamp.toLocalDate().isEqual(today)) return '→'
-  if (timestamp === null) return '–'
-  return timestamp.toLocalTime().format()
+  if (timestamp === null) return <NoTime>–</NoTime>
+  const formatted = timestamp.toLocalTime().format()
+  return automaticDeparture ? <Warning>{formatted}</Warning> : formatted
 }
+
+const NoTime = styled.span`
+  color: ${(p) => p.theme.colors.grayscale.g35};
+`
+
+const Warning = styled.span`
+  color: ${(p) => p.theme.colors.accents.a2orangeDark};
+`
 
 function computeModalAttendances(
   detailsModalConfig: DetailsModalConfig,
@@ -810,23 +941,28 @@ function computeModalAttendances(
     const attendances: ModalAttendance[] = uniqBy(
       combined
         .flatMap((employee) => employee.attendances)
-        .filter(
-          (attendance) =>
-            attendance.type !== null &&
-            attendance.arrived <= endOfDay &&
-            (attendance.departed === null || startOfDay <= attendance.departed)
-        )
-        .map((a) => ({
-          ...a,
-          type: a.type!
-        })),
+        .flatMap((attendance) =>
+          attendance.type !== null &&
+          attendance.arrived <= endOfDay &&
+          (attendance.departed === null || startOfDay <= attendance.departed)
+            ? ({
+                id: attendance.id,
+                groupId: attendance.groupId,
+                type: attendance.type,
+                arrived: attendance.arrived,
+                departed: attendance.departed,
+                departedAutomatically: attendance.departedAutomatically,
+                occupancyCoefficient: attendance.occupancyCoefficient
+              } satisfies ModalAttendance)
+            : []
+        ),
       (attendance) => attendance.id
     )
     const plannedAttendances: ModalPlannedAttendance[] = uniq(
       combined.flatMap((employee) => employee.plannedAttendances)
     )
       .filter(({ start, end }) => start <= endOfDay && startOfDay <= end)
-      .map(({ start, end }) => ({ start, end }))
+      .map(({ start, end, description }) => ({ start, end, description }))
     return { attendances, plannedAttendances }
   } else {
     const name = detailsModalConfig.target.name
@@ -1067,28 +1203,10 @@ const validateGroupId = (
   return [item.groupId, undefined]
 }
 
-const DetailsToggle = styled.div<{ $showAlways: boolean }>`
-  display: flex;
-  align-items: center;
-  padding: ${defaultMargins.xxs};
-  margin-left: -${defaultMargins.s};
-  visibility: ${({ $showAlways }) => ($showAlways ? 'visible' : 'hidden')};
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  margin-bottom: 3px;
-`
-
 const DayCell = styled.div`
   display: flex;
   flex-direction: column;
   position: relative;
-
-  &:hover {
-    ${DetailsToggle} {
-      visibility: visible;
-    }
-  }
 `
 
 const AttendanceTimes = styled.div`
@@ -1105,13 +1223,18 @@ const PlannedAttendanceTimes = styled.div`
   flex-grow: 1;
 `
 
-const AttendanceCell = styled.div`
+const AttendanceCell = styled.div<{ $automaticDeparture?: boolean }>`
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
+  align-items: center;
   justify-content: space-evenly;
   padding: ${defaultMargins.xs};
   gap: ${defaultMargins.xs};
+  background-color: ${(p) =>
+    p.$automaticDeparture
+      ? p.theme.colors.status.warningBackground
+      : 'transparent'};
 `
 
 const AttendanceTime = styled.span`

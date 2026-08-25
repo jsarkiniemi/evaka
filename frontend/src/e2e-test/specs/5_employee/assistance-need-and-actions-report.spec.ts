@@ -117,7 +117,7 @@ test.describe('Assistance need and actions report', () => {
     await report.selectCareAreaFilter('Superkeskus')
     await report.openUnit('Alkuräjähdyksen päiväkoti')
     await expect(report.childRows.nth(0)).toHaveText(
-      'Antero Onni Leevi Aatu Högfors\tKosmiset Vakiot\t10\t1\t0\t0\t0\t1\t0\t0\ta test assistance action option\t1.5',
+      'Antero Onni Leevi Aatu Högfors\tKosmiset Vakiot\t10\t2013\t1\t0\t0\t0\t1\t0\t0\ta test assistance action option\t1.5',
       { useInnerText: true }
     )
   })
@@ -159,7 +159,7 @@ test.describe('Assistance need and actions report', () => {
     const report = new AssistanceNeedsAndActionsReport(page)
 
     await expect(report.needsAndActionsHeader).toHaveText(
-      'TOIMINTAYKSIKÖT ALUEITTAIN\tRYHMÄ\tYLEINEN TUKI, EI PÄÄTÖSTÄ\tYLEINEN TUKI, PÄÄTÖS TUKIPALVELUISTA\tTEHOSTETTU TUKI\tERITYINEN TUKI\tKULJETUSETU (ESIOPPILAILLA KOSKI-TIETO)\tLAPSEN KOTOUTUMISEN TUKI (ELY)\tOPETUKSEN POIKKEAVA ALOITTAMISAJANKOHTA\tVAKA 1\tVAKA 2\tVAKA 3\tMUU TUKITOIMI\tTUKITOIMI PUUTTUU\tKOROTETTU PS-KERROIN',
+      'TOIMINTAYKSIKÖT ALUEITTAIN\tRYHMÄ\tYLEINEN TUKI, EI PÄÄTÖSTÄ\tYLEINEN TUKI, PÄÄTÖS TUKIPALVELUISTA\tTEHOSTETTU TUKI\tERITYINEN TUKI\tKULJETUSETU (ESIOPPILAILLA KOSKI-TIETO)\tLAPSEN KOTOUTUMISEN TUKI (EVK)\tOPETUKSEN POIKKEAVA ALOITTAMISAJANKOHTA\tVAKA 1\tVAKA 2\tVAKA 3\tMUU TUKITOIMI\tTUKITOIMI PUUTTUU\tKOROTETTU PS-KERROIN',
       { useInnerText: true }
     )
     await report.daycareAssistanceLevelSelect.fillAndSelectFirst(
@@ -180,19 +180,19 @@ test.describe('Assistance need and actions report', () => {
       'Lapsen kotoutumisen tuki'
     )
     await expect(report.needsAndActionsHeader).toHaveText(
-      'TOIMINTAYKSIKÖT ALUEITTAIN\tRYHMÄ\tERITYINEN TUKI ILMAN PIDENNETTYÄ OPPIVELVOLLISUUTTA\tKULJETUSETU (ESIOPPILAILLA KOSKI-TIETO)\tLAPSEN KOTOUTUMISEN TUKI (ELY)\tESKARI 1\tESKARI 2\tESKARI 3\tMUU TUKITOIMI\tTUKITOIMI PUUTTUU\tKOROTETTU PS-KERROIN',
+      'TOIMINTAYKSIKÖT ALUEITTAIN\tRYHMÄ\tERITYINEN TUKI ILMAN PIDENNETTYÄ OPPIVELVOLLISUUTTA\tKULJETUSETU (ESIOPPILAILLA KOSKI-TIETO)\tLAPSEN KOTOUTUMISEN TUKI (EVK)\tESKARI 1\tESKARI 2\tESKARI 3\tMUU TUKITOIMI\tTUKITOIMI PUUTTUU\tKOROTETTU PS-KERROIN',
       { useInnerText: true }
     )
     await report.assistanceActionOptionSelect.fillAndSelectFirst('Eskari 1')
     await report.assistanceActionOptionSelect.fillAndSelectFirst('Eskari 3')
     await expect(report.needsAndActionsHeader).toHaveText(
-      'TOIMINTAYKSIKÖT ALUEITTAIN\tRYHMÄ\tERITYINEN TUKI ILMAN PIDENNETTYÄ OPPIVELVOLLISUUTTA\tKULJETUSETU (ESIOPPILAILLA KOSKI-TIETO)\tLAPSEN KOTOUTUMISEN TUKI (ELY)\tESKARI 1\tESKARI 3\tMUU TUKITOIMI\tTUKITOIMI PUUTTUU\tKOROTETTU PS-KERROIN',
+      'TOIMINTAYKSIKÖT ALUEITTAIN\tRYHMÄ\tERITYINEN TUKI ILMAN PIDENNETTYÄ OPPIVELVOLLISUUTTA\tKULJETUSETU (ESIOPPILAILLA KOSKI-TIETO)\tLAPSEN KOTOUTUMISEN TUKI (EVK)\tESKARI 1\tESKARI 3\tMUU TUKITOIMI\tTUKITOIMI PUUTTUU\tKOROTETTU PS-KERROIN',
       { useInnerText: true }
     )
 
     await report.typeSelect.fillAndSelectFirst('varhaiskasvatuksessa')
     await expect(report.needsAndActionsHeader).toHaveText(
-      'TOIMINTAYKSIKÖT ALUEITTAIN\tRYHMÄ\tTEHOSTETTU TUKI\tKULJETUSETU (ESIOPPILAILLA KOSKI-TIETO)\tLAPSEN KOTOUTUMISEN TUKI (ELY)\tVAKA 2\tMUU TUKITOIMI\tTUKITOIMI PUUTTUU\tKOROTETTU PS-KERROIN',
+      'TOIMINTAYKSIKÖT ALUEITTAIN\tRYHMÄ\tTEHOSTETTU TUKI\tKULJETUSETU (ESIOPPILAILLA KOSKI-TIETO)\tLAPSEN KOTOUTUMISEN TUKI (EVK)\tVAKA 2\tMUU TUKITOIMI\tTUKITOIMI PUUTTUU\tKOROTETTU PS-KERROIN',
       { useInnerText: true }
     )
   })
@@ -322,14 +322,14 @@ test.describe('Assistance need and actions report', () => {
 
     await report.typeSelect.fillAndSelectFirst('esiopetuksessa')
     await expect(report.childRows.nth(0)).toHaveText(
-      'Antero Onni Leevi Aatu Högfors\tKosmiset Vakiot\t10\t1\t0\t0\t0\t0\t0\t0\ta test assistance action option\t-',
+      'Antero Onni Leevi Aatu Högfors\tKosmiset Vakiot\t10\t2013\t1\t0\t0\t0\t0\t0\t0\ta test assistance action option\t-',
       { useInnerText: true }
     )
     await report.preschoolAssistanceLevelSelect.fillAndSelectFirst(
       'Tehostettu tuki'
     )
     await expect(report.childRows.nth(0)).toHaveText(
-      'Antero Onni Leevi Aatu Högfors\tKosmiset Vakiot\t10\t1\ta test assistance action option\t-',
+      'Antero Onni Leevi Aatu Högfors\tKosmiset Vakiot\t10\t2013\t1\ta test assistance action option\t-',
       { useInnerText: true }
     )
     await report.preschoolAssistanceLevelSelect.fillAndSelectFirst(
@@ -339,20 +339,20 @@ test.describe('Assistance need and actions report', () => {
       'Erityinen tuki ilman pidennettyä oppivelvollisuutta'
     )
     await expect(report.childRows.nth(0)).toHaveText(
-      'Antero Onni Leevi Aatu Högfors\tKosmiset Vakiot\t10\t0\t\t-',
+      'Antero Onni Leevi Aatu Högfors\tKosmiset Vakiot\t10\t2013\t0\t\t-',
       { useInnerText: true }
     )
 
     await report.typeSelect.fillAndSelectFirst('varhaiskasvatuksessa')
     await expect(report.childRows.nth(0)).toHaveText(
-      'Antero Onni Leevi Aatu Högfors\tKosmiset Vakiot\t10\t1\t0\t0\t0\t0\t0\t0\ta test assistance action option\t-',
+      'Antero Onni Leevi Aatu Högfors\tKosmiset Vakiot\t10\t2013\t1\t0\t0\t0\t0\t0\t0\ta test assistance action option\t-',
       { useInnerText: true }
     )
     await report.daycareAssistanceLevelSelect.fillAndSelectFirst(
       'Yleinen tuki, ei päätöstä'
     )
     await expect(report.childRows.nth(0)).toHaveText(
-      'Antero Onni Leevi Aatu Högfors\tKosmiset Vakiot\t10\t1\ta test assistance action option\t-',
+      'Antero Onni Leevi Aatu Högfors\tKosmiset Vakiot\t10\t2013\t1\ta test assistance action option\t-',
       { useInnerText: true }
     )
     await report.daycareAssistanceLevelSelect.fillAndSelectFirst(
@@ -362,7 +362,7 @@ test.describe('Assistance need and actions report', () => {
       'Yleinen tuki, päätös tukipalveluista'
     )
     await expect(report.childRows.nth(0)).toHaveText(
-      'Antero Onni Leevi Aatu Högfors\tKosmiset Vakiot\t10\t0\t\t-',
+      'Antero Onni Leevi Aatu Högfors\tKosmiset Vakiot\t10\t2013\t0\t\t-',
       { useInnerText: true }
     )
   })
@@ -521,14 +521,13 @@ test.describe('Assistance need and actions report', () => {
     const report = new AssistanceNeedsAndActionsReport(page)
     await report.includeDecisionsCheckbox.check()
 
-    await report.needsAndActionsHeader.assertText((text) => {
-      return (
+    await report.needsAndActionsHeader.assertText(
+      (text) =>
         text.includes('SPECIAL SUPPORT DECISION') &&
         text.includes('PEDAGOGICAL ASSESSMENT')
-      )
-    })
+    )
     await expect(report.needsAndActionsHeader).toHaveText(
-      'TOIMINTAYKSIKÖT ALUEITTAIN\tRYHMÄ\tYLEINEN TUKI, EI PÄÄTÖSTÄ\tYLEINEN TUKI, PÄÄTÖS TUKIPALVELUISTA\tTEHOSTETTU TUKI\tERITYINEN TUKI\tKULJETUSETU (ESIOPPILAILLA KOSKI-TIETO)\tLAPSEN KOTOUTUMISEN TUKI (ELY)\tOPETUKSEN POIKKEAVA ALOITTAMISAJANKOHTA\tMUU TUKITOIMI\tTUKITOIMI PUUTTUU\tPEDAGOGICAL ASSESSMENT\tSPECIAL SUPPORT DECISION\tKOROTETTU PS-KERROIN',
+      'TOIMINTAYKSIKÖT ALUEITTAIN\tRYHMÄ\tYLEINEN TUKI, EI PÄÄTÖSTÄ\tYLEINEN TUKI, PÄÄTÖS TUKIPALVELUISTA\tTEHOSTETTU TUKI\tERITYINEN TUKI\tKULJETUSETU (ESIOPPILAILLA KOSKI-TIETO)\tLAPSEN KOTOUTUMISEN TUKI (EVK)\tOPETUKSEN POIKKEAVA ALOITTAMISAJANKOHTA\tMUU TUKITOIMI\tTUKITOIMI PUUTTUU\tPEDAGOGICAL ASSESSMENT\tSPECIAL SUPPORT DECISION\tKOROTETTU PS-KERROIN',
       { useInnerText: true }
     )
     // Group row should show 1 for each decision column
@@ -820,7 +819,7 @@ test.describe('Assistance need and actions report', () => {
     await report.includeDecisionsCheckbox.check()
 
     await expect(report.needsAndActionsHeader).toHaveText(
-      'TOIMINTAYKSIKÖT ALUEITTAIN\tRYHMÄ\tYLEINEN TUKI, EI PÄÄTÖSTÄ\tYLEINEN TUKI, PÄÄTÖS TUKIPALVELUISTA\tTEHOSTETTU TUKI\tERITYINEN TUKI\tKULJETUSETU (ESIOPPILAILLA KOSKI-TIETO)\tLAPSEN KOTOUTUMISEN TUKI (ELY)\tOPETUKSEN POIKKEAVA ALOITTAMISAJANKOHTA\tMUU TUKITOIMI\tTUKITOIMI PUUTTUU\tSUPPORT DECISION\tKOROTETTU PS-KERROIN',
+      'TOIMINTAYKSIKÖT ALUEITTAIN\tRYHMÄ\tYLEINEN TUKI, EI PÄÄTÖSTÄ\tYLEINEN TUKI, PÄÄTÖS TUKIPALVELUISTA\tTEHOSTETTU TUKI\tERITYINEN TUKI\tKULJETUSETU (ESIOPPILAILLA KOSKI-TIETO)\tLAPSEN KOTOUTUMISEN TUKI (EVK)\tOPETUKSEN POIKKEAVA ALOITTAMISAJANKOHTA\tMUU TUKITOIMI\tTUKITOIMI PUUTTUU\tSUPPORT DECISION\tKOROTETTU PS-KERROIN',
       { useInnerText: true }
     )
 
@@ -912,7 +911,7 @@ test.describe('Assistance need and actions report', () => {
 
     await report.openUnit('Alkuräjähdyksen päiväkoti')
     await expect(report.childRows.nth(0)).toHaveText(
-      'Antero Onni Leevi Aatu Högfors\tKosmiset Vakiot\t10\t1\t0\t0\t0\t0\t0\t0\t\t-',
+      'Antero Onni Leevi Aatu Högfors\tKosmiset Vakiot\t10\t2013\t1\t0\t0\t0\t0\t0\t0\t\t-',
       { useInnerText: true }
     )
 
@@ -992,8 +991,9 @@ test.describe('Assistance need and actions report', () => {
     const report = new AssistanceNeedsAndActionsReport(page)
 
     const anteroRow =
-      'Antero Onni Leevi Aatu Högfors\tKosmiset Vakiot\t10\t1\t0\t0\t0\t1\t0\t0\ta test assistance action option\t1.5'
-    const lisaRow = 'Lisä Lapsi\tKosmiset Vakiot\t10\t1\t0\t0\t0\t0\t0\t0\t\t-'
+      'Antero Onni Leevi Aatu Högfors\tKosmiset Vakiot\t10\t2013\t1\t0\t0\t0\t1\t0\t0\ta test assistance action option\t1.5'
+    const lisaRow =
+      'Lisä Lapsi\tKosmiset Vakiot\t10\t2013\t1\t0\t0\t0\t0\t0\t0\t\t-'
 
     //Group view count check
     await expect(report.needsAndActionsRows.nth(0)).toHaveText(

@@ -218,10 +218,10 @@ const emptyGroupingDataByGroup = (
     CHILD_DISCUSSION_COUNSELING: 0
   },
   actionCounts: actions.reduce(
-    (data, action) => ({
-      ...data,
-      [action.value]: 0
-    }),
+    (data, action) =>
+      Object.assign(data, {
+        [action.value]: 0
+      }),
     {}
   ),
   otherActionCount: 0,
@@ -307,7 +307,7 @@ const resolveGroupingType = (
 }
 
 export default React.memo(function AssistanceNeedsAndActions() {
-  const { i18n } = useTranslation()
+  const { i18n, lang } = useTranslation()
   const permittedReports = useQueryResult(permittedReportsQuery())
   const assistanceActionOptionsResult = useQueryResult(
     getAssistanceActionOptionsQuery()
@@ -501,7 +501,7 @@ export default React.memo(function AssistanceNeedsAndActions() {
               setFilters((prev) => ({ ...prev, date }))
               setRowFilters(emptyRowFilters)
             }}
-            locale="fi"
+            locale={lang}
           />
         </FilterRow>
 
@@ -963,9 +963,9 @@ const ReportByGroupTable = ({
   const documentDecisionKeys = useMemo(() => {
     const keys = new Set<string>()
     report.rows.forEach((row) => {
-      Object.keys(
-        (row.documentDecisionCounts ?? {}) as DocumentDecisionCounts
-      ).forEach((key) => keys.add(key))
+      Object.keys(row.documentDecisionCounts ?? {}).forEach((key) =>
+        keys.add(key)
+      )
     })
     return Array.from(keys).sort()
   }, [report.rows])
@@ -1018,7 +1018,7 @@ const ReportByGroupTable = ({
               groupData.documentDecisionCounts,
               row.documentDecisionCounts ?? {},
               add
-            ) as DocumentDecisionCounts
+            )
           }
           return data
         },
@@ -1401,9 +1401,9 @@ const ReportByChildTable = ({
   const documentDecisionKeys = useMemo(() => {
     const keys = new Set<string>()
     report.rows.forEach((row) => {
-      Object.keys(
-        (row.documentDecisionCounts ?? {}) as DocumentDecisionCounts
-      ).forEach((key) => keys.add(key))
+      Object.keys(row.documentDecisionCounts ?? {}).forEach((key) =>
+        keys.add(key)
+      )
     })
     return Array.from(keys).sort()
   }, [report.rows])
@@ -1442,7 +1442,7 @@ const ReportByChildTable = ({
               groupData.documentDecisionCounts,
               row.documentDecisionCounts ?? {},
               add
-            ) as DocumentDecisionCounts
+            )
           }
           return data
         },
@@ -1484,6 +1484,10 @@ const ReportByChildTable = ({
           {
             label: i18n.reports.common.age,
             value: (row) => row.childAge
+          },
+          {
+            label: i18n.reports.common.yearOfBirth,
+            value: (row) => row.childYearOfBirth
           },
           ...selectedDaycareColumns.map((level) => ({
             label:
@@ -1552,6 +1556,7 @@ const ReportByChildTable = ({
             </Th>
             <Th>{i18n.reports.common.groupName}</Th>
             <Th>{i18n.reports.common.age}</Th>
+            <Th>{i18n.reports.common.yearOfBirth}</Th>
             {selectedDaycareColumns.map((level) => (
               <Th key={level}>
                 {
@@ -1614,9 +1619,8 @@ const ReportByChildTable = ({
                       {data.name}
                     </div>
                   </Td>
-                  <Td>
-                    {/*This is to add an empty Ikä column to daycare row */}
-                  </Td>
+                  <Td />
+                  <Td />
                   <Td />
                   {selectedDaycareColumns.map((level) => (
                     <Td key={level}>
@@ -1670,6 +1674,7 @@ const ReportByChildTable = ({
                     </Td>
                     <Td>{row.groupName}</Td>
                     <Td>{row.childAge}</Td>
+                    <Td>{row.childYearOfBirth}</Td>
                     {selectedDaycareColumns.map((level) => (
                       <Td key={level}>
                         {row.daycareAssistanceCounts[level] ?? 0}
@@ -1725,6 +1730,7 @@ const ReportByChildTable = ({
         <TableFooter>
           <Tr>
             <Td className="bold">{i18n.reports.common.total}</Td>
+            <Td />
             <Td />
             <Td />
             {selectedDaycareColumns.map((level) => (

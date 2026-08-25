@@ -5,6 +5,7 @@
 package evaka.instance.oulu
 
 import evaka.core.Sensitive
+import evaka.core.SftpEnv
 import evaka.core.lookup
 import org.springframework.core.env.Environment
 
@@ -13,6 +14,7 @@ data class OuluEnv(
     val intimePayments: SftpProperties,
     val bucket: BucketProperties,
     val dwExport: DwExportProperties,
+    val fabric: FabricProperties,
 ) {
     companion object {
         fun fromEnvironment(env: Environment) =
@@ -25,6 +27,7 @@ data class OuluEnv(
                         prefix = env.lookup("evakaoulu.dw_export.prefix"),
                         sftp = SftpProperties.fromEnvironment(env, "evakaoulu.dw_export.sftp"),
                     ),
+                fabric = FabricProperties.fromEnvironment(env),
             )
     }
 }
@@ -36,6 +39,17 @@ data class SftpProperties(
     val username: Sensitive<String>,
     val password: Sensitive<String>,
 ) {
+    fun toSftpEnv(): SftpEnv =
+        SftpEnv(
+            host = address,
+            port = port,
+            hostKeys = emptyList(),
+            username = username.value,
+            password = password,
+            privateKey = null,
+            skipHostKeyVerification = true,
+        )
+
     companion object {
         fun fromEnvironment(env: Environment, prefix: String) =
             SftpProperties(
@@ -53,3 +67,27 @@ data class BucketProperties(val export: String) {
 }
 
 data class DwExportProperties(val prefix: String, val sftp: SftpProperties)
+
+data class FabricProperties(val sftp: SftpEnv, val remotePath: String) {
+    companion object {
+        fun fromEnvironment(env: Environment) =
+            FabricProperties(
+                sftp =
+                    SftpEnv(
+                        host = env.lookup("evakaoulu.fabric.sftp.host"),
+                        port = env.lookup<Int?>("evakaoulu.fabric.sftp.port") ?: 22,
+                        hostKeys = env.lookup("evakaoulu.fabric.sftp.host_keys"),
+                        username = env.lookup("evakaoulu.fabric.sftp.username"),
+                        password =
+                            env.lookup<String?>("evakaoulu.fabric.sftp.password")?.let {
+                                Sensitive(it)
+                            },
+                        privateKey =
+                            env.lookup<String?>("evakaoulu.fabric.sftp.private_key")?.let {
+                                Sensitive(it)
+                            },
+                    ),
+                remotePath = env.lookup<String?>("evakaoulu.fabric.remote_path") ?: "",
+            )
+    }
+}

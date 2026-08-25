@@ -51,8 +51,9 @@ class FamilyInitializerService(
             db.read { it.fetchApplicationDetails(msg.applicationId) }
                 ?: error("Could not initialize family, application ${msg.applicationId} not found")
 
-        val members =
-            db.transaction { parseFridgeFamilyMembersFromApplication(it, clock, user, application) }
+        val members = db.transaction {
+            parseFridgeFamilyMembersFromApplication(it, clock, user, application)
+        }
         db.transaction { initFamilyFromApplication(it, clock, members, msg.applicationId) }
     }
 
@@ -138,6 +139,9 @@ class FamilyInitializerService(
         user: AuthenticatedUser,
         application: ApplicationDetails,
     ): FridgeFamilyMembers {
+        val now = clock.now()
+        val today = now.toLocalDate()
+
         val headOfFamily =
             tx.getPersonById(application.guardianId)
                 ?: error("Application guardian not found with id ${application.guardianId}")
@@ -147,7 +151,7 @@ class FamilyInitializerService(
 
         val otherGuardian =
             personService
-                .getGuardians(tx, user, application.childId)
+                .getGuardians(tx, user, now, application.childId)
                 .firstOrNull { it.id != application.guardianId }
                 ?.takeIf { otherGuardian ->
                     personService.personsLiveInTheSameAddress(headOfFamily, otherGuardian)
@@ -163,7 +167,7 @@ class FamilyInitializerService(
             } else {
                 tx.getPartnershipsForPerson(application.guardianId, false)
                     .filter {
-                        DateRange(it.startDate, it.endDate).includes(clock.today()) &&
+                        DateRange(it.startDate, it.endDate).includes(today) &&
                             it.partners.any { partner ->
                                 partner.id != application.guardianId &&
                                     personService.personsLiveInTheSameAddress(

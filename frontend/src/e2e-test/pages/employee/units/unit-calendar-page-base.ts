@@ -73,7 +73,7 @@ export class UnitCalendarPageBase {
   }
 
   async selectGroup(
-    // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+    // oxlint-disable-next-line typescript/no-redundant-type-constituents
     groupId: UUID | 'shift-care' | 'no-group' | 'staff'
   ): Promise<void> {
     const select = new Select(
@@ -202,6 +202,16 @@ export class UnitStaffAttendancesTable extends Element {
 
   personCountSum(nth: number) {
     return this.findAllByDataQa('person-count-sum').nth(nth)
+  }
+
+  get automaticDeparturesBanner() {
+    return this.page.findByDataQa('automatic-departures-banner')
+  }
+
+  departedAutomaticallyIcon(rowIx: number, date: LocalDate) {
+    return this.#attendanceCell(date, rowIx).findByDataQa(
+      'departed-automatically-icon'
+    )
   }
 
   #attendanceCell = (date: LocalDate, row: number) =>
@@ -333,6 +343,14 @@ export class StaffAttendanceDetailsModal extends Element {
   )
   continuationAttendance = this.findByDataQa('continuation-attendance')
   newAttendanceButton = this.findByDataQa('new-attendance')
+
+  departedAutomaticallyTime(index: number) {
+    return this.findAllByDataQa('departed-automatically-time').nth(index)
+  }
+
+  departedAutomaticallyLabel(index: number) {
+    return this.findAllByDataQa('departed-automatically-label').nth(index)
+  }
 
   async setGroup(row: number, groupId: UUID) {
     await new Select(
